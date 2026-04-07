@@ -46,9 +46,9 @@ class CatalogCategoriesScreen extends StatelessWidget {
                 itemCount: _categories.length,
                 gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: 2,
-                  mainAxisSpacing: 12.h,
-                  crossAxisSpacing: 12.w,
-                  childAspectRatio: 168 / 170,
+                  mainAxisSpacing: 8.h,
+                  crossAxisSpacing: 8.w,
+                  childAspectRatio: 168 / 112,
                 ),
                 itemBuilder: (BuildContext context, int i) {
                   final _Category c = _categories[i];
@@ -82,7 +82,7 @@ class _CatalogHeader extends StatelessWidget {
       color: AppColors.navBarDark,
       padding: EdgeInsets.fromLTRB(
         AppSpacing.screenH,
-        MediaQuery.of(context).padding.top + 8.h,
+        MediaQuery.of(context).padding.top + 24.h,
         AppSpacing.screenH,
         AppSpacing.md,
       ),

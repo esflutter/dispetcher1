@@ -126,7 +126,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                   focusedPinTheme: focusedPinTheme,
                   errorPinTheme: errorPinTheme,
                   forceErrorState: _hasError,
-                  separatorBuilder: (int _) => SizedBox(width: 8.w),
+                  separatorBuilder: (int _) => SizedBox(width: 4.w),
                   onChanged: (_) {
                     if (_hasError) {
                       setState(() => _hasError = false);
@@ -149,7 +149,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                 child: _secondsLeft > 0
                     ? Text(
                         'Отправить повторно через 0:${_secondsLeft.toString().padLeft(2, '0')}',
-                        style: AppTextStyles.body.copyWith(color: AppColors.textTertiary),
+                        style: AppTextStyles.resendLink,
                       )
                     : GestureDetector(
                         onTap: () {
@@ -159,10 +159,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                         },
                         child: Text(
                           'Не пришел код? Отправить повторно',
-                          style: AppTextStyles.body.copyWith(
-                            color: AppColors.primary,
-                            fontWeight: FontWeight.w600,
-                          ),
+                          style: AppTextStyles.resendLink,
                         ),
                       ),
               ),

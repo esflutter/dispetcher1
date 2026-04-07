@@ -94,8 +94,11 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              SizedBox(height: 8.h),
-              Text('Введите данные', style: AppTextStyles.h1SemiBold),
+              SizedBox(height: 16.h),
+              Text(
+                'Введите данные',
+                style: AppTextStyles.h1SemiBold.copyWith(color: AppColors.textBlack),
+              ),
               SizedBox(height: 24.h),
               Center(child: _AvatarSlot(onTap: _openPhotoSheet)),
               SizedBox(height: 24.h),
@@ -180,7 +183,7 @@ class _LabeledField extends StatelessWidget {
       padding: EdgeInsets.symmetric(horizontal: 16.w),
       decoration: BoxDecoration(
         color: AppColors.primaryTint,
-        borderRadius: BorderRadius.circular(AppSpacing.radiusM),
+        borderRadius: BorderRadius.circular(16.r),
       ),
       alignment: Alignment.center,
       child: TextField(
@@ -223,7 +226,7 @@ class _PolicyCheckbox extends StatelessWidget {
                 onChanged: (bool? v) => onChanged(v ?? false),
                 activeColor: AppColors.primary,
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(4.r),
+                  borderRadius: BorderRadius.circular(6.r),
                 ),
               ),
             ),

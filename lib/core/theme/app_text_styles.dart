@@ -89,6 +89,10 @@ class AppTextStyles {
   static TextStyle get captionBold =>
       _t(size: 12, weight: FontWeight.w600, height: 16.8);
 
+  // 15 — resend link (Open Sans в Figma, унифицируем на Roboto)
+  static TextStyle get resendLink =>
+      _t(size: 15, weight: FontWeight.w400, height: 21, color: AppColors.textMuted);
+
   // 10
   static TextStyle get tiny =>
       _t(size: 10, weight: FontWeight.w500, height: 11.7);

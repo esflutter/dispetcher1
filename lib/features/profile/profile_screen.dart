@@ -99,19 +99,19 @@ class ProfileScreen extends StatelessWidget {
               label: 'Моя карточка исполнителя',
               onTap: () => context.push('/executor-card'),
             ),
-            SizedBox(height: AppSpacing.sm),
+            SizedBox(height: AppSpacing.md),
             _ProfileMenuItem(
               icon: Icons.list_alt_outlined,
               label: 'Мои услуги',
               onTap: () => context.push('/services'),
             ),
-            SizedBox(height: AppSpacing.sm),
+            SizedBox(height: AppSpacing.md),
             _ProfileMenuItem(
               icon: Icons.calendar_today_outlined,
               label: 'Мой график',
               onTap: () => context.push('/schedule'),
             ),
-            SizedBox(height: AppSpacing.sm),
+            SizedBox(height: AppSpacing.md),
             _ProfileMenuItem(
               icon: Icons.workspace_premium_outlined,
               label: 'Информация о подписке',
@@ -149,10 +149,10 @@ class _Header extends StatelessWidget {
     return Column(
       children: [
         SizedBox(
-          width: 96.r,
-          height: 96.r,
+          width: 72.r,
+          height: 72.r,
           child: CircleAvatar(
-            radius: 48.r,
+            radius: 36.r,
             backgroundColor: AppColors.surfaceVariant,
             backgroundImage:
                 photoUrl != null ? NetworkImage(photoUrl!) : null,
@@ -213,10 +213,10 @@ class _ProfileMenuItem extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       color: AppColors.categoryCard,
-      borderRadius: BorderRadius.circular(AppSpacing.radiusM),
+      borderRadius: BorderRadius.circular(14.r),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(AppSpacing.radiusM),
+        borderRadius: BorderRadius.circular(14.r),
         child: Container(
           height: 56.h,
           padding: EdgeInsets.symmetric(horizontal: AppSpacing.md),
@@ -248,9 +248,9 @@ class _SupportFooter extends StatelessWidget {
               style: AppTextStyles.linkBold
                   .copyWith(color: AppColors.textPrimary)),
         ),
-        Icon(Icons.telegram, color: const Color(0xFF2CA9E1), size: 32.r),
+        Icon(Icons.telegram, color: AppColors.telegramBlue, size: 32.r),
         SizedBox(width: AppSpacing.xs),
-        Icon(Icons.chat, color: const Color(0xFF38CB10), size: 32.r),
+        Icon(Icons.chat, color: AppColors.whatsappGreen, size: 32.r),
       ],
     );
   }
@@ -319,7 +319,7 @@ class _BlockedNotice extends StatelessWidget {
       width: double.infinity,
       padding: EdgeInsets.all(AppSpacing.md),
       decoration: BoxDecoration(
-        color: const Color(0xFFFDECEA),
+        color: AppColors.errorTint,
         borderRadius: BorderRadius.circular(AppSpacing.radiusL),
       ),
       child: Column(

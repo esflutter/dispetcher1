@@ -23,6 +23,7 @@ class AppColors {
   static const Color textPrimary = Color(0xFF1D1D1D);
   static const Color textSecondary = Color(0xFF49454F);
   static const Color textTertiary = Color(0xFF929292);
+  static const Color textMuted = Color(0xFF7A7A7A);
   static const Color textBlack = Color(0xFF141515);
   static const Color textHeading = Color(0xFF333333);
 
@@ -33,6 +34,9 @@ class AppColors {
   // Состояния
   static const Color success = Color(0xFF05BD0B);
   static const Color error = Color(0xFFE53935);
+  static const Color errorTint = Color(0xFFFDECEA);
+  static const Color telegramBlue = Color(0xFF2CA9E1);
+  static const Color whatsappGreen = Color(0xFF38CB10);
   static const Color warning = Color(0xFFFFAC26);
 
   // Рейтинг

@@ -31,37 +31,36 @@ class CategoryCard extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.center,
+        child: Stack(
+          fit: StackFit.expand,
           children: <Widget>[
-            Expanded(
-              child: Center(
-                child: imageAsset != null
-                    ? Image.asset(
-                        imageAsset!,
-                        fit: BoxFit.contain,
-                        errorBuilder: (BuildContext _, Object _, StackTrace? _) => Icon(
+            Positioned.fill(
+              child: imageAsset != null
+                  ? Image.asset(
+                      imageAsset!,
+                      fit: BoxFit.cover,
+                      errorBuilder: (BuildContext _, Object _, StackTrace? _) => Center(
+                        child: Icon(
                           icon ?? Icons.image_outlined,
                           size: 56.r,
                           color: AppColors.textTertiary,
                         ),
-                      )
-                    : Icon(
+                      ),
+                    )
+                  : Center(
+                      child: Icon(
                         icon ?? Icons.image_outlined,
                         size: 56.r,
                         color: AppColors.textPrimary,
                       ),
-              ),
+                    ),
             ),
             Padding(
-              padding: EdgeInsets.symmetric(
-                horizontal: AppSpacing.sm,
-                vertical: AppSpacing.xs,
-              ),
+              padding: EdgeInsets.fromLTRB(12.w, 16.h, 12.w, 10.h),
               child: Text(
                 title,
-                style: AppTextStyles.subBody,
-                textAlign: TextAlign.center,
+                style: AppTextStyles.chip,
+                textAlign: TextAlign.left,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
