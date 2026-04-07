@@ -1,0 +1,3 @@
+/executor-card -> ExecutorCardScreen -> package:dispatcher_1/features/executor_card/executor_card_screen.dart
+/executor-card/edit -> EditExecutorCardScreen -> package:dispatcher_1/features/executor_card/edit_executor_card_screen.dart
+/executor-card/verification -> VerificationDocumentsScreen -> package:dispatcher_1/features/executor_card/verification_documents_screen.dart

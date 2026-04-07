@@ -1,0 +1,120 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:go_router/go_router.dart';
+import 'package:mask_text_input_formatter/mask_text_input_formatter.dart';
+
+import 'package:dispatcher_1/core/theme/app_colors.dart';
+import 'package:dispatcher_1/core/theme/app_text_styles.dart';
+import 'package:dispatcher_1/core/theme/app_spacing.dart';
+import 'package:dispatcher_1/core/widgets/primary_button.dart';
+
+class PhoneInputScreen extends StatefulWidget {
+  const PhoneInputScreen({super.key});
+
+  @override
+  State<PhoneInputScreen> createState() => _PhoneInputScreenState();
+}
+
+class _PhoneInputScreenState extends State<PhoneInputScreen> {
+  final _maskFormatter = MaskTextInputFormatter(
+    mask: '+7 (###) ###-##-##',
+    filter: {'#': RegExp(r'[0-9]')},
+    type: MaskAutoCompletionType.lazy,
+  );
+  final TextEditingController _controller = TextEditingController();
+  bool _isComplete = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller.addListener(() {
+      final complete = _maskFormatter.getUnmaskedText().length == 10;
+      if (complete != _isComplete) {
+        setState(() => _isComplete = complete);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      appBar: AppBar(
+        backgroundColor: AppColors.background,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new, color: AppColors.textPrimary),
+          onPressed: () => Navigator.of(context).maybePop(),
+        ),
+      ),
+      body: SafeArea(
+        child: Padding(
+          padding: EdgeInsets.symmetric(horizontal: AppSpacing.screenH),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(height: 12.h),
+              Text('Введите номер телефона', style: AppTextStyles.h1Phone),
+              SizedBox(height: 32.h),
+              _PhoneField(controller: _controller, formatter: _maskFormatter),
+              const Spacer(),
+              PrimaryButton(
+                label: 'Далее',
+                enabled: _isComplete,
+                onPressed: _isComplete ? () => context.go('/auth/otp') : null,
+              ),
+              SizedBox(height: 24.h),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PhoneField extends StatelessWidget {
+  const _PhoneField({required this.controller, required this.formatter});
+
+  final TextEditingController controller;
+  final MaskTextInputFormatter formatter;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 56.h,
+      padding: EdgeInsets.symmetric(horizontal: 16.w),
+      decoration: BoxDecoration(
+        color: AppColors.primaryTint,
+        borderRadius: BorderRadius.circular(AppSpacing.radiusM),
+      ),
+      alignment: Alignment.center,
+      child: TextField(
+        controller: controller,
+        keyboardType: TextInputType.phone,
+        autofocus: true,
+        inputFormatters: <TextInputFormatter>[formatter],
+        style: AppTextStyles.body.copyWith(
+          fontSize: 16.sp,
+          color: AppColors.textPrimary,
+        ),
+        decoration: InputDecoration(
+          isCollapsed: true,
+          border: InputBorder.none,
+          hintText: '+ 7 (900) 000-00-00',
+          hintStyle: AppTextStyles.body.copyWith(
+            fontSize: 16.sp,
+            color: AppColors.textTertiary,
+          ),
+        ),
+      ),
+    );
+  }
+}

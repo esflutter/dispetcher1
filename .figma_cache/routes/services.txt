@@ -1,0 +1,4 @@
+/services -> MyServicesScreen -> package:dispatcher_1/features/services/my_services_screen.dart
+/services/:id -> ServiceDetailScreen -> package:dispatcher_1/features/services/service_detail_screen.dart
+/services/create -> CreateServiceScreen -> package:dispatcher_1/features/services/create_service_screen.dart
+/services/:id/edit -> CreateServiceScreen -> package:dispatcher_1/features/services/create_service_screen.dart

@@ -1,0 +1,3 @@
+/orders -> MyOrdersScreen -> package:dispatcher_1/features/orders/my_orders_screen.dart
+/orders/:id -> MyOrderDetailScreen -> package:dispatcher_1/features/orders/order_detail_screen.dart
+/orders/:id/review -> ReviewScreen -> package:dispatcher_1/features/orders/review_screen.dart

@@ -1,0 +1,5 @@
+/subscription -> SubscriptionScreen -> package:dispatcher_1/features/subscription/subscription_screen.dart
+/subscription/tariffs -> TariffsScreen -> package:dispatcher_1/features/subscription/tariffs_screen.dart
+/subscription/card -> AddCardScreen -> package:dispatcher_1/features/subscription/add_card_screen.dart
+/subscription/payment -> PaymentScreen -> package:dispatcher_1/features/subscription/payment_screen.dart
+/subscription/payment/result -> PaymentResultScreen -> package:dispatcher_1/features/subscription/payment_result_screen.dart

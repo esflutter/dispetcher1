@@ -1,0 +1,2 @@
+/schedule -> ScheduleScreen -> package:dispatcher_1/features/schedule/schedule_screen.dart
+/schedule/day -> DaySettingsScreen -> package:dispatcher_1/features/schedule/day_settings_screen.dart

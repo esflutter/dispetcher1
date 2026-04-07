@@ -1,0 +1,2 @@
+/splash -> SplashScreen -> package:dispatcher_1/features/onboarding/splash_screen.dart
+/onboarding -> OnboardingScreen -> package:dispatcher_1/features/onboarding/onboarding_screen.dart

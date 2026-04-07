@@ -1,0 +1,9 @@
+/shell -> MainShell -> package:dispatcher_1/features/shell/main_shell.dart
+/catalog -> CatalogCategoriesScreen -> package:dispatcher_1/features/catalog/catalog_categories_screen.dart
+/catalog/feed/:categoryId -> OrderFeedScreen -> package:dispatcher_1/features/catalog/order_feed_screen.dart
+/catalog/order/:id -> OrderDetailScreen -> package:dispatcher_1/features/catalog/order_detail_screen.dart
+/catalog/filter -> CatalogFilterScreen -> package:dispatcher_1/features/catalog/catalog_filter_screen.dart
+/catalog/customer/:id -> CustomerCardScreen -> package:dispatcher_1/features/catalog/customer_card_screen.dart
+/catalog/orders-map -> OrdersMapScreen -> package:dispatcher_1/features/catalog/orders_map_screen.dart
+/catalog/order/:id/map -> OrderOnMapScreen -> package:dispatcher_1/features/catalog/order_on_map_screen.dart
+/catalog/no-internet -> NoInternetScreen -> package:dispatcher_1/features/catalog/no_internet_screen.dart
