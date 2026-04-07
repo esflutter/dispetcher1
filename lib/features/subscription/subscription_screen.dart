@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:go_router/go_router.dart';
 
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_spacing.dart';
@@ -64,16 +65,16 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
               child: _StatusCard(status: _status),
             ),
             const Spacer(),
-            if (_status == SubscriptionStatus.inactive)
-              Padding(
-                padding: EdgeInsets.fromLTRB(AppSpacing.screenH, 0,
-                    AppSpacing.screenH, AppSpacing.lg),
-                child: PrimaryButton(
-                  label: 'Оплатить подписку',
-                  onPressed: () => Navigator.of(context)
-                      .pushNamed('/subscription/payment'),
-                ),
+            Padding(
+              padding: EdgeInsets.fromLTRB(AppSpacing.screenH, 0,
+                  AppSpacing.screenH, AppSpacing.lg),
+              child: PrimaryButton(
+                label: _status == SubscriptionStatus.inactive
+                    ? 'Оплатить подписку'
+                    : 'Тарифы',
+                onPressed: () => context.push('/subscription/tariffs'),
               ),
+            ),
           ],
         ),
       ),

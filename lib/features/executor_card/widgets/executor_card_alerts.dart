@@ -6,7 +6,8 @@ import 'package:dispatcher_1/core/theme/app_spacing.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
 import 'package:dispatcher_1/core/widgets/primary_button.dart';
 
-/// Bottom-sheet алерт удаления карточки исполнителя.
+/// Bottom-sheet алерт «Подтвердите свои данные» — приглашение
+/// отправить документы на верификацию.
 Future<void> showDeleteExecutorCardAlert(BuildContext context) {
   return showModalBottomSheet<void>(
     context: context,
@@ -37,26 +38,26 @@ Future<void> showDeleteExecutorCardAlert(BuildContext context) {
             ),
             SizedBox(height: AppSpacing.md),
             Text(
-              'Удалить карточку исполнителя?',
+              'Подтвердите свои данные',
               style: AppTextStyles.titleL,
               textAlign: TextAlign.center,
             ),
             SizedBox(height: AppSpacing.xs),
             Text(
-              'Все данные карточки и статус верификации будут удалены '
-              'безвозвратно.',
+              'Чтобы создать карточку исполнителя, нужно отправить документы '
+              'на проверку. Это займёт пару минут.',
               style: AppTextStyles.body
                   .copyWith(color: AppColors.textSecondary),
               textAlign: TextAlign.center,
             ),
             SizedBox(height: AppSpacing.lg),
             PrimaryButton(
-              label: 'Удалить',
+              label: 'Отправить документы',
               onPressed: () => Navigator.of(ctx).pop(),
             ),
             SizedBox(height: AppSpacing.sm),
             SecondaryButton(
-              label: 'Отмена',
+              label: 'Может быть позже',
               onPressed: () => Navigator.of(ctx).pop(),
             ),
           ],

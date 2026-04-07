@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:go_router/go_router.dart';
 
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_spacing.dart';
@@ -95,7 +96,11 @@ class _CatalogHeader extends StatelessWidget {
                 'Поиск заказов',
                 style: AppTextStyles.h1.copyWith(color: AppColors.surface),
               ),
-              Icon(Icons.map_outlined, color: AppColors.primary, size: 24.r),
+              IconButton(
+                onPressed: () => context.push('/catalog/orders-map'),
+                icon: Icon(Icons.map_outlined,
+                    color: AppColors.primary, size: 24.r),
+              ),
             ],
           ),
           SizedBox(height: AppSpacing.sm),
@@ -124,15 +129,18 @@ class _CatalogHeader extends StatelessWidget {
                 ),
               ),
               SizedBox(width: AppSpacing.sm),
-              Container(
-                width: 44.r,
-                height: 44.r,
-                decoration: BoxDecoration(
-                  color: AppColors.primary,
-                  borderRadius: BorderRadius.circular(AppSpacing.radiusM),
+              GestureDetector(
+                onTap: () => context.push('/catalog/filter'),
+                child: Container(
+                  width: 44.r,
+                  height: 44.r,
+                  decoration: BoxDecoration(
+                    color: AppColors.primary,
+                    borderRadius: BorderRadius.circular(AppSpacing.radiusM),
+                  ),
+                  child: Icon(Icons.tune,
+                      color: AppColors.surface, size: 20.r),
                 ),
-                child: Icon(Icons.tune,
-                    color: AppColors.surface, size: 20.r),
               ),
             ],
           ),

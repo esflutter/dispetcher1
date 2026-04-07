@@ -229,7 +229,15 @@ class _ManualForm extends StatelessWidget {
           SizedBox(height: AppSpacing.xl),
           PrimaryButton(
             label: state._isEdit ? 'Сохранить' : 'Создать',
-            onPressed: () => Navigator.of(context).maybePop(),
+            onPressed: () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Сохранено'),
+                  duration: Duration(seconds: 2),
+                ),
+              );
+              Navigator.of(context).maybePop();
+            },
           ),
         ],
       ),

@@ -46,6 +46,11 @@ class _SplashScreenState extends State<SplashScreen> {
               width: 100.w,
               height: 100.w,
               fit: BoxFit.contain,
+              errorBuilder: (BuildContext _, Object _, StackTrace? _) => Icon(
+                Icons.engineering,
+                size: 80.r,
+                color: AppColors.primary,
+              ),
             ),
             SizedBox(height: 16.h),
             Text(

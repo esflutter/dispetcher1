@@ -78,7 +78,13 @@ final GoRouter appRouter = GoRouter(
         customerId: state.pathParameters['id'] ?? '',
       ),
     ),
-    GoRoute(path: '/catalog/orders-map', builder: (_, _) => const OrdersMapScreen()),
+    GoRoute(
+      path: '/catalog/orders-map',
+      builder: (_, _) => Scaffold(
+        appBar: AppBar(title: const Text('Заказы на карте')),
+        body: const OrdersMapScreen(),
+      ),
+    ),
     GoRoute(
       path: '/catalog/order/:id/map',
       builder: (_, state) => OrderOnMapScreen(

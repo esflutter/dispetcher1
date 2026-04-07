@@ -54,13 +54,13 @@ class _DeleteServiceSheet extends StatelessWidget {
             ),
             SizedBox(height: AppSpacing.lg),
             Text(
-              'Удалить услугу?',
+              'Удалить услугу',
               style: AppTextStyles.h3,
               textAlign: TextAlign.center,
             ),
             SizedBox(height: AppSpacing.sm),
             Text(
-              'Услуга «$serviceTitle» будет удалена без возможности восстановления.',
+              'Вы уверены, что хотите удалить услугу?',
               style: AppTextStyles.body
                   .copyWith(color: AppColors.textSecondary),
               textAlign: TextAlign.center,
@@ -87,7 +87,7 @@ class _DeleteServiceSheet extends StatelessWidget {
             ),
             SizedBox(height: AppSpacing.sm),
             SecondaryButton(
-              label: 'Отмена',
+              label: 'Вернуться',
               onPressed: () => Navigator.of(context).pop(false),
             ),
           ],

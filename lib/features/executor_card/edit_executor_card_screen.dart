@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:go_router/go_router.dart';
 
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_spacing.dart';
@@ -157,8 +158,20 @@ class _EditExecutorCardScreenState extends State<EditExecutorCardScreen> {
               SizedBox(height: AppSpacing.xl),
               PrimaryButton(
                 label: 'Сохранить',
-                onPressed: () => Navigator.of(context)
-                    .pushNamed('/executor-card/verification'),
+                onPressed: () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Сохранено'),
+                      duration: Duration(seconds: 2),
+                    ),
+                  );
+                  Navigator.of(context).maybePop();
+                },
+              ),
+              SizedBox(height: AppSpacing.sm),
+              SecondaryButton(
+                label: 'Отправить документы на верификацию',
+                onPressed: () => context.push('/executor-card/verification'),
               ),
             ],
           ),

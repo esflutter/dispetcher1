@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:go_router/go_router.dart';
 
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_spacing.dart';
@@ -67,8 +68,7 @@ class PaymentScreen extends StatelessWidget {
                     SizedBox(height: AppSpacing.lg),
                     _CardRow(
                       cardLast4: cardLast4,
-                      onTap: () => Navigator.of(context)
-                          .pushNamed('/subscription/card'),
+                      onTap: () => context.push('/subscription/card'),
                     ),
                   ],
                 ),
@@ -79,8 +79,8 @@ class PaymentScreen extends StatelessWidget {
                   AppSpacing.screenH, AppSpacing.lg),
               child: PrimaryButton(
                 label: 'Оплатить $amount',
-                onPressed: () => Navigator.of(context).pushReplacementNamed(
-                    '/subscription/payment/result'),
+                onPressed: () =>
+                    context.push('/subscription/payment/result'),
               ),
             ),
           ],

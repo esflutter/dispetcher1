@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:go_router/go_router.dart';
 
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_spacing.dart';
@@ -47,7 +48,7 @@ class EditProfileScreen extends StatelessWidget {
               icon: Icons.logout_rounded,
               text: 'Выйти из аккаунта',
               tint: false,
-              onTap: () {},
+              onTap: () => context.go('/auth/phone'),
             ),
             SizedBox(height: AppSpacing.sm),
             _InfoField(
@@ -55,7 +56,14 @@ class EditProfileScreen extends StatelessWidget {
               text: 'Удалить аккаунт',
               tint: false,
               danger: true,
-              onTap: () {},
+              onTap: () {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Аккаунт удалён (демо)'),
+                    duration: Duration(seconds: 2),
+                  ),
+                );
+              },
             ),
           ],
         ),

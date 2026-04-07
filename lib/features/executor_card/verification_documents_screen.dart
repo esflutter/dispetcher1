@@ -32,7 +32,7 @@ class VerificationDocumentsScreen extends StatelessWidget {
           icon: const Icon(Icons.arrow_back, color: AppColors.textPrimary),
           onPressed: () => Navigator.of(context).maybePop(),
         ),
-        title: Text('Поддержка', style: AppTextStyles.titleS),
+        title: Text('Верификация', style: AppTextStyles.titleS),
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -57,7 +57,15 @@ class VerificationDocumentsScreen extends StatelessWidget {
               SizedBox(height: AppSpacing.md),
               SizedBox(height: AppSpacing.lg),
               for (final d in _docs) ...[
-                DocumentUploadTile(title: d, onTap: () {}),
+                DocumentUploadTile(
+                  title: d,
+                  onTap: () => ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Загрузка: $d'),
+                      duration: const Duration(seconds: 2),
+                    ),
+                  ),
+                ),
                 SizedBox(height: AppSpacing.sm),
               ],
               SizedBox(height: AppSpacing.lg),

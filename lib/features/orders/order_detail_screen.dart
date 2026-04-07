@@ -140,11 +140,30 @@ class MyOrderDetailScreen extends StatelessWidget {
               onPressed: () => showAcceptAlert(context),
             ),
             SizedBox(height: AppSpacing.xs),
-            SecondaryButton(label: 'Отклонить', onPressed: () {}),
+            SecondaryButton(
+              label: 'Отклонить',
+              onPressed: () {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Заказ отклонён'),
+                    duration: Duration(seconds: 2),
+                  ),
+                );
+                Navigator.of(context).maybePop();
+              },
+            ),
           ],
         );
       case MyOrderDetailState.accepted:
-        return PrimaryButton(label: 'Свяжитесь с заказчиком', onPressed: () {});
+        return PrimaryButton(
+          label: 'Свяжитесь с заказчиком',
+          onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Звоним: $customerName'),
+              duration: const Duration(seconds: 2),
+            ),
+          ),
+        );
       case MyOrderDetailState.completed:
         return PrimaryButton(
           label: 'Оставить отзыв',

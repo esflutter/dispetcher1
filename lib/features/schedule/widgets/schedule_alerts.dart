@@ -60,19 +60,18 @@ class _CloseAcceptanceSheet extends StatelessWidget {
             ),
             SizedBox(height: AppSpacing.sm),
             Text(
-              'Новые заказы на этот день перестанут поступать. '
-              'Уже принятые заказы останутся в работе.',
+              'Новые заказы на этот день поступать не будут',
               style: AppTextStyles.body.copyWith(color: AppColors.textSecondary),
               textAlign: TextAlign.center,
             ),
             SizedBox(height: AppSpacing.xl),
             PrimaryButton(
-              label: 'Закрыть приём',
+              label: 'Закрыть',
               onPressed: () => Navigator.of(context).pop(true),
             ),
             SizedBox(height: AppSpacing.sm),
             SecondaryButton(
-              label: 'Отмена',
+              label: 'Вернуться',
               onPressed: () => Navigator.of(context).pop(false),
             ),
           ],

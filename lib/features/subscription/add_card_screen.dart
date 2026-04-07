@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:go_router/go_router.dart';
 import 'package:mask_text_input_formatter/mask_text_input_formatter.dart';
 
 import 'package:dispatcher_1/core/theme/app_colors.dart';
@@ -127,7 +128,7 @@ class _AddCardScreenState extends State<AddCardScreen> {
               child: PrimaryButton(
                 label: 'Добавить',
                 enabled: _valid,
-                onPressed: () => Navigator.of(context).pop(true),
+                onPressed: () => context.push('/subscription/payment'),
               ),
             ),
           ],

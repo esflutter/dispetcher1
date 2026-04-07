@@ -135,6 +135,9 @@ class _SupportFab extends StatelessWidget {
           child: Image.asset(
             'assets/icons/nav/support_fab.webp',
             color: AppColors.surface,
+            errorBuilder: (BuildContext _, Object _, StackTrace? _) =>
+                Icon(Icons.support_agent,
+                    color: AppColors.surface, size: 28.r),
           ),
         ),
       ),

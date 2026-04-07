@@ -174,13 +174,13 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
       case DayState.dayOff:
         return _EmptyState(
           icon: Icons.beach_access_outlined,
-          title: 'Выходной день',
-          subtitle: 'В этот день вы не принимаете заказы',
+          title: 'Выходной',
+          subtitle: 'Вы отметили этот день выходным — заказы на него не принимаются',
         );
       case DayState.noOrders:
         return _EmptyState(
           icon: Icons.event_available_outlined,
-          title: 'Заказов пока нет',
+          title: 'Нет заказов',
           subtitle: 'Новые заказы на этот день появятся здесь',
         );
     }

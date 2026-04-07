@@ -127,6 +127,13 @@ class _OnbPage extends StatelessWidget {
             step.image,
             fit: BoxFit.cover,
             width: double.infinity,
+            errorBuilder: (BuildContext _, Object _, StackTrace? _) =>
+                Container(
+              color: AppColors.surfaceVariant,
+              alignment: Alignment.center,
+              child: Icon(Icons.image_outlined,
+                  size: 80, color: AppColors.textTertiary),
+            ),
           ),
         ),
         SizedBox(height: 24.h),

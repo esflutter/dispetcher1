@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:go_router/go_router.dart';
 
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_spacing.dart';
@@ -72,8 +73,7 @@ class TariffsScreen extends StatelessWidget {
                   SizedBox(height: AppSpacing.xs),
                   PrimaryButton(
                     label: 'Продолжить',
-                    onPressed: () => Navigator.of(context)
-                        .pushNamed('/subscription/payment'),
+                    onPressed: () => context.push('/subscription/card'),
                   ),
                   SizedBox(height: AppSpacing.md),
                   _Footer(),

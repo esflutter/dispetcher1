@@ -51,22 +51,17 @@ class RespondBottomSheet extends StatelessWidget {
 
   List<Widget> _verifiedContent(BuildContext context) {
     return <Widget>[
-      Text('Откликнуться на заказ', style: AppTextStyles.h3),
+      Text('Ваш отклик отправлен!', style: AppTextStyles.h3),
       SizedBox(height: AppSpacing.xs),
       Text(
-        'Заказчик увидит ваш отклик и сможет связаться с вами. '
-        'Стоимость отклика спишется с подписки.',
+        'Заказчик рассмотрит вашу заявку на заказ. Если он выберет вас — '
+        'заказ появится в разделе Мои заказы.',
         style: AppTextStyles.bodyMRegular
             .copyWith(color: AppColors.textSecondary),
       ),
       SizedBox(height: AppSpacing.lg),
       PrimaryButton(
-        label: 'Откликнуться',
-        onPressed: () => Navigator.of(context).pop(),
-      ),
-      SizedBox(height: AppSpacing.xs),
-      SecondaryButton(
-        label: 'Оплатить отклик',
+        label: 'Ок',
         onPressed: () => Navigator.of(context).pop(),
       ),
     ];
@@ -77,17 +72,22 @@ class RespondBottomSheet extends StatelessWidget {
       Icon(Icons.lock_outline,
           size: 56.r, color: AppColors.primary),
       SizedBox(height: AppSpacing.sm),
-      Text('Требуется верификация', style: AppTextStyles.h3),
+      Text('Подтвердите свои данные', style: AppTextStyles.h3),
       SizedBox(height: AppSpacing.xs),
       Text(
-        'Чтобы откликаться на заказы, отправьте документы на проверку. '
-        'Обычно это занимает не более суток.',
+        'Чтобы откликаться на заказы, нужно отправить документы на проверку. '
+        'Это займёт пару минут.',
         style: AppTextStyles.bodyMRegular
             .copyWith(color: AppColors.textSecondary),
       ),
       SizedBox(height: AppSpacing.lg),
       PrimaryButton(
         label: 'Отправить документы',
+        onPressed: () => Navigator.of(context).pop(),
+      ),
+      SizedBox(height: AppSpacing.xs),
+      SecondaryButton(
+        label: 'Может быть позже',
         onPressed: () => Navigator.of(context).pop(),
       ),
     ];

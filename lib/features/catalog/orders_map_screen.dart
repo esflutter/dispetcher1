@@ -12,18 +12,25 @@ class OrdersMapScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      color: AppColors.surfaceVariant,
-      child: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            Icon(Icons.map, size: 64.r, color: AppColors.textTertiary),
-            SizedBox(height: AppSpacing.sm),
-            Text('Карта (демо)',
-                style: AppTextStyles.bodyMedium
-                    .copyWith(color: AppColors.textTertiary)),
-          ],
+    return SizedBox.expand(
+      child: Container(
+        color: AppColors.surfaceVariant,
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Icon(Icons.map_outlined,
+                  size: 80.sp, color: AppColors.textTertiary),
+              SizedBox(height: AppSpacing.sm),
+              Text('Карта (демо)',
+                  style: AppTextStyles.bodyMedium
+                      .copyWith(color: AppColors.textTertiary)),
+              SizedBox(height: AppSpacing.xxs),
+              Text('Здесь будет карта',
+                  style: AppTextStyles.caption
+                      .copyWith(color: AppColors.textTertiary)),
+            ],
+          ),
         ),
       ),
     );

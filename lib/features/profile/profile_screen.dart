@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:go_router/go_router.dart';
 
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_spacing.dart';
@@ -41,7 +42,7 @@ class ProfileScreen extends StatelessWidget {
             IconButton(
               icon: Icon(Icons.edit_outlined,
                   color: AppColors.primary, size: 24.r),
-              onPressed: () => Navigator.of(context).pushNamed('/profile/edit'),
+              onPressed: () => context.push('/profile/edit'),
             ),
         ],
       ),
@@ -57,8 +58,7 @@ class ProfileScreen extends StatelessWidget {
               rating: rating,
               reviewsCount: reviewsCount,
               photoUrl: photoUrl,
-              onReviewsTap: () =>
-                  Navigator.of(context).pushNamed('/profile/reviews'),
+              onReviewsTap: () => context.push('/profile/reviews'),
             ),
             SizedBox(height: AppSpacing.lg),
             if (_isBlocked) ...[
@@ -97,26 +97,43 @@ class ProfileScreen extends StatelessWidget {
             _ProfileMenuItem(
               icon: Icons.badge_outlined,
               label: 'Моя карточка исполнителя',
-              onTap: () =>
-                  Navigator.of(context).pushNamed('/executor-card'),
+              onTap: () => context.push('/executor-card'),
             ),
             SizedBox(height: AppSpacing.sm),
             _ProfileMenuItem(
               icon: Icons.list_alt_outlined,
               label: 'Мои услуги',
-              onTap: () => Navigator.of(context).pushNamed('/services'),
+              onTap: () => context.push('/services'),
             ),
             SizedBox(height: AppSpacing.sm),
             _ProfileMenuItem(
               icon: Icons.calendar_today_outlined,
               label: 'Мой график',
-              onTap: () => Navigator.of(context).pushNamed('/schedule'),
+              onTap: () => context.push('/schedule'),
             ),
             SizedBox(height: AppSpacing.sm),
             _ProfileMenuItem(
               icon: Icons.workspace_premium_outlined,
               label: 'Информация о подписке',
-              onTap: () => Navigator.of(context).pushNamed('/subscription'),
+              onTap: () => context.push('/subscription'),
+            ),
+            SizedBox(height: AppSpacing.sm),
+            _ProfileMenuItem(
+              icon: Icons.support_agent_outlined,
+              label: 'Поддержка',
+              onTap: () => context.push('/support'),
+            ),
+            SizedBox(height: AppSpacing.sm),
+            _ProfileMenuItem(
+              icon: Icons.star_outline_rounded,
+              label: 'Отзывы',
+              onTap: () => context.push('/profile/reviews'),
+            ),
+            SizedBox(height: AppSpacing.sm),
+            _ProfileMenuItem(
+              icon: Icons.logout_rounded,
+              label: 'Выйти',
+              onTap: () => context.go('/auth/phone'),
             ),
             SizedBox(height: AppSpacing.xl),
             _SupportFooter(),
@@ -302,7 +319,7 @@ class _InfoCard extends StatelessWidget {
               alignment: Alignment.centerLeft,
               child: TextButton(
                 style: TextButton.styleFrom(padding: EdgeInsets.zero),
-                onPressed: () {},
+                onPressed: () => context.push('/executor-card/verification'),
                 child: Text(actionLabel!, style: AppTextStyles.linkBold),
               ),
             ),

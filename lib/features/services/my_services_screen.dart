@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:go_router/go_router.dart';
 
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_spacing.dart';
@@ -60,7 +61,7 @@ class MyServicesScreen extends StatelessWidget {
         padding: EdgeInsets.symmetric(horizontal: AppSpacing.md),
         child: PrimaryButton(
           label: 'Создать услугу',
-          onPressed: () => Navigator.of(context).pushNamed('/services/create'),
+          onPressed: () => context.push('/services/create'),
         ),
       ),
     );
@@ -101,8 +102,7 @@ class _ServicesList extends StatelessWidget {
           title: item.title,
           category: item.category,
           pricePerHour: item.pricePerHour,
-          onTap: () => Navigator.of(context)
-              .pushNamed('/services/${item.id}'),
+          onTap: () => context.push('/services/${item.id}'),
         );
       },
     );

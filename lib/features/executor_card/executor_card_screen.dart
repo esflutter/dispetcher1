@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:go_router/go_router.dart';
 
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_spacing.dart';
@@ -240,27 +241,26 @@ class _StatusActions extends StatelessWidget {
         return PrimaryButton(
           label: 'Создать',
           onPressed: () =>
-              Navigator.of(context).pushNamed('/executor-card/edit'),
+              context.push('/executor-card/edit'),
         );
       case ExecutorCardStatus.inReview:
         return PrimaryButton(
           label: 'Редактировать',
           onPressed: () =>
-              Navigator.of(context).pushNamed('/executor-card/edit'),
+              context.push('/executor-card/edit'),
         );
       case ExecutorCardStatus.rejected:
         return Column(
           children: [
             PrimaryButton(
               label: 'Отправить заново',
-              onPressed: () => Navigator.of(context)
-                  .pushNamed('/executor-card/verification'),
+              onPressed: () => context.push('/executor-card/verification'),
             ),
             SizedBox(height: AppSpacing.sm),
             SecondaryButton(
               label: 'Редактировать',
               onPressed: () =>
-                  Navigator.of(context).pushNamed('/executor-card/edit'),
+                  context.push('/executor-card/edit'),
             ),
           ],
         );
@@ -270,7 +270,7 @@ class _StatusActions extends StatelessWidget {
             PrimaryButton(
               label: 'Редактировать',
               onPressed: () =>
-                  Navigator.of(context).pushNamed('/executor-card/edit'),
+                  context.push('/executor-card/edit'),
             ),
             SizedBox(height: AppSpacing.sm),
             SecondaryButton(

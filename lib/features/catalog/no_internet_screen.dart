@@ -31,7 +31,8 @@ class NoInternetScreen extends StatelessWidget {
               SizedBox(height: AppSpacing.xl),
               PrimaryButton(
                 label: 'Обновить',
-                onPressed: onRetry ?? () {},
+                onPressed: onRetry ??
+                    () => Navigator.of(context).maybePop(),
               ),
             ],
           ),
