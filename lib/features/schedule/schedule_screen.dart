@@ -175,7 +175,8 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
         return _EmptyState(
           icon: Icons.beach_access_outlined,
           title: 'Выходной',
-          subtitle: 'Вы отметили этот день выходным — заказы на него не принимаются',
+          subtitle:
+              'Вы отметили этот день\nвыходным — заказы на него не принимаются',
         );
       case DayState.noOrders:
         return _EmptyState(

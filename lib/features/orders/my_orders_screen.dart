@@ -209,13 +209,13 @@ class _EmptyOrders extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         children: <Widget>[
           Text(
-            'Здесь появятся ваши отклики',
+            'Откликнитесь на заказ и получайте предложения от заказчиков',
             style: AppTextStyles.titleL,
             textAlign: TextAlign.center,
           ),
           SizedBox(height: AppSpacing.sm),
           Text(
-            'Откликнитесь на заказ и получайте предложения от заказчиков',
+            'Здесь появятся ваши отклики',
             style: AppTextStyles.body.copyWith(color: AppColors.textTertiary),
             textAlign: TextAlign.center,
           ),

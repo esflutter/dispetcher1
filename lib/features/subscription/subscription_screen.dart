@@ -71,7 +71,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
               child: PrimaryButton(
                 label: _status == SubscriptionStatus.inactive
                     ? 'Оплатить подписку'
-                    : 'Тарифы',
+                    : 'Отключить',
                 onPressed: () => context.push('/subscription/tariffs'),
               ),
             ),

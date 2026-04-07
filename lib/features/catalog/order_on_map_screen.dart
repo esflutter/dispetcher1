@@ -26,7 +26,8 @@ class OrderOnMapScreen extends StatelessWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: <Widget>[
-                  Icon(Icons.map, size: 64.r, color: AppColors.textTertiary),
+                  Icon(Icons.map_outlined,
+                      size: 80.sp, color: AppColors.textTertiary),
                   SizedBox(height: AppSpacing.sm),
                   Text('Карта (демо)',
                       style: AppTextStyles.bodyMedium

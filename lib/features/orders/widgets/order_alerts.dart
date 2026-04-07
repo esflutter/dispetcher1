@@ -16,9 +16,9 @@ Future<void> showAcceptAlert(BuildContext context) {
       borderRadius: BorderRadius.vertical(top: Radius.circular(AppSpacing.radiusXL)),
     ),
     builder: (ctx) => _SheetBody(
-      title: 'Отклонить заказ',
-      message: 'Вы уверены, что хотите отклонить заказ?',
-      primaryLabel: 'Отклонить',
+      title: 'Принять заказ?',
+      message: 'Вы уверены, что хотите принять заказ?',
+      primaryLabel: 'Подтвердить',
       onPrimary: () => Navigator.of(ctx).pop(),
       secondaryLabel: 'Вернуться',
     ),
@@ -38,9 +38,9 @@ Future<void> showReviewPromptSheet(
       borderRadius: BorderRadius.vertical(top: Radius.circular(AppSpacing.radiusXL)),
     ),
     builder: (ctx) => _SheetBody(
-      title: 'Вы получили отзыв',
-      message: 'Пользователь оставил вам оценку',
-      primaryLabel: 'Мои отзывы',
+      title: 'Оставьте отзыв',
+      message: 'Поделитесь впечатлениями о заказчике — это поможет другим исполнителям.',
+      primaryLabel: 'Оставить отзыв',
       onPrimary: () {
         Navigator.of(ctx).pop();
         onLeaveReview();

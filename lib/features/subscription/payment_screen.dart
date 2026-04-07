@@ -46,30 +46,19 @@ class PaymentScreen extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
-                    Text('Резюме платежа', style: AppTextStyles.h3),
+                    Text('Оплата картой', style: AppTextStyles.titleL),
                     SizedBox(height: AppSpacing.md),
-                    Container(
-                      padding: EdgeInsets.all(AppSpacing.md),
-                      decoration: BoxDecoration(
-                        color: AppColors.primaryTint,
-                        borderRadius:
-                            BorderRadius.circular(AppSpacing.radiusL),
-                      ),
-                      child: Column(
-                        children: <Widget>[
-                          _Row(label: 'Тариф', value: tariffTitle),
-                          SizedBox(height: AppSpacing.sm),
-                          const Divider(color: AppColors.divider, height: 1),
-                          SizedBox(height: AppSpacing.sm),
-                          _Row(label: 'К оплате', value: amount, accent: true),
-                        ],
-                      ),
-                    ),
-                    SizedBox(height: AppSpacing.lg),
                     _CardRow(
                       cardLast4: cardLast4,
                       onTap: () => context.push('/subscription/card'),
                     ),
+                    SizedBox(height: AppSpacing.lg),
+                    Text('Apple Pay / Google Pay',
+                        style: AppTextStyles.bodyMMedium),
+                    SizedBox(height: AppSpacing.md),
+                    _Row(label: 'Тариф', value: tariffTitle),
+                    SizedBox(height: AppSpacing.xs),
+                    _Row(label: 'К оплате', value: amount, accent: true),
                   ],
                 ),
               ),
@@ -78,7 +67,7 @@ class PaymentScreen extends StatelessWidget {
               padding: EdgeInsets.fromLTRB(AppSpacing.screenH, 0,
                   AppSpacing.screenH, AppSpacing.lg),
               child: PrimaryButton(
-                label: 'Оплатить $amount',
+                label: 'Оплатить',
                 onPressed: () =>
                     context.push('/subscription/payment/result'),
               ),

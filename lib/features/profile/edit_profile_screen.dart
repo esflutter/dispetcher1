@@ -130,7 +130,7 @@ class _InfoField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = danger ? const Color(0xFFE94057) : AppColors.textPrimary;
+    final color = danger ? AppColors.error : AppColors.textPrimary;
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(AppSpacing.radiusM),
