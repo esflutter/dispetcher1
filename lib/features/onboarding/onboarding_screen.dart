@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 import 'package:smooth_page_indicator/smooth_page_indicator.dart';
 
 import '../../core/theme/app_colors.dart';
-import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../core/widgets/primary_button.dart';
 
@@ -24,8 +23,7 @@ const List<_OnbStep> _steps = <_OnbStep>[
   _OnbStep(
     image: 'assets/images/onboarding/onb_1.webp',
     title: 'Откликайтесь на заказы',
-    description:
-        'Предлагайте свои услуги и получайте предложения от заказчиков',
+    description: 'Предлагайте свои услуги и получайте\nпредложения от заказчиков',
   ),
   _OnbStep(
     image: 'assets/images/onboarding/onb_2.webp',
@@ -35,8 +33,7 @@ const List<_OnbStep> _steps = <_OnbStep>[
   _OnbStep(
     image: 'assets/images/onboarding/onb_3.webp',
     title: 'Работайте напрямую',
-    description:
-        'Получайте контакты заказчика\nи договаривайтесь без посредников',
+    description: 'Получайте контакты заказчика\nи договаривайтесь без посредников',
   ),
 ];
 
@@ -70,63 +67,87 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final sHeight = MediaQuery.of(context).size.height;
+    
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: SafeArea(
-        child: Column(
-          children: [
-            Expanded(
-              child: PageView.builder(
-                controller: _controller,
-                itemCount: _steps.length,
-                onPageChanged: (i) => setState(() => _index = i),
-                itemBuilder: (_, i) => _OnbPage(step: _steps[i]),
+      body: Stack(
+        children: [
+          // Sliding content (Images + Text Cards)
+          PageView.builder(
+            controller: _controller,
+            itemCount: _steps.length,
+            onPageChanged: (i) => setState(() => _index = i),
+            itemBuilder: (_, i) => _OnbPage(step: _steps[i], screenHeight: sHeight),
+          ),
+          
+          // Static content on top (Indicator + Button)
+          Align(
+            alignment: Alignment.bottomCenter,
+            child: SizedBox(
+              height: sHeight * 0.445, // 46% exactly
+              child: SafeArea(
+                top: false,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    Container(
+                      padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 8.h),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFBE4C6).withValues(alpha: 0.78),
+                        borderRadius: BorderRadius.circular(100.r),
+                      ),
+                      child: SmoothPageIndicator(
+                        controller: _controller,
+                        count: _steps.length,
+                        effect: SlideEffect(
+                          dotHeight: 8.r,
+                          dotWidth: 8.r,
+                          spacing: 8.w,
+                          activeDotColor: const Color(0xFFFFAC26),
+                          dotColor: const Color(0xFFFFAC26).withValues(alpha: 0.3),
+                        ),
+                      ),
+                    ),
+                    SizedBox(height: 19.h),
+                    Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 16.w),
+                      child: PrimaryButton(
+                        label: 'Далее',
+                        onPressed: _onNext,
+                      ),
+                    ),
+                    SizedBox(height: 51.h), // Bottom padding
+                  ],
+                ),
               ),
             ),
-            SizedBox(height: 8.h),
-            SmoothPageIndicator(
-              controller: _controller,
-              count: _steps.length,
-              effect: ExpandingDotsEffect(
-                dotHeight: 8.h,
-                dotWidth: 8.w,
-                spacing: 8.w,
-                expansionFactor: 3,
-                activeDotColor: AppColors.primary,
-                dotColor: AppColors.divider,
-              ),
-            ),
-            SizedBox(height: 24.h),
-            Padding(
-              padding: EdgeInsets.symmetric(horizontal: AppSpacing.md),
-              child: PrimaryButton(
-                label: 'Далее',
-                onPressed: _onNext,
-              ),
-            ),
-            SizedBox(height: 24.h),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 }
 
 class _OnbPage extends StatelessWidget {
-  const _OnbPage({required this.step});
+  const _OnbPage({required this.step, required this.screenHeight});
 
   final _OnbStep step;
+  final double screenHeight;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+    return Stack(
       children: [
-        Expanded(
+        // Full bleed image behind the status bar
+        Positioned(
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: screenHeight * 0.445 - 22.r, // Заканчивается ровно под скруглением шторки
           child: Image.asset(
             step.image,
             fit: BoxFit.cover,
-            width: double.infinity,
             errorBuilder: (BuildContext _, Object _, StackTrace? _) =>
                 Container(
               color: AppColors.surfaceVariant,
@@ -136,25 +157,38 @@ class _OnbPage extends StatelessWidget {
             ),
           ),
         ),
-        SizedBox(height: 24.h),
-        Padding(
-          padding: EdgeInsets.symmetric(horizontal: AppSpacing.xl),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Text(
-                step.title,
-                style: AppTextStyles.h2,
-                textAlign: TextAlign.center,
-              ),
-              SizedBox(height: 12.h),
-              Text(
-                step.description,
-                style: AppTextStyles.body
-                    .copyWith(color: AppColors.textSecondary),
-                textAlign: TextAlign.center,
-              ),
-            ],
+        // Overlapping bottom white card
+        Align(
+          alignment: Alignment.bottomCenter,
+          child: Container(
+            height: screenHeight * 0.445,
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: AppColors.background,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(22.r)),
+            ),
+            padding: EdgeInsets.only(top: 42.h, left: 16.w, right: 16.w),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Text(
+                  step.title,
+                  style: AppTextStyles.h2.copyWith(
+                    fontSize: 24.sp,
+                    color: AppColors.textBlack,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                SizedBox(height: 11.h),
+                Text(
+                  step.description,
+                  style: AppTextStyles.body.copyWith(
+                    color: AppColors.textSecondary,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
           ),
         ),
       ],

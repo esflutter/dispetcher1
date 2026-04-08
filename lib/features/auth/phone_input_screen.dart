@@ -6,7 +6,6 @@ import 'package:mask_text_input_formatter/mask_text_input_formatter.dart';
 
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
-import 'package:dispatcher_1/core/theme/app_spacing.dart';
 import 'package:dispatcher_1/core/widgets/primary_button.dart';
 
 class PhoneInputScreen extends StatefulWidget {
@@ -46,34 +45,53 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(
-        backgroundColor: AppColors.background,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, color: AppColors.textPrimary),
-          onPressed: () => Navigator.of(context).maybePop(),
-        ),
-      ),
       body: SafeArea(
-        child: Padding(
-          padding: EdgeInsets.symmetric(horizontal: AppSpacing.screenH),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              SizedBox(height: 12.h),
-              Text('Введите номер телефона', style: AppTextStyles.h1Phone),
-              SizedBox(height: 32.h),
-              _PhoneField(controller: _controller, formatter: _maskFormatter),
-              const Spacer(),
-              PrimaryButton(
+        child: Column(
+          children: [
+            Expanded(
+              child: Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16.w),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(height: 16.h),
+                    Text(
+                      'Введите номер\nтелефона',
+                      style: AppTextStyles.h1Phone.copyWith(color: AppColors.textBlack),
+                    ),
+                    SizedBox(height: 40.h),
+                    Text(
+                      'Номер телефона',
+                      style: AppTextStyles.body.copyWith(
+                        color: AppColors.textPrimary,
+                        fontSize: 16.sp,
+                      ),
+                    ),
+                    SizedBox(height: 8.h),
+                    _PhoneField(controller: _controller, formatter: _maskFormatter),
+                  ],
+                ),
+              ),
+            ),
+            Container(
+              padding: EdgeInsets.fromLTRB(16.w, 16.h, 16.w, 16.h),
+              decoration: BoxDecoration(
+                color: AppColors.background,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.04),
+                    offset: const Offset(0, -4),
+                    blurRadius: 16,
+                  ),
+                ],
+              ),
+              child: PrimaryButton(
                 label: 'Далее',
                 enabled: _isComplete,
                 onPressed: _isComplete ? () => context.go('/auth/otp') : null,
               ),
-              SizedBox(height: 24.h),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -90,10 +108,10 @@ class _PhoneField extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       height: 56.h,
-      padding: EdgeInsets.symmetric(horizontal: 16.w),
+      padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 4.h),
       decoration: BoxDecoration(
         color: AppColors.primaryTint,
-        borderRadius: BorderRadius.circular(AppSpacing.radiusM),
+        borderRadius: BorderRadius.circular(16.r),
       ),
       alignment: Alignment.center,
       child: TextField(
@@ -103,7 +121,7 @@ class _PhoneField extends StatelessWidget {
         inputFormatters: <TextInputFormatter>[formatter],
         style: AppTextStyles.body.copyWith(
           fontSize: 16.sp,
-          color: AppColors.textPrimary,
+          color: AppColors.textBlack,
         ),
         decoration: InputDecoration(
           isCollapsed: true,

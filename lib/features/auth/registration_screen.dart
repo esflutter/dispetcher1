@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
-import 'package:dispatcher_1/core/theme/app_spacing.dart';
 import 'package:dispatcher_1/core/widgets/primary_button.dart';
+import 'package:dispatcher_1/features/auth/photo_crop_screen.dart';
 
 class RegistrationScreen extends StatefulWidget {
   const RegistrationScreen({super.key});
@@ -17,6 +18,7 @@ class RegistrationScreen extends StatefulWidget {
 class _RegistrationScreenState extends State<RegistrationScreen> {
   final TextEditingController _firstNameController = TextEditingController();
   bool _agreed = false;
+  CropResult? _cropResult;
 
   @override
   void initState() {
@@ -32,94 +34,80 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     super.dispose();
   }
 
-  bool get _isValid =>
-      _firstNameController.text.trim().isNotEmpty && _agreed;
+  bool get _isValid => _firstNameController.text.trim().isNotEmpty && _agreed;
 
-  void _openPhotoSheet() {
-    showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: AppColors.surface,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20.r)),
-      ),
-      builder: (ctx) => SafeArea(
-        child: Padding(
-          padding: EdgeInsets.symmetric(horizontal: AppSpacing.screenH, vertical: 16.h),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 36.w,
-                height: 4.h,
-                margin: EdgeInsets.only(bottom: 16.h),
-                decoration: BoxDecoration(
-                  color: AppColors.divider,
-                  borderRadius: BorderRadius.circular(2.r),
-                ),
-              ),
-              ListTile(
-                leading: const Icon(Icons.photo_camera_outlined, color: AppColors.textPrimary),
-                title: Text('Сделать фото', style: AppTextStyles.bodyMMedium),
-                onTap: () => Navigator.of(ctx).pop(),
-              ),
-              ListTile(
-                leading: const Icon(Icons.photo_library_outlined, color: AppColors.textPrimary),
-                title: Text('Выбрать из галереи', style: AppTextStyles.bodyMMedium),
-                onTap: () => Navigator.of(ctx).pop(),
-              ),
-              SizedBox(height: 8.h),
-            ],
-          ),
-        ),
-      ),
+  Future<void> _openPhotoSheet() async {
+    // Переходим на экран кропа и получаем геометрию вырезанного круга
+    final result = await Navigator.of(context).push<CropResult>(
+      MaterialPageRoute(builder: (_) => const PhotoCropScreen()),
     );
+    if (result != null && mounted) {
+      setState(() {
+        _cropResult = result;
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(
-        backgroundColor: AppColors.background,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, color: AppColors.textPrimary),
-          onPressed: () => context.go('/auth/otp'),
-        ),
-      ),
       body: SafeArea(
-        child: Padding(
-          padding: EdgeInsets.symmetric(horizontal: AppSpacing.screenH),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              SizedBox(height: 16.h),
-              Text(
-                'Введите данные',
-                style: AppTextStyles.h1SemiBold.copyWith(color: AppColors.textBlack),
+        child: Column(
+          children: [
+            Expanded(
+              child: Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16.w),
+                child: ListView(
+                  physics: const BouncingScrollPhysics(),
+                  children: [
+                    SizedBox(height: 16.h),
+                    Text(
+                      'Введите данные',
+                      style: AppTextStyles.h1Phone.copyWith(color: AppColors.textBlack),
+                    ),
+                    SizedBox(height: 40.h),
+                    Center(
+                      child: _AvatarSlot(
+                        onTap: _openPhotoSheet,
+                        cropResult: _cropResult,
+                      ),
+                    ),
+                    SizedBox(height: 25.h),
+                    _LabeledField(
+                      controller: _firstNameController,
+                      hint: 'Имя',
+                    ),
+                  ],
+                ),
               ),
-              SizedBox(height: 24.h),
-              Center(child: _AvatarSlot(onTap: _openPhotoSheet)),
-              SizedBox(height: 24.h),
-              _LabeledField(
-                controller: _firstNameController,
-                hint: 'Имя',
-              ),
-              SizedBox(height: 16.h),
-              _PolicyCheckbox(
+            ),
+            Padding(
+              padding: EdgeInsets.fromLTRB(16.w, 0, 16.w, 28.h),
+              child: _PolicyCheckbox(
                 value: _agreed,
                 onChanged: (bool v) => setState(() => _agreed = v),
               ),
-              const Spacer(),
-              PrimaryButton(
+            ),
+            Container(
+              padding: EdgeInsets.fromLTRB(16.w, 16.h, 16.w, 16.h),
+              decoration: BoxDecoration(
+                color: AppColors.background,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.04),
+                    offset: const Offset(0, -4),
+                    blurRadius: 16,
+                  ),
+                ],
+              ),
+              child: PrimaryButton(
                 label: 'Готово',
                 enabled: _isValid,
-                onPressed: _isValid ? () => context.go('/shell') : null,
+                onPressed: _isValid ? () => context.go('/shell') : () {},
               ),
-              SizedBox(height: 24.h),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -127,41 +115,67 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
 }
 
 class _AvatarSlot extends StatelessWidget {
-  const _AvatarSlot({required this.onTap});
+  const _AvatarSlot({required this.onTap, required this.cropResult});
   final VoidCallback onTap;
+  final CropResult? cropResult;
 
   @override
   Widget build(BuildContext context) {
+    final bool hasPhoto = cropResult != null;
     return GestureDetector(
       onTap: onTap,
       child: Stack(
         clipBehavior: Clip.none,
-        children: <Widget>[
+        children: [
           Container(
-            width: 100.w,
-            height: 100.w,
-            decoration: const BoxDecoration(
-              color: AppColors.border,
+            width: 112.w,
+            height: 112.w,
+            decoration: BoxDecoration(
+              color: const Color(0xFFEAEAEA), // Цвет фона-плейсхолдера
               shape: BoxShape.circle,
             ),
             alignment: Alignment.center,
-            child: Icon(
-              Icons.person_outline,
-              size: 48.sp,
-              color: AppColors.textTertiary,
-            ),
+            clipBehavior: Clip.hardEdge,
+            child: hasPhoto
+                ? Stack(
+                    children: [
+                      Positioned(
+                        left: 0,
+                        top: 0,
+                        child: Transform(
+                          // Матрица трансформации для идеального маппинга кружка кропа в миниатюру
+                          transform: Matrix4.identity()
+                            ..translate(
+                              56.w - cropResult!.center.dx * (56.w / cropResult!.radius),
+                              56.w - cropResult!.center.dy * (56.w / cropResult!.radius),
+                            )
+                            ..scale(56.w / cropResult!.radius),
+                          child: SizedBox(
+                            width: cropResult!.screenSize.width,
+                            height: cropResult!.screenSize.height,
+                            child: Image.asset(
+                              'assets/images/user1.png', 
+                              fit: BoxFit.cover,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  )
+                : Image.asset(
+                    'assets/icons/ui/avatar.webp',
+                    width: 112.w,
+                    height: 112.w,
+                    fit: BoxFit.cover,
+                  ),
           ),
           Positioned(
-            right: -2,
-            bottom: -2,
-            child: Container(
-              width: 32.w,
-              height: 32.w,
-              decoration: const BoxDecoration(
-                color: AppColors.primary,
-                shape: BoxShape.circle,
-              ),
-              child: Icon(Icons.edit, size: 16.r, color: AppColors.surface),
+            right: -2.w,
+            bottom: 0,
+            child: Image.asset(
+              'assets/icons/ui/edit.webp',
+              width: 28.w,
+              height: 28.w,
             ),
           ),
         ],
@@ -180,7 +194,7 @@ class _LabeledField extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       height: 56.h,
-      padding: EdgeInsets.symmetric(horizontal: 16.w),
+      padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 4.h),
       decoration: BoxDecoration(
         color: AppColors.primaryTint,
         borderRadius: BorderRadius.circular(16.r),
@@ -188,7 +202,10 @@ class _LabeledField extends StatelessWidget {
       alignment: Alignment.center,
       child: TextField(
         controller: controller,
-        style: AppTextStyles.body.copyWith(fontSize: 16.sp),
+        style: AppTextStyles.body.copyWith(
+          fontSize: 16.sp,
+          color: AppColors.textBlack,
+        ),
         decoration: InputDecoration(
           isCollapsed: true,
           border: InputBorder.none,
@@ -214,30 +231,45 @@ class _PolicyCheckbox extends StatelessWidget {
       onTap: () => onChanged(!value),
       behavior: HitTestBehavior.opaque,
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: <Widget>[
           Padding(
-            padding: EdgeInsets.only(top: 2.h),
-            child: SizedBox(
-              width: 24.r,
-              height: 24.r,
-              child: Checkbox(
-                value: value,
-                onChanged: (bool? v) => onChanged(v ?? false),
-                activeColor: AppColors.primary,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(6.r),
-                ),
-              ),
+            padding: EdgeInsets.zero,
+            child: Image.asset(
+              value ? 'assets/icons/ui/check_ok.png' : 'assets/icons/ui/check.webp',
+              width: 24.w,
+              height: 24.w,
             ),
           ),
           SizedBox(width: 12.w),
           Expanded(
-            child: Text(
-              'Я прочитал(а) и согласен(а) с Правилами обработки персональных данных, Пользовательским соглашением и Политикой конфиденциальности',
-              style: AppTextStyles.caption.copyWith(
-                color: AppColors.textPrimary,
-                fontSize: 12.sp,
+            child: RichText(
+              text: TextSpan(
+                style: AppTextStyles.caption.copyWith(
+                  color: AppColors.textBlack,
+                  fontSize: 12.sp,
+                  height: 1.4,
+                ),
+                children: [
+                  const TextSpan(text: 'Я прочитал(а) и согласен(а) с '),
+                  TextSpan(
+                    text: 'Правилами обработки персональных данных',
+                    style: const TextStyle(fontWeight: FontWeight.bold, decoration: TextDecoration.underline),
+                    recognizer: TapGestureRecognizer()..onTap = () {},
+                  ),
+                  const TextSpan(text: ', '),
+                  TextSpan(
+                    text: 'Пользовательским соглашением',
+                    style: const TextStyle(fontWeight: FontWeight.bold, decoration: TextDecoration.underline),
+                    recognizer: TapGestureRecognizer()..onTap = () {},
+                  ),
+                  const TextSpan(text: ' и '),
+                  TextSpan(
+                    text: 'Политикой конфиденциальности',
+                    style: const TextStyle(fontWeight: FontWeight.bold, decoration: TextDecoration.underline),
+                    recognizer: TapGestureRecognizer()..onTap = () {},
+                  ),
+                ],
               ),
             ),
           ),
