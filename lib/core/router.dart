@@ -96,7 +96,7 @@ final GoRouter appRouter = GoRouter(
       path: '/orders/:id',
       builder: (_, state) => my_order_detail.MyOrderDetailScreen(
         state: (state.extra as my_order_detail.MyOrderDetailState?) ??
-            my_order_detail.MyOrderDetailState.waiting,
+            my_order_detail.MyOrderDetailState.confirmed,
       ),
     ),
     GoRoute(

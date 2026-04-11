@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:go_router/go_router.dart';
 
 import 'package:dispatcher_1/core/theme/app_colors.dart';
-import 'package:dispatcher_1/core/theme/app_spacing.dart';
-import 'package:dispatcher_1/core/theme/app_text_styles.dart';
 import 'package:dispatcher_1/core/widgets/primary_button.dart';
+import 'package:dispatcher_1/features/orders/widgets/order_alerts.dart';
 
-/// Экран отзыва — 5 звёзд + поле комментария + «Отправить».
+/// Экран «Как всё прошло?» — оценка пользователя + комментарий + кнопка.
 class ReviewScreen extends StatefulWidget {
   const ReviewScreen({super.key});
 
@@ -24,87 +25,174 @@ class _ReviewScreenState extends State<ReviewScreen> {
     super.dispose();
   }
 
+  Future<void> _submit() async {
+    // Захватываем GoRouter до await, чтобы после закрытия экрана
+    // всё ещё можно было выполнить push в /profile/reviews.
+    final GoRouter router = GoRouter.of(context);
+    final bool openReviews = await showReviewSentDialog(context) ?? false;
+    if (!mounted) return;
+    Navigator.of(context).maybePop();
+    if (openReviews) {
+      router.push('/profile/reviews');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final bool canSubmit = _rating > 0;
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
         backgroundColor: AppColors.background,
         elevation: 0,
+        toolbarHeight: 48.h,
+        centerTitle: true,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: AppColors.textPrimary),
+          padding: EdgeInsets.zero,
+          alignment: Alignment.centerLeft,
+          icon: Padding(
+            padding: EdgeInsets.only(left: 8.w),
+            child: Icon(
+              Icons.arrow_back_ios_new_rounded,
+              color: AppColors.textPrimary,
+              size: 22.r,
+            ),
+          ),
           onPressed: () => Navigator.of(context).maybePop(),
         ),
-        title: Text('Как всё прошло?', style: AppTextStyles.titleS),
-        centerTitle: true,
-      ),
-      body: SafeArea(
-        child: Padding(
-          padding: EdgeInsets.symmetric(horizontal: AppSpacing.screenH),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              SizedBox(height: AppSpacing.lg),
-              Text('Оцените пользователя',
-                  style: AppTextStyles.bodyMedium),
-              SizedBox(height: AppSpacing.xs),
-              Text(
-                'Ваш отзыв поможет другим понять, с кем лучше работать. Оцените заказчика и при желании оставьте комментарий.',
-                style: AppTextStyles.subBody
-                    .copyWith(color: AppColors.textTertiary),
-              ),
-              SizedBox(height: AppSpacing.md),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: List.generate(5, (i) {
-                  final filled = i < _rating;
-                  return Padding(
-                    padding: EdgeInsets.symmetric(horizontal: AppSpacing.xxs),
-                    child: GestureDetector(
-                      onTap: () => setState(() => _rating = i + 1),
-                      child: Icon(
-                        Icons.star_rounded,
-                        size: 44.r,
-                        color: filled ? AppColors.primary : AppColors.divider,
-                      ),
-                    ),
-                  );
-                }),
-              ),
-              SizedBox(height: AppSpacing.lg),
-              Container(
-                decoration: BoxDecoration(
-                  color: AppColors.surfaceVariant,
-                  borderRadius: BorderRadius.circular(AppSpacing.radiusM),
-                ),
-                padding: EdgeInsets.symmetric(
-                  horizontal: AppSpacing.sm,
-                  vertical: AppSpacing.xs,
-                ),
-                child: TextField(
-                  controller: _comment,
-                  maxLines: 5,
-                  style: AppTextStyles.body,
-                  decoration: InputDecoration(
-                    border: InputBorder.none,
-                    hintText: 'Введите комментарий',
-                    hintStyle: AppTextStyles.body
-                        .copyWith(color: AppColors.textTertiary),
-                  ),
-                ),
-              ),
-              const Spacer(),
-              PrimaryButton(
-                label: 'Оставить отзыв',
-                enabled: _rating > 0,
-                onPressed: _rating > 0
-                    ? () => Navigator.of(context).maybePop()
-                    : null,
-              ),
-              SizedBox(height: AppSpacing.md),
-            ],
+        title: Text(
+          'Как всё прошло?',
+          style: TextStyle(
+            fontFamily: 'Roboto',
+            fontSize: 17.sp,
+            fontWeight: FontWeight.w600,
+            color: AppColors.textPrimary,
           ),
         ),
+      ),
+      body: Column(
+        children: <Widget>[
+          Expanded(
+            child: SingleChildScrollView(
+              padding: EdgeInsets.fromLTRB(16.w, 8.h, 16.w, 24.h),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: <Widget>[
+                  Text(
+                    'Ваш отзыв поможет другим понять, с кем лучше '
+                    'работать. Оцените заказчика и при желании '
+                    'оставьте комментарий.',
+                    style: TextStyle(
+                      fontFamily: 'Roboto',
+                      fontSize: 14.sp,
+                      fontWeight: FontWeight.w400,
+                      height: 1.4,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                  SizedBox(height: 24.h),
+                  Text(
+                    'Оцените пользователя',
+                    style: TextStyle(
+                      fontFamily: 'Roboto',
+                      fontSize: 16.sp,
+                      fontWeight: FontWeight.w500,
+                      height: 1.3,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  SizedBox(height: 17.h),
+                  Row(
+                    children: <Widget>[
+                      SizedBox(width: 10.w),
+                      for (int i = 0; i < 5; i++) ...<Widget>[
+                        if (i > 0) SizedBox(width: 28.w),
+                        GestureDetector(
+                          onTap: () => setState(() => _rating = i + 1),
+                          child: Image.asset(
+                            i < _rating
+                                ? 'assets/images/orders/star_filled.webp'
+                                : 'assets/images/orders/star_empty.webp',
+                            width: 24.r,
+                            height: 24.r,
+                            fit: BoxFit.contain,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  SizedBox(height: 36.h),
+                  Container(
+                    constraints: BoxConstraints(minHeight: 56.h),
+                    decoration: BoxDecoration(
+                      color: AppColors.fieldFill,
+                      borderRadius: BorderRadius.circular(12.r),
+                    ),
+                    padding: EdgeInsets.symmetric(
+                      horizontal: 16.w,
+                      vertical: 16.h,
+                    ),
+                    child: TextField(
+                      controller: _comment,
+                      // null — поле растёт вниз по мере добавления строк.
+                      maxLines: null,
+                      minLines: 1,
+                      maxLength: 500,
+                      inputFormatters: <TextInputFormatter>[
+                        LengthLimitingTextInputFormatter(500),
+                      ],
+                      style: TextStyle(
+                        fontFamily: 'Roboto',
+                        fontSize: 16.sp,
+                        fontWeight: FontWeight.w400,
+                        height: 1.3,
+                        color: AppColors.textPrimary,
+                      ),
+                      decoration: InputDecoration(
+                        isCollapsed: true,
+                        border: InputBorder.none,
+                        // Скрываем счётчик "0/500" снизу — ограничение нужно
+                        // только как валидация ввода, показывать не надо.
+                        counterText: '',
+                        hintText: 'Введите комментарий',
+                        hintStyle: TextStyle(
+                          fontFamily: 'Roboto',
+                          fontSize: 16.sp,
+                          fontWeight: FontWeight.w400,
+                          height: 1.3,
+                          color: AppColors.textTertiary,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          Container(
+            decoration: BoxDecoration(
+              color: AppColors.background,
+              boxShadow: <BoxShadow>[
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.06),
+                  blurRadius: 8,
+                  offset: const Offset(0, -2),
+                ),
+              ],
+            ),
+            padding: EdgeInsets.fromLTRB(
+              16.w,
+              12.h,
+              16.w,
+              16.h + MediaQuery.of(context).padding.bottom,
+            ),
+            child: PrimaryButton(
+              label: 'Оставить отзыв',
+              enabled: canSubmit,
+              onPressed: canSubmit ? _submit : null,
+            ),
+          ),
+        ],
       ),
     );
   }

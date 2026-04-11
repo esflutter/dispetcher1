@@ -17,18 +17,39 @@ import 'package:dispatcher_1/features/shell/widgets/support_fab.dart';
 class MainShell extends StatefulWidget {
   const MainShell({super.key});
 
+  /// Глобальный способ переключить нижний таб изнутри экранов,
+  /// запушенных поверх MainShell (например, из `OrderFeedScreen`,
+  /// где нижняя панель — это «фейковая» копия shell'овской).
+  /// Достаточно выставить нужный индекс и сделать
+  /// `Navigator.popUntil(isFirst)`, чтобы вернуться к shell.
+  static final ValueNotifier<int> selectedTab = ValueNotifier<int>(0);
+
   @override
   State<MainShell> createState() => _MainShellState();
 }
 
 class _MainShellState extends State<MainShell> {
-  int _index = 0;
-
-  static const List<Widget> _screens = <Widget>[
-    CatalogCategoriesScreen(),
-    MyOrdersScreen(),
-    ProfileScreen(),
+  late final List<Widget> _screens = <Widget>[
+    const CatalogCategoriesScreen(),
+    MyOrdersScreen(onGoToCatalog: () => MainShell.selectedTab.value = 0),
+    const ProfileScreen(),
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    MainShell.selectedTab.addListener(_onTabChanged);
+  }
+
+  @override
+  void dispose() {
+    MainShell.selectedTab.removeListener(_onTabChanged);
+    super.dispose();
+  }
+
+  void _onTabChanged() {
+    if (mounted) setState(() {});
+  }
 
   void _openSupport() {
     // Стартовый экран ассистента («С чего хотите начать?») показывается
@@ -39,6 +60,7 @@ class _MainShellState extends State<MainShell> {
 
   @override
   Widget build(BuildContext context) {
+    final int index = MainShell.selectedTab.value;
     return Scaffold(
       backgroundColor: AppColors.background,
       body: AnimatedBuilder(
@@ -49,7 +71,7 @@ class _MainShellState extends State<MainShell> {
               onRetry: () => NetworkStatus.instance.recheck(),
             );
           }
-          return IndexedStack(index: _index, children: _screens);
+          return IndexedStack(index: index, children: _screens);
         },
       ),
       floatingActionButton: Padding(
@@ -59,8 +81,8 @@ class _MainShellState extends State<MainShell> {
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       bottomNavigationBar: MainBottomNavBar(
         items: kMainNavItems,
-        currentIndex: _index,
-        onTap: (int i) => setState(() => _index = i),
+        currentIndex: index,
+        onTap: (int i) => MainShell.selectedTab.value = i,
       ),
     );
   }

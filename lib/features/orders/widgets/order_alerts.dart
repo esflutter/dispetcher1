@@ -2,101 +2,216 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 
 import 'package:dispatcher_1/core/theme/app_colors.dart';
-import 'package:dispatcher_1/core/theme/app_spacing.dart';
-import 'package:dispatcher_1/core/theme/app_text_styles.dart';
-import 'package:dispatcher_1/core/widgets/bottom_sheet_handle.dart';
 import 'package:dispatcher_1/core/widgets/primary_button.dart';
 
-/// Боттом-шит «Принять заказ?» — алерт перед подтверждением.
-Future<void> showAcceptAlert(BuildContext context) {
-  return showModalBottomSheet<void>(
-    context: context,
-    backgroundColor: AppColors.surface,
-    isScrollControlled: true,
-    shape: RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(AppSpacing.radiusXL)),
-    ),
-    builder: (ctx) => _SheetBody(
-      title: 'Принять заказ?',
-      message: 'Вы уверены, что хотите принять заказ?',
-      primaryLabel: 'Подтвердить',
-      onPrimary: () => Navigator.of(ctx).pop(),
-      secondaryLabel: 'Вернуться',
-    ),
-  );
-}
-
-/// Боттом-шит «Оставьте отзыв» — приглашение оставить отзыв.
-Future<void> showReviewPromptSheet(
+/// Алерт «Вы уверены, что хотите отказаться от заказа?»
+/// Используется на экране подтверждённого заказа (исполнитель уже принял).
+Future<void> showConfirmRefuseDialog(
   BuildContext context, {
-  required VoidCallback onLeaveReview,
+  required VoidCallback onRefuse,
 }) {
-  return showModalBottomSheet<void>(
+  return showDialog<void>(
     context: context,
-    backgroundColor: AppColors.surface,
-    isScrollControlled: true,
-    shape: RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(AppSpacing.radiusXL)),
-    ),
-    builder: (ctx) => _SheetBody(
-      title: 'Оставьте отзыв',
-      message: 'Поделитесь впечатлениями о заказчике — это поможет другим исполнителям.',
-      primaryLabel: 'Оставить отзыв',
+    barrierColor: Colors.black.withValues(alpha: 0.35),
+    builder: (BuildContext ctx) => _ConfirmDialog(
+      title: 'Вы уверены, что хотите\nотказаться от заказа?',
+      primaryLabel: 'Отказаться',
       onPrimary: () {
         Navigator.of(ctx).pop();
-        onLeaveReview();
+        onRefuse();
       },
-      secondaryLabel: 'Позже',
     ),
   );
 }
 
-class _SheetBody extends StatelessWidget {
-  const _SheetBody({
-    required this.title,
-    required this.message,
-    required this.primaryLabel,
-    required this.onPrimary,
-    required this.secondaryLabel,
-  });
+/// Алерт «Вы уверены, что хотите отклонить заказ?»
+/// Используется на экране, где исполнитель ещё не подтвердил заказ.
+Future<void> showConfirmDeclineDialog(
+  BuildContext context, {
+  required VoidCallback onDecline,
+}) {
+  return showDialog<void>(
+    context: context,
+    barrierColor: Colors.black.withValues(alpha: 0.35),
+    builder: (BuildContext ctx) => _ConfirmDialog(
+      title: 'Вы уверены, что хотите\nотклонить заказ?',
+      primaryLabel: 'Отклонить заказ',
+      onPrimary: () {
+        Navigator.of(ctx).pop();
+        onDecline();
+      },
+    ),
+  );
+}
 
-  final String title;
-  final String message;
-  final String primaryLabel;
-  final VoidCallback onPrimary;
-  final String secondaryLabel;
+/// Подтверждение принятия заказа исполнителем (опционально, по флоу).
+Future<void> showConfirmAcceptDialog(
+  BuildContext context, {
+  required VoidCallback onConfirm,
+}) {
+  return showDialog<void>(
+    context: context,
+    barrierColor: Colors.black.withValues(alpha: 0.35),
+    builder: (BuildContext ctx) => _ConfirmDialog(
+      title: 'Вы уверены, что хотите\nпринять заказ?',
+      primaryLabel: 'Подтвердить',
+      onPrimary: () {
+        Navigator.of(ctx).pop();
+        onConfirm();
+      },
+    ),
+  );
+}
 
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      top: false,
-      child: Padding(
-        padding: EdgeInsets.fromLTRB(
-          AppSpacing.screenH,
-          AppSpacing.md,
-          AppSpacing.screenH,
-          AppSpacing.md,
+/// Алерт «Вы оставили отзыв» — показывается после успешной отправки отзыва.
+/// Возвращает `true`, если пользователь нажал «Мои отзывы», иначе `null`.
+Future<bool?> showReviewSentDialog(BuildContext context) {
+  return showDialog<bool>(
+    context: context,
+    barrierColor: Colors.black.withValues(alpha: 0.35),
+    builder: (BuildContext ctx) => Dialog(
+      insetPadding: EdgeInsets.symmetric(horizontal: 16.w),
+      backgroundColor: Colors.transparent,
+      child: Container(
+        padding: EdgeInsets.fromLTRB(16.r, 14.r, 16.r, 22.r),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(20.r),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const BottomSheetHandle(),
-            SizedBox(height: AppSpacing.md),
-            Text(title, style: AppTextStyles.h3, textAlign: TextAlign.center),
-            SizedBox(height: AppSpacing.xs),
+          children: <Widget>[
+            Align(
+              alignment: Alignment.centerRight,
+              child: GestureDetector(
+                onTap: () => Navigator.of(ctx).pop(),
+                child: Icon(
+                  Icons.close_rounded,
+                  size: 22.r,
+                  color: AppColors.textTertiary,
+                ),
+              ),
+            ),
+            SizedBox(height: 10.h),
+            Center(
+              child: Image.asset(
+                'assets/images/orders/big_star.webp',
+                width: 67.r,
+                height: 67.r,
+                fit: BoxFit.contain,
+              ),
+            ),
+            SizedBox(height: 30.h),
             Text(
-              message,
-              style: AppTextStyles.body.copyWith(color: AppColors.textSecondary),
+              'Вы оставили отзыв',
               textAlign: TextAlign.center,
+              style: TextStyle(
+                fontFamily: 'Roboto',
+                fontSize: 20.sp,
+                fontWeight: FontWeight.w600,
+                height: 1.3,
+                color: AppColors.textPrimary,
+              ),
             ),
-            SizedBox(height: AppSpacing.lg),
+            SizedBox(height: 8.h),
+            Text(
+              'Пользователь увидит вашу оценку',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontFamily: 'Roboto',
+                fontSize: 16.sp,
+                fontWeight: FontWeight.w400,
+                height: 1.3,
+                color: AppColors.textSecondary,
+              ),
+            ),
+            SizedBox(height: 14.h),
+            PrimaryButton(
+              label: 'Мои отзывы',
+              onPressed: () => Navigator.of(ctx).pop(true),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+/// Внутренний компонент: модалка-подтверждение с заголовком, кнопкой
+/// и текстом «Вернуться» снизу.
+class _ConfirmDialog extends StatelessWidget {
+  const _ConfirmDialog({
+    required this.title,
+    required this.primaryLabel,
+    required this.onPrimary,
+  });
+
+  final String title;
+  final String primaryLabel;
+  final VoidCallback onPrimary;
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      insetPadding: EdgeInsets.symmetric(horizontal: 16.w),
+      backgroundColor: Colors.transparent,
+      child: Container(
+        // Высота примерно 252 в дизайне 375×812 (≈ 280 −10%),
+        // .h адаптирует под другие разрешения. Ширина — на
+        // оставшееся после боковых отступов 16+16 = 343 на эталонном фрейме.
+        height: 252.h,
+        padding: EdgeInsets.fromLTRB(16.r, 14.r, 16.r, 22.r),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(20.r),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            Align(
+              alignment: Alignment.centerRight,
+              child: GestureDetector(
+                onTap: () => Navigator.of(context).pop(),
+                child: Icon(
+                  Icons.close_rounded,
+                  size: 22.r,
+                  color: AppColors.textTertiary,
+                ),
+              ),
+            ),
+            const Spacer(),
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontFamily: 'Roboto',
+                fontSize: 20.sp,
+                fontWeight: FontWeight.w600,
+                height: 1.3,
+                color: AppColors.textPrimary,
+              ),
+            ),
+            SizedBox(height: 20.h),
             PrimaryButton(label: primaryLabel, onPressed: onPrimary),
-            SizedBox(height: AppSpacing.xs),
-            SecondaryButton(
-              label: secondaryLabel,
-              onPressed: () => Navigator.of(context).pop(),
+            SizedBox(height: 20.h),
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => Navigator.of(context).pop(),
+              child: Center(
+                child: Text(
+                  'Вернуться',
+                  style: TextStyle(
+                    fontFamily: 'Roboto',
+                    fontSize: 16.sp,
+                    fontWeight: FontWeight.w500,
+                    height: 1.3,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+              ),
             ),
+            const Spacer(),
           ],
         ),
       ),

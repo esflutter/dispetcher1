@@ -45,6 +45,7 @@ flutter:
     - assets/images/onboarding/
     - assets/images/categories/
     - assets/images/catalog/
+    - assets/images/orders/
     - assets/icons/
     - assets/icons/nav/
     - assets/icons/ui/

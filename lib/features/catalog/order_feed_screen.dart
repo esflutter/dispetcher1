@@ -10,6 +10,7 @@ import 'package:dispatcher_1/features/catalog/order_detail_screen.dart';
 import 'package:dispatcher_1/features/catalog/orders_map_screen.dart';
 import 'package:dispatcher_1/features/catalog/widgets/catalog_search_bar.dart';
 import 'package:dispatcher_1/features/catalog/widgets/order_card.dart';
+import 'package:dispatcher_1/features/shell/main_shell.dart';
 import 'package:dispatcher_1/features/shell/widgets/main_bottom_nav_bar.dart';
 
 /// Лента заказов категории. Соответствует Figma «Лента заказов»:
@@ -139,7 +140,10 @@ class _OrderFeedScreenState extends State<OrderFeedScreen> {
       bottomNavigationBar: MainBottomNavBar(
         items: kMainNavItems,
         currentIndex: 0,
-        onTap: (int _) {
+        onTap: (int i) {
+          // Сначала выставляем нужный таб в shell через общий notifier,
+          // затем возвращаемся к корневому маршруту shell.
+          MainShell.selectedTab.value = i;
           Navigator.of(context).popUntil((Route<dynamic> r) => r.isFirst);
         },
       ),
