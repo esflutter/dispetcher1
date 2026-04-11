@@ -15,6 +15,7 @@ class OrderCard extends StatelessWidget {
     required this.rentDate,
     required this.publishedAgo,
     required this.equipment,
+    this.price,
     this.onTap,
   });
 
@@ -23,6 +24,7 @@ class OrderCard extends StatelessWidget {
   final String rentDate;
   final String publishedAgo;
   final List<String> equipment;
+  final String? price;
   final VoidCallback? onTap;
 
   @override
@@ -70,6 +72,18 @@ class OrderCard extends StatelessWidget {
             _LabelLine(label: 'Дата аренды:', value: rentDate),
             SizedBox(height: 5.h),
             _LabelLine(label: 'Адрес:', value: address),
+            if (price != null && price!.isNotEmpty) ...<Widget>[
+              SizedBox(height: 10.h),
+              Text(
+                price!,
+                style: TextStyle(
+                  fontFamily: 'Roboto',
+                  fontSize: 15.sp,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.primary,
+                ),
+              ),
+            ],
           ],
         ),
       ),

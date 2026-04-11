@@ -13,11 +13,13 @@ class CatalogSearchBar extends StatelessWidget {
     required this.onFilterTap,
     this.controller,
     this.onChanged,
+    this.hintText = 'Поиск',
   });
 
   final VoidCallback onFilterTap;
   final TextEditingController? controller;
   final ValueChanged<String>? onChanged;
+  final String hintText;
 
   @override
   Widget build(BuildContext context) {
@@ -50,7 +52,7 @@ class CatalogSearchBar extends StatelessWidget {
                       decoration: InputDecoration(
                         isCollapsed: true,
                         border: InputBorder.none,
-                        hintText: 'Поиск',
+                        hintText: hintText,
                         hintStyle: AppTextStyles.bodyMRegular.copyWith(
                           color: AppColors.textTertiary,
                           fontSize: 17.sp,

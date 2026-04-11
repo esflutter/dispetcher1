@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 
+import 'package:go_router/go_router.dart';
+
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
 import 'package:dispatcher_1/core/widgets/primary_button.dart';
@@ -16,10 +18,10 @@ class RespondModalDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Dialog(
-      insetPadding: EdgeInsets.symmetric(horizontal: 24.w),
+      insetPadding: EdgeInsets.symmetric(horizontal: 16.w),
       backgroundColor: Colors.transparent,
       child: Container(
-        padding: EdgeInsets.fromLTRB(20.w, 20.h, 20.w, 20.h),
+        padding: EdgeInsets.fromLTRB(16.r, 18.r, 16.r, 26.r),
         decoration: BoxDecoration(
           color: AppColors.surface,
           borderRadius: BorderRadius.circular(20.r),
@@ -42,7 +44,7 @@ class RespondModalDialog extends StatelessWidget {
                 size: 22.r, color: AppColors.textTertiary),
           ),
         ),
-        SizedBox(height: 4.h),
+        SizedBox(height: 24.h),
         Text(
           'Ваш отклик отправлен!',
           textAlign: TextAlign.center,
@@ -50,8 +52,8 @@ class RespondModalDialog extends StatelessWidget {
         ),
         SizedBox(height: 10.h),
         Text(
-          'Заказчик рассмотрит вашу заявку на заказ. Если он выберет вас — '
-          'заказ появится в разделе Мои заказы.',
+          'Заказчик рассмотрит вашу заявку на заказ. Если он выберет вас, '
+          'заказ появится в разделе «Мои заказы».',
           textAlign: TextAlign.center,
           style: AppTextStyles.bodyMRegular
               .copyWith(color: AppColors.textSecondary),
@@ -61,6 +63,7 @@ class RespondModalDialog extends StatelessWidget {
           label: 'Ок',
           onPressed: () => Navigator.of(context).pop(),
         ),
+        SizedBox(height: 16.h),
       ],
     );
   }
@@ -70,47 +73,52 @@ class RespondModalDialog extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        SizedBox(height: 8.h),
+        SizedBox(height: 24.h),
         Center(
-          child: Container(
-            width: 72.r,
-            height: 72.r,
-            decoration: const BoxDecoration(
-              color: AppColors.primary,
-              shape: BoxShape.circle,
-            ),
-            child: Icon(Icons.person_outline,
-                size: 40.r, color: Colors.white),
+          child: Image.asset(
+            'assets/images/catalog/user_edit.webp',
+            width: 96.r,
+            height: 96.r,
+            fit: BoxFit.contain,
           ),
         ),
-        SizedBox(height: 16.h),
+        SizedBox(height: 24.h),
         Text(
           'Подтвердите свои данные',
           textAlign: TextAlign.center,
-          style: AppTextStyles.titleL.copyWith(fontWeight: FontWeight.w700),
+          style: AppTextStyles.titleL,
         ),
         SizedBox(height: 10.h),
         Text(
           'Чтобы откликаться на заказы, нужно отправить документы на проверку. '
           'Это займёт пару минут.',
           textAlign: TextAlign.center,
-          style: AppTextStyles.bodyMRegular
+          style: AppTextStyles.body
               .copyWith(color: AppColors.textSecondary),
         ),
-        SizedBox(height: 20.h),
+        SizedBox(height: 18.h),
         PrimaryButton(
           label: 'Отправить документы',
-          onPressed: () => Navigator.of(context).pop(),
+          onPressed: () {
+            Navigator.of(context).pop();
+            GoRouter.of(context).push('/assistant/chat', extra: <String, String>{
+              'initial': 'verify_documents',
+            });
+          },
         ),
-        SizedBox(height: 4.h),
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: Text(
-            'Может быть позже',
-            style: AppTextStyles.bodyMMedium
-                .copyWith(color: AppColors.textPrimary),
+        SizedBox(height: 18.h),
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => Navigator.of(context).pop(),
+          child: Center(
+            child: Text(
+              'Может быть, позже',
+              style: AppTextStyles.bodyMedium
+                  .copyWith(color: AppColors.textPrimary),
+            ),
           ),
         ),
+        SizedBox(height: 14.h),
       ],
     );
   }

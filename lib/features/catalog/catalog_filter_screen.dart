@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
+import 'package:dispatcher_1/core/widgets/bottom_sheet_handle.dart';
 import 'package:dispatcher_1/core/widgets/primary_button.dart';
 import 'package:dispatcher_1/features/catalog/widgets/catalog_search_bar.dart';
 
@@ -34,20 +36,19 @@ class _CatalogFilterScreenState extends State<CatalogFilterScreen> {
 
   static const List<String> _equipment = <String>[
     'Экскаватор-погрузчик',
+    'Экскаватор',
     'Погрузчик',
     'Миниэкскаватор',
-    'Минипогрузчик',
     'Буроям',
     'Самогруз',
     'Автокран',
-    'Самосвалы (до 5тн, 15, 25)',
     'Бетононасос',
     'Эвакуатор',
     'Автовышка',
     'Манипулятор',
+    'Минипогрузчик',
+    'Самосвал',
     'Минитрактор',
-    'Экскаватор',
-    'Инертные материалы',
   ];
 
   final Set<String> _selectedCategories = <String>{
@@ -66,6 +67,11 @@ class _CatalogFilterScreenState extends State<CatalogFilterScreen> {
   TimeOfDay? _timeFrom;
   TimeOfDay? _timeTo;
   int? _radiusKm; // 10/20/50
+  String? _address;
+
+  /// Какой инлайн-пикер сейчас открыт: null / 'dateFrom' / 'dateTo' /
+  /// 'timeFrom' / 'timeTo'. Одновременно виден только один.
+  String? _openPicker;
 
   String _formatDate(DateTime d) =>
       '${d.day.toString().padLeft(2, '0')}.${d.month.toString().padLeft(2, '0')}.${(d.year % 100).toString().padLeft(2, '0')}';
@@ -73,37 +79,8 @@ class _CatalogFilterScreenState extends State<CatalogFilterScreen> {
   String _formatTime(TimeOfDay t) =>
       '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
 
-  Future<void> _pickDate(bool isFrom) async {
-    final DateTime now = DateTime.now();
-    final DateTime? d = await showDatePicker(
-      context: context,
-      initialDate: isFrom ? (_dateFrom ?? now) : (_dateTo ?? now),
-      firstDate: now,
-      lastDate: now.add(const Duration(days: 365)),
-    );
-    if (d == null) return;
-    setState(() {
-      if (isFrom) {
-        _dateFrom = d;
-      } else {
-        _dateTo = d;
-      }
-    });
-  }
-
-  Future<void> _pickTime(bool isFrom) async {
-    final TimeOfDay? t = await showTimePicker(
-      context: context,
-      initialTime: isFrom ? (_timeFrom ?? TimeOfDay.now()) : (_timeTo ?? TimeOfDay.now()),
-    );
-    if (t == null) return;
-    setState(() {
-      if (isFrom) {
-        _timeFrom = t;
-      } else {
-        _timeTo = t;
-      }
-    });
+  void _togglePicker(String key) {
+    setState(() => _openPicker = _openPicker == key ? null : key);
   }
 
   @override
@@ -124,18 +101,18 @@ class _CatalogFilterScreenState extends State<CatalogFilterScreen> {
             style: AppTextStyles.titleS.copyWith(color: Colors.white)),
       ),
       floatingActionButton: Padding(
-        padding: EdgeInsets.only(bottom: 24.h),
+        padding: EdgeInsets.only(bottom: 88.h),
         child: AiAssistantFab(
-          onTap: () => Navigator.of(context).maybePop(),
+          onTap: () => GoRouter.of(context).push('/assistant/chat'),
         ),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
-      body: Stack(
+      body: Column(
         children: <Widget>[
-          Column(
-            children: <Widget>[
-              Expanded(
-                child: SingleChildScrollView(
+          Expanded(
+            child: Stack(
+              children: <Widget>[
+                SingleChildScrollView(
                   padding: EdgeInsets.fromLTRB(16.w, 16.h, 16.w, 24.h),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -170,12 +147,14 @@ class _CatalogFilterScreenState extends State<CatalogFilterScreen> {
                         children: <Widget>[
                           Expanded(
                             child: _PickerField(
-                              hint: 'С',
+                              hint: _exactDate ? '' : 'С',
                               value: _dateFrom == null
                                   ? null
                                   : _formatDate(_dateFrom!),
-                              icon: Icons.calendar_today_outlined,
-                              onTap: () => _pickDate(true),
+                              iconAsset: 'assets/icons/ui/calendar_active.webp',
+                              iconAssetInactive: 'assets/icons/ui/calendar_inactive.webp',
+                              active: _openPicker == 'dateFrom',
+                              onTap: () => _togglePicker('dateFrom'),
                             ),
                           ),
                           SizedBox(width: 12.w),
@@ -185,18 +164,56 @@ class _CatalogFilterScreenState extends State<CatalogFilterScreen> {
                               value: _dateTo == null
                                   ? null
                                   : _formatDate(_dateTo!),
-                              icon: Icons.calendar_today_outlined,
-                              onTap: () => _pickDate(false),
+                              iconAsset: 'assets/icons/ui/calendar_active.webp',
+                              iconAssetInactive: 'assets/icons/ui/calendar_inactive.webp',
+                              active: _openPicker == 'dateTo',
+                              enabled: !_exactDate,
+                              onTap: _exactDate
+                                  ? null
+                                  : () => _togglePicker('dateTo'),
                             ),
                           ),
                         ],
                       ),
+                      if (_openPicker == 'dateFrom' ||
+                          _openPicker == 'dateTo') ...<Widget>[
+                        SizedBox(height: 8.h),
+                        _InlineCalendar(
+                          selected: _openPicker == 'dateFrom'
+                              ? _dateFrom
+                              : (_dateTo ?? _dateFrom),
+                          minDate: _openPicker == 'dateTo'
+                              ? _dateFrom
+                              : null,
+                          onChanged: (DateTime d) {
+                            setState(() {
+                              if (_openPicker == 'dateFrom') {
+                                _dateFrom = d;
+                                // Сбросить «По» если она раньше «С».
+                                if (_dateTo != null &&
+                                    _dateTo!.isBefore(d)) {
+                                  _dateTo = null;
+                                }
+                              } else {
+                                _dateTo = d;
+                              }
+                              _openPicker = null;
+                            });
+                          },
+                          onCancel: () =>
+                              setState(() => _openPicker = null),
+                        ),
+                      ],
                       SizedBox(height: 8.h),
                       _CheckRow(
                         label: 'Точная дата',
                         value: _exactDate,
-                        onChanged: (bool v) =>
-                            setState(() => _exactDate = v),
+                        onChanged: (bool v) => setState(() {
+                          _exactDate = v;
+                          if (v && _openPicker == 'dateTo') {
+                            _openPicker = null;
+                          }
+                        }),
                       ),
                       SizedBox(height: 16.h),
                       _SectionTitle('Время работы'),
@@ -209,8 +226,13 @@ class _CatalogFilterScreenState extends State<CatalogFilterScreen> {
                               value: _timeFrom == null
                                   ? null
                                   : _formatTime(_timeFrom!),
-                              icon: Icons.access_time,
-                              onTap: () => _pickTime(true),
+                              iconAsset: 'assets/icons/ui/clock_active.webp',
+                              iconAssetInactive: 'assets/icons/ui/clock_inactive.webp',
+                              active: _openPicker == 'timeFrom',
+                              enabled: !_wholeDay,
+                              onTap: _wholeDay
+                                  ? null
+                                  : () => _togglePicker('timeFrom'),
                             ),
                           ),
                           SizedBox(width: 12.w),
@@ -220,23 +242,92 @@ class _CatalogFilterScreenState extends State<CatalogFilterScreen> {
                               value: _timeTo == null
                                   ? null
                                   : _formatTime(_timeTo!),
-                              icon: Icons.access_time,
-                              onTap: () => _pickTime(false),
+                              iconAsset: 'assets/icons/ui/clock_active.webp',
+                              iconAssetInactive: 'assets/icons/ui/clock_inactive.webp',
+                              active: _openPicker == 'timeTo',
+                              enabled: !_wholeDay,
+                              onTap: _wholeDay
+                                  ? null
+                                  : () => _togglePicker('timeTo'),
                             ),
                           ),
                         ],
                       ),
+                      if (_openPicker == 'timeFrom' ||
+                          _openPicker == 'timeTo') ...<Widget>[
+                        SizedBox(height: 8.h),
+                        _InlineTimePicker(
+                          selected: _openPicker == 'timeFrom'
+                              ? _timeFrom
+                              : _timeTo,
+                          onDone: (TimeOfDay t) {
+                            setState(() {
+                              if (_openPicker == 'timeFrom') {
+                                _timeFrom = t;
+                              } else {
+                                _timeTo = t;
+                              }
+                              _openPicker = null;
+                            });
+                          },
+                          onCancel: () =>
+                              setState(() => _openPicker = null),
+                        ),
+                      ],
                       SizedBox(height: 8.h),
                       _CheckRow(
                         label: 'Весь день',
                         value: _wholeDay,
-                        onChanged: (bool v) =>
-                            setState(() => _wholeDay = v),
+                        onChanged: (bool v) => setState(() {
+                          _wholeDay = v;
+                          if (v && (_openPicker == 'timeFrom' ||
+                              _openPicker == 'timeTo')) {
+                            _openPicker = null;
+                          }
+                        }),
                       ),
                       SizedBox(height: 16.h),
                       _SectionTitle('Местоположение'),
                       SizedBox(height: 12.h),
-                      _AddressField(),
+                      GestureDetector(
+                        onTap: () async {
+                          final String? result = await showModalBottomSheet<String>(
+                            context: context,
+                            isScrollControlled: true,
+                            backgroundColor: Colors.transparent,
+                            builder: (_) => const _AddressBottomSheet(),
+                          );
+                          if (result != null) {
+                            setState(() => _address = result);
+                          }
+                        },
+                        child: Container(
+                          height: 44.h,
+                          padding: EdgeInsets.symmetric(horizontal: 12.w),
+                          decoration: BoxDecoration(
+                            color: AppColors.fieldFill,
+                            borderRadius: BorderRadius.circular(12.r),
+                          ),
+                          child: Row(
+                            children: <Widget>[
+                              Expanded(
+                                child: Text(
+                                  _address ?? 'Введите адрес',
+                                  style: AppTextStyles.bodyMRegular.copyWith(
+                                    fontSize: 13.sp,
+                                    fontWeight: FontWeight.w400,
+                                    color: _address == null
+                                        ? AppColors.textTertiary
+                                        : AppColors.textPrimary,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
                       SizedBox(height: 12.h),
                       for (int km in const <int>[10, 20, 50])
                         _RadioRow(
@@ -248,15 +339,29 @@ class _CatalogFilterScreenState extends State<CatalogFilterScreen> {
                     ],
                   ),
                 ),
-              ),
-              Padding(
-                padding: EdgeInsets.fromLTRB(16.w, 0, 16.w, 16.h),
-                child: PrimaryButton(
-                  label: 'Применить',
-                  onPressed: () => Navigator.of(context).pop(),
+              ],
+            ),
+          ),
+          Container(
+            decoration: BoxDecoration(
+              color: AppColors.background,
+              boxShadow: <BoxShadow>[
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.08),
+                  blurRadius: 8,
+                  offset: const Offset(0, -2),
                 ),
-              ),
-            ],
+              ],
+            ),
+            padding: EdgeInsets.fromLTRB(
+                16.w,
+                12.h,
+                16.w,
+                16.h + MediaQuery.of(context).padding.bottom),
+            child: PrimaryButton(
+              label: 'Применить',
+              onPressed: () => Navigator.of(context).pop(),
+            ),
           ),
         ],
       ),
@@ -271,7 +376,7 @@ class _SectionTitle extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(text,
         style: AppTextStyles.bodyMedium
-            .copyWith(fontWeight: FontWeight.w700));
+            .copyWith(fontWeight: FontWeight.w700, fontSize: 20.sp));
   }
 }
 
@@ -308,6 +413,8 @@ class _ChipGrid extends StatelessWidget {
                   v,
                   style: AppTextStyles.chip.copyWith(
                     color: sel ? Colors.white : AppColors.textPrimary,
+                    fontSize: 13.sp,
+                    fontWeight: FontWeight.w400,
                   ),
                 ),
                 if (sel) ...<Widget>[
@@ -328,24 +435,41 @@ class _PickerField extends StatelessWidget {
   const _PickerField({
     required this.hint,
     required this.value,
-    required this.icon,
-    required this.onTap,
+    this.iconAsset,
+    this.iconAssetInactive,
+    this.onTap,
+    this.active = false,
+    this.enabled = true,
   });
   final String hint;
   final String? value;
-  final IconData icon;
-  final VoidCallback onTap;
+  final String? iconAsset;
+  final String? iconAssetInactive;
+  final VoidCallback? onTap;
+  final bool active;
+  final bool enabled;
 
   @override
   Widget build(BuildContext context) {
+    final String? assetToUse = enabled
+        ? iconAsset
+        : (iconAssetInactive ?? iconAsset);
     return GestureDetector(
-      onTap: onTap,
+      onTap: enabled ? onTap : null,
       child: Container(
         height: 44.h,
         padding: EdgeInsets.symmetric(horizontal: 12.w),
         decoration: BoxDecoration(
-          color: AppColors.fieldFill,
+          color: enabled
+              ? AppColors.fieldFill
+              : const Color(0xFFF2F2F2),
           borderRadius: BorderRadius.circular(12.r),
+          border: Border.all(
+            color: active && enabled
+                ? AppColors.primary
+                : Colors.transparent,
+            width: 1.5,
+          ),
         ),
         child: Row(
           children: <Widget>[
@@ -353,13 +477,19 @@ class _PickerField extends StatelessWidget {
               child: Text(
                 value ?? hint,
                 style: AppTextStyles.bodyMRegular.copyWith(
-                  color: value == null
-                      ? AppColors.textTertiary
-                      : AppColors.textPrimary,
+                  fontSize: 16.sp,
+                  fontWeight: FontWeight.w400,
+                  color: enabled
+                      ? (value == null
+                          ? AppColors.textTertiary
+                          : AppColors.textPrimary)
+                      : Colors.white.withValues(alpha: 0.7),
                 ),
               ),
             ),
-            Icon(icon, size: 18.r, color: AppColors.textTertiary),
+            if (assetToUse != null)
+              Image.asset(assetToUse, width: 22.r, height: 22.r,
+                  fit: BoxFit.contain),
           ],
         ),
       ),
@@ -401,7 +531,8 @@ class _CheckRow extends StatelessWidget {
                   : null,
             ),
             SizedBox(width: 12.w),
-            Text(label, style: AppTextStyles.bodyMRegular),
+            Text(label, style: AppTextStyles.bodyMRegular.copyWith(
+                fontSize: 13.sp, fontWeight: FontWeight.w400)),
           ],
         ),
       ),
@@ -451,7 +582,8 @@ class _RadioRow extends StatelessWidget {
                   : null,
             ),
             SizedBox(width: 12.w),
-            Text(label, style: AppTextStyles.bodyMRegular),
+            Text(label, style: AppTextStyles.bodyMRegular.copyWith(
+                fontSize: 13.sp, fontWeight: FontWeight.w400)),
           ],
         ),
       ),
@@ -459,32 +591,697 @@ class _RadioRow extends StatelessWidget {
   }
 }
 
-class _AddressField extends StatelessWidget {
+/// Инлайн-календарь, встроенный в скролл фильтра.
+class _InlineCalendar extends StatefulWidget {
+  const _InlineCalendar({
+    required this.selected,
+    required this.onChanged,
+    required this.onCancel,
+    this.minDate,
+  });
+
+  final DateTime? selected;
+  final ValueChanged<DateTime> onChanged;
+  final VoidCallback onCancel;
+  /// Минимально допустимая дата (для пикера «По» — дата «С»).
+  final DateTime? minDate;
+
+  @override
+  State<_InlineCalendar> createState() => _InlineCalendarState();
+}
+
+class _InlineCalendarState extends State<_InlineCalendar> {
+  late DateTime _picked;
+  late DateTime _displayedMonth;
+  late DateTime _firstDate;
+  late DateTime _lastDate;
+  late PageController _pageCtrl;
+  late int _totalMonths;
+
+  static const List<String> _monthNames = <String>[
+    'январь', 'февраль', 'март', 'апрель', 'май', 'июнь',
+    'июль', 'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь',
+  ];
+
+  static const List<String> _weekDays = <String>[
+    'П', 'В', 'С', 'Ч', 'П', 'С', 'В',
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _picked = widget.selected ?? DateTime.now();
+    _displayedMonth = DateTime(_picked.year, _picked.month);
+    final DateTime today = DateUtils.dateOnly(DateTime.now());
+    _firstDate = widget.minDate != null && widget.minDate!.isAfter(today)
+        ? DateUtils.dateOnly(widget.minDate!)
+        : today;
+    _lastDate = today.add(const Duration(days: 365));
+    _totalMonths = (_lastDate.year - _firstDate.year) * 12 +
+        _lastDate.month - _firstDate.month + 1;
+    final int initPage = (_displayedMonth.year - _firstDate.year) * 12 +
+        _displayedMonth.month - _firstDate.month;
+    _pageCtrl = PageController(initialPage: initPage);
+  }
+
+  @override
+  void dispose() {
+    _pageCtrl.dispose();
+    super.dispose();
+  }
+
+  DateTime _monthFromPage(int page) {
+    final int m = _firstDate.month + page;
+    return DateTime(_firstDate.year + (m - 1) ~/ 12, (m - 1) % 12 + 1);
+  }
+
+  bool get _canGoBack {
+    final DateTime prev = DateTime(_displayedMonth.year, _displayedMonth.month - 1);
+    return !prev.isBefore(DateTime(_firstDate.year, _firstDate.month));
+  }
+
+  bool get _canGoForward {
+    final DateTime next = DateTime(_displayedMonth.year, _displayedMonth.month + 1);
+    return !next.isAfter(DateTime(_lastDate.year, _lastDate.month));
+  }
+
+  void _prevMonth() {
+    if (!_canGoBack) return;
+    _pageCtrl.previousPage(
+        duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
+  }
+
+  void _nextMonth() {
+    if (!_canGoForward) return;
+    _pageCtrl.nextPage(
+        duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
+  }
+
+  void _onPageChanged(int page) {
+    setState(() => _displayedMonth = _monthFromPage(page));
+  }
+
+  int _rowCountForMonth(DateTime month) {
+    final DateTime first = DateTime(month.year, month.month, 1);
+    final int daysCount = DateUtils.getDaysInMonth(month.year, month.month);
+    final int leadingCount = first.weekday - 1;
+    final int totalCells = leadingCount + daysCount;
+    return (totalCells / 7).ceil();
+  }
+
+  List<DateTime> _daysForMonth(DateTime displayedMonth) {
+    final int year = displayedMonth.year;
+    final int month = displayedMonth.month;
+    final DateTime first = DateTime(year, month, 1);
+    final int daysCount = DateUtils.getDaysInMonth(year, month);
+    final int startWeekday = first.weekday; // Пн=1 .. Вс=7
+    final int leadingCount = startWeekday - 1;
+
+    final List<DateTime> cells = <DateTime>[];
+    // Дни предыдущего месяца.
+    if (leadingCount > 0) {
+      final DateTime prevMonth = DateTime(year, month, 0); // последний день пред. месяца
+      for (int i = leadingCount - 1; i >= 0; i--) {
+        cells.add(DateTime(prevMonth.year, prevMonth.month, prevMonth.day - i));
+      }
+    }
+    // Дни текущего месяца.
+    for (int d = 1; d <= daysCount; d++) {
+      cells.add(DateTime(year, month, d));
+    }
+    // Дни следующего месяца (добить до полных недель).
+    final int trailing = (7 - cells.length % 7) % 7;
+    for (int d = 1; d <= trailing; d++) {
+      cells.add(DateTime(year, month + 1, d));
+    }
+    return cells;
+  }
+
   @override
   Widget build(BuildContext context) {
+    final DateTime today = DateUtils.dateOnly(DateTime.now());
+    final String header =
+        '${_monthNames[_displayedMonth.month - 1]} ${_displayedMonth.year} г.';
+
     return Container(
-      height: 44.h,
-      padding: EdgeInsets.symmetric(horizontal: 12.w),
       decoration: BoxDecoration(
-        color: AppColors.fieldFill,
-        borderRadius: BorderRadius.circular(12.r),
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(16.r),
+        border: Border.all(color: const Color(0xFFD1D1D6)),
       ),
-      child: Row(
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: <Widget>[
-          Expanded(
-            child: TextField(
-              style: AppTextStyles.bodyMRegular,
-              decoration: InputDecoration(
-                hintText: 'Введите адрес',
-                hintStyle: AppTextStyles.bodyMRegular
-                    .copyWith(color: AppColors.textTertiary),
-                isDense: true,
-                border: InputBorder.none,
-              ),
+          // Хедер: < месяц год г. >
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              children: <Widget>[
+                GestureDetector(
+                  onTap: _canGoBack ? _prevMonth : null,
+                  child: Icon(Icons.chevron_left,
+                      size: 20.r,
+                      color: _canGoBack
+                          ? AppColors.textPrimary
+                          : AppColors.textTertiary),
+                ),
+                Expanded(
+                  child: Center(
+                    child: Text(
+                      header,
+                      style: TextStyle(
+                        fontFamily: 'Roboto',
+                        fontSize: 14.sp,
+                        fontWeight: FontWeight.w500,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                  ),
+                ),
+                GestureDetector(
+                  onTap: _canGoForward ? _nextMonth : null,
+                  child: Icon(Icons.chevron_right,
+                      size: 20.r,
+                      color: _canGoForward
+                          ? AppColors.textPrimary
+                          : AppColors.textTertiary),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          // Заголовки дней недели (статичные, не свайпятся).
+          Row(
+            children: _weekDays
+                .map((String d) => Expanded(
+                      child: Center(
+                        child: Text(
+                          d,
+                          style: TextStyle(
+                            fontFamily: 'Roboto',
+                            fontSize: 13.sp,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.textTertiary,
+                          ),
+                        ),
+                      ),
+                    ))
+                .toList(),
+          ),
+          const SizedBox(height: 8),
+          // Сетка дней — PageView для свайпа пальцем.
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeInOut,
+            height: 40.0 * _rowCountForMonth(_displayedMonth),
+            child: PageView.builder(
+              controller: _pageCtrl,
+              itemCount: _totalMonths,
+              onPageChanged: _onPageChanged,
+              itemBuilder: (BuildContext context, int page) {
+                final DateTime month = _monthFromPage(page);
+                final List<DateTime> days = _daysForMonth(month);
+                final int rowCount = (days.length / 7).ceil();
+                return Table(
+                  children: <TableRow>[
+                    for (int r = 0; r < rowCount; r++)
+                      TableRow(
+                        children: <Widget>[
+                          for (int c = 0; c < 7; c++)
+                            () {
+                              final int idx = r * 7 + c;
+                              if (idx >= days.length) {
+                                return const SizedBox.shrink();
+                              }
+                              final DateTime date = days[idx];
+                              final DateTime dateOnly =
+                                  DateUtils.dateOnly(date);
+                              final bool isCurrentMonth =
+                                  date.month == month.month;
+                              final bool isSelected =
+                                  DateUtils.dateOnly(_picked) == dateOnly;
+                              final bool isToday = dateOnly == today;
+                              final bool disabled =
+                                  dateOnly.isBefore(_firstDate) ||
+                                      dateOnly.isAfter(_lastDate);
+
+                              Color bg = Colors.transparent;
+                              Color fg = isCurrentMonth
+                                  ? AppColors.textPrimary
+                                  : AppColors.textTertiary;
+                              Border? border;
+
+                              if (isSelected && isCurrentMonth) {
+                                bg = AppColors.primary;
+                                fg = Colors.white;
+                              } else if (isToday) {
+                                border = Border.all(
+                                    color: AppColors.primary, width: 1.5);
+                                fg = AppColors.primary;
+                              }
+                              if (disabled) fg = AppColors.textTertiary;
+
+                              return GestureDetector(
+                                onTap: disabled || !isCurrentMonth
+                                    ? null
+                                    : () =>
+                                        setState(() => _picked = dateOnly),
+                                child: Center(
+                                  child: Container(
+                                    width: 34,
+                                    height: 34,
+                                    margin: const EdgeInsets.symmetric(
+                                        vertical: 3),
+                                    decoration: BoxDecoration(
+                                      color: bg,
+                                      borderRadius:
+                                          BorderRadius.circular(8),
+                                      border: border,
+                                    ),
+                                    alignment: Alignment.center,
+                                    child: Text(
+                                      '${date.day}',
+                                      style: TextStyle(
+                                        fontFamily: 'Roboto',
+                                        fontSize: 14.sp,
+                                        fontWeight: isSelected
+                                            ? FontWeight.w600
+                                            : FontWeight.w400,
+                                        color: fg,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              );
+                            }(),
+                        ],
+                      ),
+                  ],
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 5),
+          // Кнопки.
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: <Widget>[
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: widget.onCancel,
+                  child: Text(
+                    'Отмена',
+                    style: TextStyle(
+                      fontFamily: 'Roboto',
+                      fontSize: 14.sp,
+                      fontWeight: FontWeight.w500,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 24),
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => widget.onChanged(_picked),
+                  child: Text(
+                    'Готово',
+                    style: TextStyle(
+                      fontFamily: 'Roboto',
+                      fontSize: 14.sp,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ],
       ),
     );
   }
+}
+
+/// Инлайн-пикер времени (два колеса: часы + минуты).
+class _InlineTimePicker extends StatefulWidget {
+  const _InlineTimePicker({
+    required this.selected,
+    required this.onDone,
+    required this.onCancel,
+  });
+
+  final TimeOfDay? selected;
+  final ValueChanged<TimeOfDay> onDone;
+  final VoidCallback onCancel;
+
+  @override
+  State<_InlineTimePicker> createState() => _InlineTimePickerState();
+}
+
+class _InlineTimePickerState extends State<_InlineTimePicker> {
+  late int _hour;
+  late int _minute;
+  late FixedExtentScrollController _hourCtrl;
+  late FixedExtentScrollController _minuteCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _hour = widget.selected?.hour ?? TimeOfDay.now().hour;
+    _minute = widget.selected?.minute ?? 0;
+    _hourCtrl = FixedExtentScrollController(initialItem: _hour);
+    _minuteCtrl = FixedExtentScrollController(initialItem: _minute);
+  }
+
+  @override
+  void dispose() {
+    _hourCtrl.dispose();
+    _minuteCtrl.dispose();
+    super.dispose();
+  }
+
+  void _commit() {
+    widget.onDone(TimeOfDay(hour: _hour, minute: _minute));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(16.r),
+        border: Border.all(color: const Color(0xFFD1D1D6)),
+      ),
+      padding: EdgeInsets.symmetric(horizontal: 16.r, vertical: 12.r),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          SizedBox(
+            height: 180.h,
+            child: Row(
+              children: <Widget>[
+                Expanded(
+                  child: Padding(
+                    padding: EdgeInsets.only(left: 24.w),
+                    child: ListWheelScrollView.useDelegate(
+                      controller: _hourCtrl,
+                      itemExtent: 40.h,
+                      physics: const FixedExtentScrollPhysics(),
+                      onSelectedItemChanged: (int i) {
+                        _hour = i;
+                        setState(() {});
+                      },
+                      childDelegate: ListWheelChildBuilderDelegate(
+                        childCount: 24,
+                        builder: (BuildContext context, int i) {
+                          final bool sel = i == _hour;
+                          return Center(
+                            child: Container(
+                              padding: EdgeInsets.symmetric(
+                                  horizontal: 19.w, vertical: 7.h),
+                              decoration: sel
+                                  ? BoxDecoration(
+                                      color: AppColors.primary
+                                          .withValues(alpha: 0.12),
+                                      borderRadius:
+                                          BorderRadius.circular(8.r),
+                                    )
+                                  : null,
+                              child: Text(
+                                i.toString().padLeft(2, '0'),
+                                style: TextStyle(
+                                  fontFamily: 'Roboto',
+                                  fontSize: 22.sp,
+                                  fontWeight:
+                                      sel ? FontWeight.w600 : FontWeight.w400,
+                                  color: sel
+                                      ? AppColors.textPrimary
+                                      : AppColors.textTertiary,
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                ),
+                Text(
+                  ':',
+                  style: TextStyle(
+                    fontFamily: 'Roboto',
+                    fontSize: 22.sp,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                Expanded(
+                  child: Padding(
+                    padding: EdgeInsets.only(right: 24.w),
+                    child: ListWheelScrollView.useDelegate(
+                      controller: _minuteCtrl,
+                      itemExtent: 40.h,
+                      physics: const FixedExtentScrollPhysics(),
+                      onSelectedItemChanged: (int i) {
+                        _minute = i;
+                        setState(() {});
+                      },
+                      childDelegate: ListWheelChildBuilderDelegate(
+                        childCount: 60,
+                        builder: (BuildContext context, int i) {
+                          final bool sel = i == _minute;
+                          return Center(
+                            child: Container(
+                              padding: EdgeInsets.symmetric(
+                                  horizontal: 19.w, vertical: 7.h),
+                              decoration: sel
+                                  ? BoxDecoration(
+                                      color: AppColors.primary
+                                          .withValues(alpha: 0.12),
+                                      borderRadius:
+                                          BorderRadius.circular(8.r),
+                                    )
+                                  : null,
+                              child: Text(
+                                i.toString().padLeft(2, '0'),
+                                style: TextStyle(
+                                  fontFamily: 'Roboto',
+                                  fontSize: 22.sp,
+                                  fontWeight:
+                                      sel ? FontWeight.w600 : FontWeight.w400,
+                                  color: sel
+                                      ? AppColors.textPrimary
+                                      : AppColors.textTertiary,
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          SizedBox(height: 16.r),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: <Widget>[
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: widget.onCancel,
+                child: Text(
+                  'Отмена',
+                  style: TextStyle(
+                    fontFamily: 'Roboto',
+                    fontSize: 14.sp,
+                    fontWeight: FontWeight.w500,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+              ),
+              SizedBox(width: 24.w),
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: _commit,
+                child: Text(
+                  'Готово',
+                  style: TextStyle(
+                    fontFamily: 'Roboto',
+                    fontSize: 14.sp,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Bottom Sheet для выбора адреса в фильтре «Местоположение».
+class _AddressBottomSheet extends StatefulWidget {
+  const _AddressBottomSheet();
+
+  @override
+  State<_AddressBottomSheet> createState() => _AddressBottomSheetState();
+}
+
+class _AddressBottomSheetState extends State<_AddressBottomSheet> {
+  final TextEditingController _ctrl = TextEditingController();
+  String _query = '';
+
+  static const List<_MockAddress> _all = <_MockAddress>[
+    _MockAddress('Моё местоположение', null),
+    _MockAddress('Адрес', 'Москва, Московская область'),
+    _MockAddress('Адрес', 'Москва, Московская область'),
+    _MockAddress('Адрес', 'Москва, Московская область'),
+  ];
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return DraggableScrollableSheet(
+      initialChildSize: 0.75,
+      minChildSize: 0.4,
+      maxChildSize: 0.95,
+      builder: (BuildContext context, ScrollController scrollCtrl) {
+        return Container(
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20.r)),
+          ),
+          child: Column(
+            children: <Widget>[
+              // Индикатор перетаскивания.
+              Padding(
+                padding: EdgeInsets.only(top: 12.h, bottom: 16.h),
+                child: const BottomSheetHandle(),
+              ),
+              // Поле поиска.
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16.w),
+                child: Container(
+                  height: 44.h,
+                  padding: EdgeInsets.symmetric(horizontal: 12.w),
+                  decoration: BoxDecoration(
+                    color: AppColors.surface,
+                    borderRadius: BorderRadius.circular(12.r),
+                    border: Border.all(color: const Color(0xFF949393)),
+                  ),
+                  child: Row(
+                    children: <Widget>[
+                      Image.asset(
+                        'assets/icons/ui/location.webp',
+                        width: 20.r,
+                        height: 20.r,
+                        fit: BoxFit.contain,
+                      ),
+                      SizedBox(width: 8.w),
+                      Expanded(
+                        child: TextField(
+                          controller: _ctrl,
+                          autofocus: true,
+                          onChanged: (String v) =>
+                              setState(() => _query = v),
+                          style: AppTextStyles.bodyMRegular.copyWith(
+                            fontSize: 16.sp,
+                            color: AppColors.textPrimary,
+                          ),
+                          decoration: InputDecoration(
+                            hintText: 'Введите адрес',
+                            hintStyle: AppTextStyles.bodyMRegular.copyWith(
+                              color: AppColors.textTertiary,
+                              fontSize: 16.sp,
+                            ),
+                            isDense: true,
+                            border: InputBorder.none,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              SizedBox(height: 8.h),
+              // Список адресов.
+              Expanded(
+                child: ListView.builder(
+                  controller: scrollCtrl,
+                  padding: EdgeInsets.symmetric(horizontal: 16.w),
+                  itemCount: _all.length,
+                  itemBuilder: (BuildContext context, int i) {
+                    final _MockAddress a = _all[i];
+                    return InkWell(
+                      onTap: () => Navigator.of(context).pop(a.title),
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(vertical: 14.h),
+                        child: Row(
+                          children: <Widget>[
+                            Image.asset(
+                              'assets/icons/ui/location.webp',
+                              width: 20.r,
+                              height: 20.r,
+                              fit: BoxFit.contain,
+                            ),
+                            SizedBox(width: 12.w),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment:
+                                    CrossAxisAlignment.start,
+                                children: <Widget>[
+                                  Text(
+                                    a.title,
+                                    style: AppTextStyles.bodyMRegular
+                                        .copyWith(
+                                      fontSize: 16.sp,
+                                      fontWeight: FontWeight.w500,
+                                      color: AppColors.textPrimary,
+                                    ),
+                                  ),
+                                  if (a.subtitle != null) ...<Widget>[
+                                    SizedBox(height: 2.h),
+                                    Text(
+                                      a.subtitle!,
+                                      style: AppTextStyles.bodyMRegular
+                                          .copyWith(
+                                        fontSize: 13.sp,
+                                        color: AppColors.textTertiary,
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _MockAddress {
+  const _MockAddress(this.title, this.subtitle);
+  final String title;
+  final String? subtitle;
 }

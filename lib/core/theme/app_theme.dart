@@ -44,6 +44,90 @@ class AppTheme {
         thickness: 1,
         space: 1,
       ),
+      datePickerTheme: DatePickerThemeData(
+        backgroundColor: AppColors.surface,
+        headerBackgroundColor: AppColors.surface,
+        headerForegroundColor: AppColors.textPrimary,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        dayShape: WidgetStatePropertyAll<OutlinedBorder>(
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ),
+        dayStyle: const TextStyle(
+          fontFamily: 'Roboto',
+          fontSize: 14,
+          fontWeight: FontWeight.w400,
+        ),
+        dayForegroundColor: WidgetStateProperty.resolveWith<Color>(
+          (Set<WidgetState> states) {
+            if (states.contains(WidgetState.selected)) return Colors.white;
+            return AppColors.textPrimary;
+          },
+        ),
+        dayBackgroundColor: WidgetStateProperty.resolveWith<Color?>(
+          (Set<WidgetState> states) {
+            if (states.contains(WidgetState.selected)) return AppColors.primary;
+            return null;
+          },
+        ),
+        todayForegroundColor: WidgetStateProperty.resolveWith<Color>(
+          (Set<WidgetState> states) {
+            if (states.contains(WidgetState.selected)) return Colors.white;
+            return AppColors.primary;
+          },
+        ),
+        todayBorder: const BorderSide(color: AppColors.primary),
+        todayBackgroundColor: WidgetStateProperty.resolveWith<Color>(
+          (Set<WidgetState> states) {
+            if (states.contains(WidgetState.selected)) return AppColors.primary;
+            return Colors.transparent;
+          },
+        ),
+        dayOverlayColor:
+            WidgetStatePropertyAll<Color>(AppColors.primary.withValues(alpha: 0.12)),
+        confirmButtonStyle: ButtonStyle(
+          foregroundColor:
+              const WidgetStatePropertyAll<Color>(AppColors.primary),
+          textStyle: WidgetStatePropertyAll<TextStyle>(
+            const TextStyle(
+              fontFamily: 'Roboto',
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+        cancelButtonStyle: ButtonStyle(
+          foregroundColor:
+              const WidgetStatePropertyAll<Color>(AppColors.textSecondary),
+          textStyle: WidgetStatePropertyAll<TextStyle>(
+            const TextStyle(
+              fontFamily: 'Roboto',
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ),
+      ),
+      timePickerTheme: TimePickerThemeData(
+        backgroundColor: AppColors.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        hourMinuteColor: AppColors.fieldFill,
+        hourMinuteTextColor: AppColors.textPrimary,
+        dialHandColor: AppColors.primary,
+        dialBackgroundColor: AppColors.fieldFill,
+        dialTextColor: AppColors.textPrimary,
+        entryModeIconColor: AppColors.textTertiary,
+        confirmButtonStyle: ButtonStyle(
+          foregroundColor:
+              const WidgetStatePropertyAll<Color>(AppColors.primary),
+        ),
+        cancelButtonStyle: ButtonStyle(
+          foregroundColor:
+              const WidgetStatePropertyAll<Color>(AppColors.textSecondary),
+        ),
+      ),
     );
   }
 }

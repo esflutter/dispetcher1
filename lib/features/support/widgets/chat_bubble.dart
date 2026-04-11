@@ -91,6 +91,7 @@ class ChatBubble extends StatelessWidget {
           style: AppTextStyles.body.copyWith(
             color: fg,
             fontSize: 16.sp,
+            height: 1.25,
           ),
         ),
       ),

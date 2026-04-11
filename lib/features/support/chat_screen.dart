@@ -42,14 +42,38 @@ class _ChatScreenState extends State<ChatScreen> {
     'assets/images/onboarding/onb_3.webp',
   ];
 
+  bool _awaitingDocuments = false;
+
   @override
   void initState() {
     super.initState();
     final initial = widget.initialMessage;
     if (initial != null && initial.trim().isNotEmpty) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _handleSend(initial.trim());
-      });
+      if (initial.trim() == 'verify_documents') {
+        _awaitingDocuments = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          setState(() {
+            _messages.add(ChatMessage(
+              id: _nextId(),
+              text: 'Отправьте, пожалуйста, фото документов, чтобы мы могли '
+                  'подтвердить ваш профиль:\n\n'
+                  '• ФИО или название организации\n'
+                  '• Паспорт (первая страница)\n'
+                  '• Фото техники\n'
+                  '• Документы на технику\n'
+                  '• Удостоверение на право управления техникой\n'
+                  '• Водительское удостоверение\n\n'
+                  'Можно отправить всё одним сообщением или по отдельности.',
+              fromUser: false,
+            ));
+            _scrollToBottom();
+          });
+        });
+      } else {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _handleSend(initial.trim());
+        });
+      }
     }
     _scrollToBottom();
   }
@@ -99,7 +123,18 @@ class _ChatScreenState extends State<ChatScreen> {
     Future<void>.delayed(const Duration(milliseconds: 800), () {
       if (!mounted) return;
       setState(() {
-        if (text.toLowerCase().contains('экскават')) {
+        if (_awaitingDocuments && hasImages) {
+          _awaitingDocuments = false;
+          _messages.add(
+            ChatMessage(
+              id: _nextId(),
+              text: 'Документы отправлены 👍\n'
+                  'Результат проверки появится в профиле.\n'
+                  'Мы также пришлём уведомление.',
+              fromUser: false,
+            ),
+          );
+        } else if (text.toLowerCase().contains('экскават')) {
           _messages.add(
             ChatMessage(
               id: _nextId(),

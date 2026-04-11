@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_screenutil/flutter_screenutil.dart';
-
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_spacing.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
+import 'package:dispatcher_1/core/widgets/bottom_sheet_handle.dart';
 import 'package:dispatcher_1/core/widgets/primary_button.dart';
 
 /// Bottom-sheet алерт «Подтвердите свои данные» — приглашение
@@ -26,16 +25,7 @@ Future<void> showDeleteExecutorCardAlert(BuildContext context) {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Center(
-              child: Container(
-                width: 36.w,
-                height: 4.h,
-                decoration: BoxDecoration(
-                  color: AppColors.divider,
-                  borderRadius: BorderRadius.circular(AppSpacing.radiusPill),
-                ),
-              ),
-            ),
+            const BottomSheetHandle(),
             SizedBox(height: AppSpacing.md),
             Text(
               'Подтвердите свои данные',

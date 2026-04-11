@@ -4,10 +4,12 @@ import 'package:go_router/go_router.dart';
 
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
+import 'package:dispatcher_1/core/widgets/bottom_sheet_handle.dart';
 import 'package:dispatcher_1/core/widgets/primary_button.dart';
 import 'package:dispatcher_1/features/catalog/customer_card_screen.dart';
 import 'package:dispatcher_1/features/catalog/widgets/catalog_search_bar.dart';
 import 'package:dispatcher_1/features/catalog/widgets/respond_bottom_sheet.dart';
+import 'package:dispatcher_1/features/catalog/widgets/subscription_paywall.dart';
 
 /// Карточка заказа (детали). По Figma — заголовок заказчика сверху,
 /// далее «номер заказа → заголовок → дата публикации → секции».
@@ -34,33 +36,64 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
     'Автовышка',
   ];
 
-  bool _verified = true;
+  final bool _verified = false;
+  bool _hasSubscription = false;
+
+  // Моковый список техники из заказа.
+  List<String> get _orderEquipment => widget.multipleEquipment
+      ? _multiEquipment
+      : const <String>['Экскаватор', 'Автокран', 'Манипулятор', 'Погрузчик', 'Автовышка'];
 
   Future<void> _onRespondTap() async {
-    if (widget.multipleEquipment) {
+    // 1. Проверка подписки.
+    if (!_hasSubscription) {
+      final bool? subscribed = await Navigator.of(context).push<bool>(
+        MaterialPageRoute<bool>(
+          fullscreenDialog: true,
+          builder: (_) => const SubscriptionPaywall(),
+        ),
+      );
+      if (subscribed != true || !mounted) return;
+      setState(() => _hasSubscription = true);
+    }
+
+    // 2. Проверка верификации.
+    if (!_verified) {
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        barrierColor: Colors.black.withValues(alpha: 0.35),
+        builder: (_) => RespondModalDialog(verified: false),
+      );
+      return;
+    }
+
+    // 3. Выбор техники (если несколько).
+    final List<String> eq = _orderEquipment;
+    if (eq.length > 1) {
       final List<String>? picked = await showModalBottomSheet<List<String>>(
         context: context,
         isScrollControlled: true,
         backgroundColor: Colors.transparent,
-        builder: (_) => const _PickEquipmentSheet(options: _multiEquipment),
+        builder: (_) => _PickEquipmentSheet(options: eq),
       );
       if (picked == null || !mounted) {
         return;
       }
     }
+
+    // 4. Отклик отправлен.
     if (!mounted) return;
     await showDialog<void>(
       context: context,
       barrierColor: Colors.black.withValues(alpha: 0.35),
-      builder: (_) => RespondModalDialog(verified: _verified),
+      builder: (_) => RespondModalDialog(verified: true),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final List<String> equipment = widget.multipleEquipment
-        ? _multiEquipment
-        : const <String>['Экскаватор'];
+    final List<String> equipment = _orderEquipment;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -69,44 +102,48 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
         foregroundColor: Colors.white,
         elevation: 0,
         centerTitle: true,
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios_new_rounded,
-              color: Colors.white, size: 20.r),
-          onPressed: () => Navigator.of(context).maybePop(),
-        ),
-        title: Text(
-          'Нужен экскаватор для копки тран...',
-          style: AppTextStyles.titleS.copyWith(color: Colors.white),
-          overflow: TextOverflow.ellipsis,
-        ),
-        actions: <Widget>[
-          // Переключатель «верифицирован» только для прототипа.
-          IconButton(
-            icon: Icon(
-              _verified ? Icons.verified : Icons.verified_outlined,
-              color: Colors.white,
-              size: 22.r,
+        toolbarHeight: 48.h,
+        leading: Padding(
+          padding: EdgeInsets.only(top: 2.h),
+          child: IconButton(
+            padding: EdgeInsets.zero,
+            alignment: Alignment.centerLeft,
+            icon: Padding(
+              padding: EdgeInsets.only(left: 8.w),
+              child: Image.asset(
+                'assets/icons/ui/back_arrow.webp',
+                width: 24.r,
+                height: 24.r,
+                fit: BoxFit.contain,
+              ),
             ),
-            onPressed: () => setState(() => _verified = !_verified),
+            onPressed: () => Navigator.of(context).maybePop(),
           ),
-        ],
+        ),
+        title: Padding(
+          padding: EdgeInsets.only(top: 2.h),
+          child: Text(
+            'Нужен экскаватор для копки тран...',
+            style: AppTextStyles.titleS.copyWith(color: Colors.white),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        actions: const <Widget>[],
       ),
       floatingActionButton: Padding(
-        padding: EdgeInsets.only(bottom: 24.h),
+        padding: EdgeInsets.only(bottom: 88.h),
         child: AiAssistantFab(
           onTap: () => context.push('/assistant/chat'),
         ),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
-      body: Stack(
+      body: Column(
         children: <Widget>[
-          Column(
-            children: <Widget>[
-              Expanded(
-                child: SingleChildScrollView(
-                  padding: EdgeInsets.fromLTRB(16.w, 16.h, 16.w, 24.h),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+          Expanded(
+            child: SingleChildScrollView(
+              padding: EdgeInsets.fromLTRB(16.w, 16.h, 16.w, 24.h),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
                       _CustomerHeader(
                         onTap: () => Navigator.of(context).push(
@@ -116,29 +153,31 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                           ),
                         ),
                       ),
-                      SizedBox(height: 14.h),
+                      SizedBox(height: 10.h),
                       Text('№123456',
                           style: AppTextStyles.caption
                               .copyWith(color: AppColors.textTertiary)),
                       SizedBox(height: 4.h),
                       Text('Разработка котлована под фундамент',
-                          style: AppTextStyles.titleL.copyWith(
-                              fontWeight: FontWeight.w700)),
-                      SizedBox(height: 4.h),
+                          style: AppTextStyles.titleL.copyWith(height: 1.2)),
+                      SizedBox(height: 7.h),
                       Text('Вчера в 14:30',
                           style: AppTextStyles.caption
                               .copyWith(color: AppColors.textTertiary)),
-                      SizedBox(height: 16.h),
+                      SizedBox(height: 11.h),
                       _Section(
                         title: 'Дата и время аренды',
                         child: Text('15 июня · 09:00–18:00',
-                            style: AppTextStyles.bodyMRegular),
+                            style: AppTextStyles.subBody.copyWith(fontWeight: FontWeight.w400)),
                       ),
                       _Section(
                         title: 'Адрес',
                         child: Text(
                             'Московская область, Москва, Улица1, д 144',
-                            style: AppTextStyles.bodyMRegular),
+                            style: AppTextStyles.subBody.copyWith(
+                              fontWeight: FontWeight.w400,
+                              decoration: TextDecoration.underline,
+                            )),
                       ),
                       _Section(
                         title: 'Требуемая спецтехника',
@@ -168,9 +207,9 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: <Widget>[
                             Text('Разработка грунта — 40 м³',
-                                style: AppTextStyles.bodyMRegular),
+                                style: AppTextStyles.subBody.copyWith(fontWeight: FontWeight.w400)),
                             Text('Планировка участка — 2 × 12 × 15 м',
-                                style: AppTextStyles.bodyMRegular),
+                                style: AppTextStyles.subBody.copyWith(fontWeight: FontWeight.w400)),
                           ],
                         ),
                       ),
@@ -178,14 +217,26 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                   ),
                 ),
               ),
-              Padding(
-                padding: EdgeInsets.fromLTRB(16.w, 0, 16.w, 16.h),
-                child: PrimaryButton(
-                  label: 'Откликнуться',
-                  onPressed: _onRespondTap,
+          Container(
+            decoration: BoxDecoration(
+              color: AppColors.background,
+              boxShadow: <BoxShadow>[
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.08),
+                  blurRadius: 8,
+                  offset: const Offset(0, -2),
                 ),
-              ),
-            ],
+              ],
+            ),
+            padding: EdgeInsets.fromLTRB(
+                16.w,
+                12.h,
+                16.w,
+                16.h + MediaQuery.of(context).padding.bottom),
+            child: PrimaryButton(
+              label: 'Откликнуться',
+              onPressed: _onRespondTap,
+            ),
           ),
         ],
       ),
@@ -204,31 +255,46 @@ class _CustomerHeader extends StatelessWidget {
       child: Row(
         children: <Widget>[
           CircleAvatar(
-            radius: 24.r,
+            radius: 28.r,
             backgroundColor: AppColors.primaryTint,
-            child: Icon(Icons.person, color: AppColors.primary, size: 28.r),
+            backgroundImage:
+                const AssetImage('assets/images/catalog/avatar_placeholder.webp'),
           ),
-          SizedBox(width: 12.w),
+          SizedBox(width: 10.w),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
                 Text('Александр Иванов',
-                    style: AppTextStyles.bodyMMedium
-                        .copyWith(fontWeight: FontWeight.w600)),
+                    style: TextStyle(
+                      fontFamily: 'Roboto',
+                      fontSize: 16.sp,
+                      fontWeight: FontWeight.w600,
+                      height: 1.3,
+                    )),
                 SizedBox(height: 2.h),
                 Row(
                   children: <Widget>[
-                    Icon(Icons.star_rounded,
-                        size: 16.r, color: AppColors.ratingStar),
+                    Image.asset('assets/images/catalog/star.webp',
+                        width: 20.r, height: 20.r),
                     SizedBox(width: 4.w),
                     Text('4,5',
-                        style: AppTextStyles.caption
-                            .copyWith(color: AppColors.textPrimary)),
-                    SizedBox(width: 8.w),
+                        style: TextStyle(
+                          fontFamily: 'Roboto',
+                          fontSize: 16.sp,
+                          fontWeight: FontWeight.w400,
+                          height: 1.3,
+                          color: AppColors.textPrimary,
+                        )),
+                    SizedBox(width: 12.w),
                     Text('15 отзывов',
-                        style: AppTextStyles.caption
-                            .copyWith(color: AppColors.textTertiary)),
+                        style: TextStyle(
+                          fontFamily: 'Roboto',
+                          fontSize: 16.sp,
+                          fontWeight: FontWeight.w400,
+                          height: 1.3,
+                          color: AppColors.textPrimary,
+                        )),
                   ],
                 ),
               ],
@@ -248,13 +314,17 @@ class _Section extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.only(bottom: 16.h),
+      padding: EdgeInsets.only(bottom: 12.h),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           Text(title,
-              style: AppTextStyles.bodyMedium
-                  .copyWith(fontWeight: FontWeight.w700)),
+              style: TextStyle(
+                fontFamily: 'Roboto',
+                fontSize: 16.sp,
+                fontWeight: FontWeight.w600,
+                height: 1.3,
+              )),
           SizedBox(height: 4.h),
           child,
         ],
@@ -270,14 +340,20 @@ class _OutlinedChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 6.h),
+      padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 5.h),
       decoration: BoxDecoration(
         color: AppColors.surface,
         border: Border.all(color: AppColors.primary, width: 1),
         borderRadius: BorderRadius.circular(100.r),
       ),
       child: Text(label,
-          style: AppTextStyles.chip.copyWith(color: AppColors.textPrimary)),
+          style: TextStyle(
+            fontFamily: 'Roboto',
+            fontSize: 13.sp,
+            fontWeight: FontWeight.w400,
+            height: 1.3,
+            color: AppColors.textPrimary,
+          )),
     );
   }
 }
@@ -310,22 +386,17 @@ class _PickEquipmentSheetState extends State<_PickEquipmentSheet> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
-          Center(
-            child: Container(
-              width: 36.w,
-              height: 4.h,
-              decoration: BoxDecoration(
-                color: AppColors.divider,
-                borderRadius: BorderRadius.circular(100.r),
-              ),
-            ),
-          ),
+          const BottomSheetHandle(),
           SizedBox(height: 16.h),
           Text(
             'Выберите технику, на которой\nвы готовы выполнить работу',
             textAlign: TextAlign.center,
-            style: AppTextStyles.titleS
-                .copyWith(fontWeight: FontWeight.w600),
+            style: TextStyle(
+              fontFamily: 'Roboto',
+              fontSize: 18.sp,
+              fontWeight: FontWeight.w600,
+              height: 1.3,
+            ),
           ),
           SizedBox(height: 16.h),
           for (final String e in widget.options)
@@ -383,7 +454,7 @@ class _CheckRow extends StatelessWidget {
                   : null,
             ),
             SizedBox(width: 16.w),
-            Text(label, style: AppTextStyles.bodyMRegular),
+            Text(label, style: AppTextStyles.body),
           ],
         ),
       ),

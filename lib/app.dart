@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 
 import 'core/router.dart';
@@ -20,6 +21,13 @@ class DispatcherApp extends StatelessWidget {
           debugShowCheckedModeBanner: false,
           theme: AppTheme.light,
           routerConfig: appRouter,
+          locale: const Locale('ru', 'RU'),
+          supportedLocales: const <Locale>[Locale('ru', 'RU')],
+          localizationsDelegates: const <LocalizationsDelegate<dynamic>>[
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
         );
       },
     );

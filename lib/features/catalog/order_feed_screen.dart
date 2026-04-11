@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:dispatcher_1/core/location_permission.dart';
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
 import 'package:dispatcher_1/features/catalog/catalog_filter_screen.dart';
@@ -159,6 +160,7 @@ class _OrderFeedScreenState extends State<OrderFeedScreen> {
                 color: AppColors.navBarDark,
                 child: CatalogSearchBar(
                   controller: _searchCtrl,
+                  hintText: _tab == 1 ? 'Поиск по адресу' : 'Поиск',
                   onFilterTap: _openFilter,
                   onChanged: (String v) => setState(() => _query = v),
                 ),
@@ -167,8 +169,12 @@ class _OrderFeedScreenState extends State<OrderFeedScreen> {
               CatalogSegmented(
                 index: _tab,
                 items: const <String>['Списком', 'На карте'],
-                onChanged: (int v) => setState(() => _tab = v),
+                onChanged: (int v) {
+                  setState(() => _tab = v);
+                  if (v == 1) ensureLocationPermission();
+                },
               ),
+              SizedBox(height: 12.h),
               Expanded(
                 // IndexedStack вместо ternary — чтобы состояние обоих табов
                 // (ввод в поиске, позиция скролла, карта) сохранялось при
@@ -192,6 +198,7 @@ class _OrderFeedScreenState extends State<OrderFeedScreen> {
                               rentDate: o.rentDate,
                               publishedAgo: o.publishedAgo,
                               equipment: o.equipment,
+                              price: o.price,
                               onTap: () => Navigator.of(context).push(
                                 MaterialPageRoute<void>(
                                   builder: (_) => OrderDetailScreen(
@@ -218,6 +225,23 @@ class _OrderFeedScreenState extends State<OrderFeedScreen> {
               ),
             ],
           ),
+          // Выпадающий список адресов при вводе на вкладке «На карте».
+          if (_tab == 1 && _query.trim().isNotEmpty)
+            Positioned(
+              // Вплотную под строкой поиска: высота поиска (44h) + нижний
+              // паддинг CatalogSearchBar (12h).
+              top: 44.h + 3.h,
+              left: 16.w,
+              right: 16.w,
+              child: _AddressSuggestions(
+                query: _query,
+                onSelect: (String address) {
+                  _searchCtrl.text = address;
+                  setState(() => _query = address);
+                  FocusScope.of(context).unfocus();
+                },
+              ),
+            ),
         ],
       ),
     );
@@ -453,6 +477,69 @@ class _MapCardLine extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Выпадающий список моковых адресов для вкладки «На карте».
+class _AddressSuggestions extends StatelessWidget {
+  const _AddressSuggestions({
+    required this.query,
+    required this.onSelect,
+  });
+
+  final String query;
+  final ValueChanged<String> onSelect;
+
+  static const List<String> _all = <String>[
+    'Московская область, Москва, ул. Ленина, д. 10',
+    'Московская область, Москва, ул. Пушкина, д. 25',
+    'Московская область, Москва, пр. Мира, д. 3',
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      elevation: 4,
+      borderRadius: BorderRadius.circular(12.r),
+      color: AppColors.surface,
+      child: ListView.separated(
+        shrinkWrap: true,
+        padding: EdgeInsets.symmetric(vertical: 8.h),
+        itemCount: _all.length,
+        separatorBuilder: (_, __) => Divider(
+          height: 1,
+          thickness: 0.5,
+          indent: 16.w,
+          endIndent: 16.w,
+          color: AppColors.divider,
+        ),
+        itemBuilder: (BuildContext context, int i) {
+          return InkWell(
+            onTap: () => onSelect(_all[i]),
+            child: Padding(
+              padding: EdgeInsets.symmetric(
+                  horizontal: 16.w, vertical: 12.h),
+              child: Row(
+                children: <Widget>[
+                  Icon(Icons.location_on_outlined,
+                      size: 20.r, color: AppColors.textTertiary),
+                  SizedBox(width: 10.w),
+                  Expanded(
+                    child: Text(
+                      _all[i],
+                      style: AppTextStyles.bodyMRegular.copyWith(
+                        color: AppColors.textPrimary,
+                        fontSize: 14.sp,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
       ),
     );
   }

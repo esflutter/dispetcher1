@@ -4,6 +4,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_spacing.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
+import 'package:dispatcher_1/core/widgets/bottom_sheet_handle.dart';
 import 'package:dispatcher_1/core/widgets/primary_button.dart';
 
 /// Боттом-шит «Принять заказ?» — алерт перед подтверждением.
@@ -80,16 +81,7 @@ class _SheetBody extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Center(
-              child: Container(
-                width: 36.w,
-                height: 4.h,
-                decoration: BoxDecoration(
-                  color: AppColors.divider,
-                  borderRadius: BorderRadius.circular(AppSpacing.radiusPill),
-                ),
-              ),
-            ),
+            const BottomSheetHandle(),
             SizedBox(height: AppSpacing.md),
             Text(title, style: AppTextStyles.h3, textAlign: TextAlign.center),
             SizedBox(height: AppSpacing.xs),
