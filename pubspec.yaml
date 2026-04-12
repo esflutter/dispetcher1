@@ -50,6 +50,8 @@ flutter:
     - assets/icons/nav/
     - assets/icons/ui/
     - assets/icons/support/
+    - assets/icons/profile/
+    - assets/images/profile/
 
   fonts:
     - family: Roboto

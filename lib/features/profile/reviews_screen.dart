@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:go_router/go_router.dart';
 
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_spacing.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
+import 'package:dispatcher_1/core/widgets/dark_sub_app_bar.dart';
+import 'package:dispatcher_1/features/catalog/widgets/catalog_search_bar.dart';
 
 class Review {
   const Review({
@@ -19,7 +22,7 @@ class Review {
 }
 
 class ReviewsScreen extends StatelessWidget {
-  const ReviewsScreen({super.key, this.empty = false});
+  const ReviewsScreen({super.key, this.empty = true});
 
   final bool empty;
 
@@ -36,21 +39,12 @@ class ReviewsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(
-        backgroundColor: AppColors.navBarDark,
-        foregroundColor: Colors.white,
-        elevation: 0,
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios_new_rounded,
-              size: 20.r, color: Colors.white),
-          onPressed: () => Navigator.of(context).maybePop(),
-        ),
-        centerTitle: true,
-        title: Text(
-          'Отзывы',
-          style: AppTextStyles.titleS.copyWith(color: Colors.white),
-        ),
+      appBar: const DarkSubAppBar(title: 'Отзывы'),
+      floatingActionButton: Padding(
+        padding: EdgeInsets.only(bottom: 24.h),
+        child: AiAssistantFab(onTap: () => context.push('/assistant/chat')),
       ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       body: empty
           ? const _Empty()
           : ListView.separated(
@@ -76,7 +70,13 @@ class _Empty extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.star_rounded, size: 128.r, color: AppColors.primary),
+          Image.asset(
+            'assets/icons/profile/star_empty.webp',
+            width: 140.r,
+            height: 140.r,
+            errorBuilder: (_, _, _) => Icon(Icons.star_rounded,
+                size: 128.r, color: AppColors.primary),
+          ),
           SizedBox(height: AppSpacing.md),
           Text('Пока нет отзывов',
               style: AppTextStyles.body.copyWith(color: AppColors.textPrimary)),
@@ -157,8 +157,8 @@ class _ReviewCard extends StatelessWidget {
               (i) => Padding(
                 padding: EdgeInsets.only(right: i == review.photos - 1 ? 0 : 8.w),
                 child: Container(
-                  width: 78.w,
-                  height: 78.w,
+                  width: 78.r,
+                  height: 78.r,
                   decoration: BoxDecoration(
                     color: AppColors.surfaceVariant,
                     borderRadius: BorderRadius.circular(AppSpacing.radiusS),

@@ -14,6 +14,54 @@ enum VerificationStatus {
   blocked,
 }
 
+class _BadgeConfig {
+  const _BadgeConfig({
+    required this.label,
+    required this.fg,
+    required this.bg,
+  });
+  final String label;
+  final Color fg;
+  final Color bg;
+}
+
+_BadgeConfig _configFor(VerificationStatus s) {
+  switch (s) {
+    case VerificationStatus.verified:
+      return const _BadgeConfig(
+        label: 'Верификация пройдена',
+        fg: Color(0xFF1F8A2D),
+        bg: Color(0xFFD7F6CB),
+      );
+    case VerificationStatus.inProgress:
+      return const _BadgeConfig(
+        label: 'Верификация в процессе',
+        fg: Color(0xFF1976D2),
+        bg: Color(0xFFDCECFA),
+      );
+    case VerificationStatus.rejected:
+      return const _BadgeConfig(
+        label: 'Верификация не пройдена',
+        fg: AppColors.error,
+        bg: Color(0xFFFCE1E1),
+      );
+    case VerificationStatus.notVerified:
+      return const _BadgeConfig(
+        label: 'Верификация не пройдена',
+        fg: AppColors.error,
+        bg: Color(0xFFFCE1E1),
+      );
+    case VerificationStatus.blocked:
+      return const _BadgeConfig(
+        label: 'Ваш профиль заблокирован',
+        fg: AppColors.error,
+        bg: Color(0xFFFCE1E1),
+      );
+  }
+}
+
+/// Небольшой pill-бейдж со статусом — для компактных мест
+/// (например, заголовок карточки исполнителя).
 class VerificationBadge extends StatelessWidget {
   const VerificationBadge({super.key, required this.status});
 
@@ -21,77 +69,51 @@ class VerificationBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cfg = _config(status);
+    final cfg = _configFor(status);
     return Container(
       padding: EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: 6.h),
       decoration: BoxDecoration(
         color: cfg.bg,
         borderRadius: BorderRadius.circular(AppSpacing.radiusPill),
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(cfg.icon, size: 14.r, color: cfg.fg),
-          SizedBox(width: 6.w),
-          Text(
-            cfg.label,
-            style: AppTextStyles.captionBold.copyWith(color: cfg.fg),
-          ),
-        ],
+      child: Text(
+        cfg.label,
+        style: AppTextStyles.captionBold.copyWith(color: cfg.fg),
       ),
     );
   }
-
-  static _BadgeConfig _config(VerificationStatus s) {
-    switch (s) {
-      case VerificationStatus.verified:
-        return _BadgeConfig(
-          label: 'Верифицирован',
-          icon: Icons.verified_rounded,
-          fg: AppColors.success,
-          bg: const Color(0xFFE6F9E7),
-        );
-      case VerificationStatus.inProgress:
-        return _BadgeConfig(
-          label: 'На проверке',
-          icon: Icons.hourglass_top_rounded,
-          fg: AppColors.primary,
-          bg: AppColors.primaryTint,
-        );
-      case VerificationStatus.rejected:
-        return _BadgeConfig(
-          label: 'Отказано',
-          icon: Icons.cancel_rounded,
-          fg: AppColors.error,
-          bg: const Color(0xFFFDECEA),
-        );
-      case VerificationStatus.notVerified:
-        return _BadgeConfig(
-          label: 'Не верифицирован',
-          icon: Icons.help_outline_rounded,
-          fg: AppColors.textTertiary,
-          bg: AppColors.surfaceVariant,
-        );
-      case VerificationStatus.blocked:
-        return _BadgeConfig(
-          label: 'Заблокирован',
-          icon: Icons.block_rounded,
-          fg: AppColors.error,
-          bg: const Color(0xFFFDECEA),
-        );
-    }
-  }
 }
 
-class _BadgeConfig {
-  _BadgeConfig({
-    required this.label,
-    required this.icon,
-    required this.fg,
-    required this.bg,
-  });
-  final String label;
-  final IconData icon;
-  final Color fg;
-  final Color bg;
+/// Полноширинный pill со статусом верификации — используется
+/// на главном экране профиля и в карточке исполнителя.
+class FullWidthVerificationPill extends StatelessWidget {
+  const FullWidthVerificationPill({super.key, required this.status});
+
+  final VerificationStatus status;
+
+  @override
+  Widget build(BuildContext context) {
+    final cfg = _configFor(status);
+    return Container(
+      width: double.infinity,
+      height: 25.h,
+      alignment: Alignment.center,
+      padding: EdgeInsets.symmetric(horizontal: 12.w),
+      decoration: BoxDecoration(
+        color: cfg.bg,
+        borderRadius: BorderRadius.circular(100.r),
+      ),
+      child: Text(
+        cfg.label,
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          fontFamily: 'Roboto',
+          fontSize: 12.sp,
+          fontWeight: FontWeight.w600,
+          height: 1.0,
+          color: cfg.fg,
+        ),
+      ),
+    );
+  }
 }

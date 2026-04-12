@@ -68,20 +68,146 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   @override
   Widget build(BuildContext context) {
     final sHeight = MediaQuery.of(context).size.height;
+    final bottomSectionHeight = sHeight * 0.445;
     
     return Scaffold(
       backgroundColor: AppColors.background,
       body: Stack(
         children: [
-          // Sliding content (Images + Text Cards)
-          PageView.builder(
-            controller: _controller,
-            itemCount: _steps.length,
-            onPageChanged: (i) => setState(() => _index = i),
-            itemBuilder: (_, i) => _OnbPage(step: _steps[i], screenHeight: sHeight),
+          // 1. Sliding Images Behind
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: bottomSectionHeight - 22.r, // Заканчивается ровно под скруглением шторки
+            child: PageView.builder(
+              controller: _controller,
+              itemCount: _steps.length,
+              onPageChanged: (i) => setState(() => _index = i),
+              itemBuilder: (_, i) => Image.asset(
+                _steps[i].image,
+                fit: BoxFit.cover,
+                errorBuilder: (BuildContext _, Object _, StackTrace? _) =>
+                    Container(
+                  color: AppColors.surfaceVariant,
+                  alignment: Alignment.center,
+                  child: Icon(Icons.image_outlined,
+                      size: 80, color: AppColors.textTertiary),
+                ),
+              ),
+            ),
           ),
           
-          // TODO: временная кнопка для быстрого перехода в каталог.
+          // 2. Static White Card at bottom
+          Align(
+            alignment: Alignment.bottomCenter,
+            child: Container(
+              height: bottomSectionHeight,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: AppColors.background,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(22.r)),
+              ),
+              child: SafeArea(
+                top: false,
+                child: Column(
+                  children: [
+                    SizedBox(height: 42.h),
+                    
+                    // Animated Text Container (Swipe Sync Parallax)
+                    AnimatedBuilder(
+                      animation: _controller,
+                      builder: (context, _) {
+                        double page =
+                            _controller.hasClients ? (_controller.page ?? _index.toDouble()) : _index.toDouble();
+
+                        return Stack(
+                          alignment: Alignment.topCenter,
+                          children: List.generate(_steps.length, (i) {
+                            double offset = page - i;
+                            double opacity = (1 - offset.abs()).clamp(0.0, 1.0);
+
+                            if (opacity == 0) return const SizedBox.shrink();
+
+                            double translateX = -offset * MediaQuery.of(context).size.width * 0.6;
+
+                            return Transform.translate(
+                              offset: Offset(translateX, 0),
+                              child: Opacity(
+                                opacity: opacity,
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Padding(
+                                      padding: EdgeInsets.symmetric(horizontal: 16.w),
+                                      child: Text(
+                                        _steps[i].title,
+                                        style: AppTextStyles.h2.copyWith(
+                                          fontSize: 24.sp,
+                                          color: AppColors.textBlack,
+                                        ),
+                                        textAlign: TextAlign.center,
+                                      ),
+                                    ),
+                                    SizedBox(height: 11.h),
+                                    Padding(
+                                      padding: EdgeInsets.symmetric(horizontal: 16.w),
+                                      child: Text(
+                                        _steps[i].description,
+                                        style: AppTextStyles.body.copyWith(
+                                          color: AppColors.textSecondary,
+                                        ),
+                                        textAlign: TextAlign.center,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          }),
+                        );
+                      },
+                    ),
+
+                    const Spacer(),
+
+                    // Indicator
+                    Container(
+                      padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 8.h),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFBE4C6).withValues(alpha: 0.78),
+                        borderRadius: BorderRadius.circular(100.r),
+                      ),
+                      child: SmoothPageIndicator(
+                        controller: _controller,
+                        count: _steps.length,
+                        effect: SlideEffect(
+                          dotHeight: 8.r,
+                          dotWidth: 8.r,
+                          spacing: 8.w,
+                          activeDotColor: const Color(0xFFFFAC26),
+                          dotColor: const Color(0xFFFFAC26).withValues(alpha: 0.3),
+                        ),
+                      ),
+                    ),
+                    SizedBox(height: 19.h),
+
+                    // Button
+                    Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 16.w),
+                      child: PrimaryButton(
+                        label: 'Далее',
+                        onPressed: _onNext,
+                      ),
+                    ),
+                    SizedBox(height: 51.h), // Bottom padding
+                  ],
+                ),
+              ),
+            ),
+          ),
+
+          // 3. Временная кнопка для быстрого перехода в каталог.
           Positioned(
             top: MediaQuery.of(context).padding.top + 8.h,
             right: 12.w,
@@ -105,118 +231,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               ),
             ),
           ),
-
-          // Static content on top (Indicator + Button)
-          Align(
-            alignment: Alignment.bottomCenter,
-            child: SizedBox(
-              height: sHeight * 0.445, // 46% exactly
-              child: SafeArea(
-                top: false,
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    Container(
-                      padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 8.h),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFFBE4C6).withValues(alpha: 0.78),
-                        borderRadius: BorderRadius.circular(100.r),
-                      ),
-                      child: SmoothPageIndicator(
-                        controller: _controller,
-                        count: _steps.length,
-                        effect: SlideEffect(
-                          dotHeight: 8.r,
-                          dotWidth: 8.r,
-                          spacing: 8.w,
-                          activeDotColor: const Color(0xFFFFAC26),
-                          dotColor: const Color(0xFFFFAC26).withValues(alpha: 0.3),
-                        ),
-                      ),
-                    ),
-                    SizedBox(height: 19.h),
-                    Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 16.w),
-                      child: PrimaryButton(
-                        label: 'Далее',
-                        onPressed: _onNext,
-                      ),
-                    ),
-                    SizedBox(height: 51.h), // Bottom padding
-                  ],
-                ),
-              ),
-            ),
-          ),
         ],
       ),
-    );
-  }
-}
-
-class _OnbPage extends StatelessWidget {
-  const _OnbPage({required this.step, required this.screenHeight});
-
-  final _OnbStep step;
-  final double screenHeight;
-
-  @override
-  Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        // Full bleed image behind the status bar
-        Positioned(
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: screenHeight * 0.445 - 22.r, // Заканчивается ровно под скруглением шторки
-          child: Image.asset(
-            step.image,
-            fit: BoxFit.cover,
-            errorBuilder: (BuildContext _, Object _, StackTrace? _) =>
-                Container(
-              color: AppColors.surfaceVariant,
-              alignment: Alignment.center,
-              child: Icon(Icons.image_outlined,
-                  size: 80, color: AppColors.textTertiary),
-            ),
-          ),
-        ),
-        // Overlapping bottom white card
-        Align(
-          alignment: Alignment.bottomCenter,
-          child: Container(
-            height: screenHeight * 0.445,
-            width: double.infinity,
-            decoration: BoxDecoration(
-              color: AppColors.background,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(22.r)),
-            ),
-            padding: EdgeInsets.only(top: 42.h, left: 16.w, right: 16.w),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Text(
-                  step.title,
-                  style: AppTextStyles.h2.copyWith(
-                    fontSize: 24.sp,
-                    color: AppColors.textBlack,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                SizedBox(height: 11.h),
-                Text(
-                  step.description,
-                  style: AppTextStyles.body.copyWith(
-                    color: AppColors.textSecondary,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
     );
   }
 }

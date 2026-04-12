@@ -729,13 +729,13 @@ class _InlineCalendarState extends State<_InlineCalendar> {
         borderRadius: BorderRadius.circular(16.r),
         border: Border.all(color: const Color(0xFFD1D1D6)),
       ),
-      padding: const EdgeInsets.symmetric(vertical: 16),
+      padding: EdgeInsets.symmetric(vertical: 16.h),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
           // Хедер: < месяц год г. >
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
+            padding: EdgeInsets.symmetric(horizontal: 16.w),
             child: Row(
               children: <Widget>[
                 GestureDetector(
@@ -770,7 +770,7 @@ class _InlineCalendarState extends State<_InlineCalendar> {
               ],
             ),
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: 16.h),
           // Заголовки дней недели (статичные, не свайпятся).
           Row(
             children: _weekDays
@@ -789,12 +789,12 @@ class _InlineCalendarState extends State<_InlineCalendar> {
                     ))
                 .toList(),
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: 8.h),
           // Сетка дней — PageView для свайпа пальцем.
           AnimatedContainer(
             duration: const Duration(milliseconds: 200),
             curve: Curves.easeInOut,
-            height: 40.0 * _rowCountForMonth(_displayedMonth),
+            height: 40.h * _rowCountForMonth(_displayedMonth),
             child: PageView.builder(
               controller: _pageCtrl,
               itemCount: _totalMonths,
@@ -849,14 +849,14 @@ class _InlineCalendarState extends State<_InlineCalendar> {
                                         setState(() => _picked = dateOnly),
                                 child: Center(
                                   child: Container(
-                                    width: 34,
-                                    height: 34,
-                                    margin: const EdgeInsets.symmetric(
-                                        vertical: 3),
+                                    width: 34.r,
+                                    height: 34.r,
+                                    margin: EdgeInsets.symmetric(
+                                        vertical: 3.h),
                                     decoration: BoxDecoration(
                                       color: bg,
                                       borderRadius:
-                                          BorderRadius.circular(8),
+                                          BorderRadius.circular(8.r),
                                       border: border,
                                     ),
                                     alignment: Alignment.center,
@@ -882,10 +882,10 @@ class _InlineCalendarState extends State<_InlineCalendar> {
               },
             ),
           ),
-          const SizedBox(height: 5),
+          SizedBox(height: 5.h),
           // Кнопки.
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
+            padding: EdgeInsets.symmetric(horizontal: 16.w),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: <Widget>[
@@ -902,7 +902,7 @@ class _InlineCalendarState extends State<_InlineCalendar> {
                     ),
                   ),
                 ),
-                const SizedBox(width: 24),
+                SizedBox(width: 24.w),
                 GestureDetector(
                   behavior: HitTestBehavior.opaque,
                   onTap: () => widget.onChanged(_picked),
@@ -1087,7 +1087,7 @@ class _InlineTimePickerState extends State<_InlineTimePicker> {
               ],
             ),
           ),
-          SizedBox(height: 16.r),
+          SizedBox(height: 16.h),
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: <Widget>[

@@ -12,7 +12,7 @@ class SupportHomeScreen extends StatelessWidget {
 
   void _openChat(BuildContext context, {String? initialMessage}) {
     final extra = initialMessage == null ? null : {'initial': initialMessage};
-    GoRouter.of(context).push('/assistant/chat', extra: extra);
+    GoRouter.of(context).go('/assistant/chat', extra: extra);
   }
 
   @override
@@ -127,8 +127,8 @@ class _AskQuestionField extends StatelessWidget {
               ),
             ),
             Container(
-              width: 48.w,
-              height: 48.w,
+              width: 48.r,
+              height: 48.r,
               decoration: BoxDecoration(
                 color: AppColors.primary,
                 borderRadius: BorderRadius.circular(8.r),

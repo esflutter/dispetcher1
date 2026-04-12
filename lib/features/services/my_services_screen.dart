@@ -5,13 +5,15 @@ import 'package:go_router/go_router.dart';
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_spacing.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
+import 'package:dispatcher_1/core/widgets/dark_sub_app_bar.dart';
 import 'package:dispatcher_1/core/widgets/primary_button.dart';
+import 'package:dispatcher_1/features/catalog/widgets/catalog_search_bar.dart';
 
 import 'widgets/service_card.dart';
 
 /// Экран «Мои услуги» — список услуг исполнителя или пустое состояние.
 class MyServicesScreen extends StatelessWidget {
-  const MyServicesScreen({super.key, this.empty = false});
+  const MyServicesScreen({super.key, this.empty = true});
 
   final bool empty;
 
@@ -42,32 +44,40 @@ class MyServicesScreen extends StatelessWidget {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(
-        backgroundColor: AppColors.navBarDark,
-        foregroundColor: Colors.white,
-        elevation: 0,
-        centerTitle: true,
-        title: Text(
-          'Мои услуги',
-          style: AppTextStyles.titleS.copyWith(color: Colors.white),
-        ),
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios_new,
-              size: 20.sp, color: Colors.white),
-          onPressed: () => Navigator.of(context).maybePop(),
-        ),
+      appBar: DarkSubAppBar(
+        title: 'Мои услуги',
+        actions: <Widget>[
+          if (!isEmpty)
+            Padding(
+              padding: EdgeInsets.only(right: 8.w),
+              child: IconButton(
+                icon: Icon(Icons.add_rounded, color: Colors.white, size: 26.r),
+                onPressed: () => context.push('/services/create'),
+              ),
+            ),
+        ],
       ),
+      floatingActionButton: Padding(
+        padding: EdgeInsets.only(bottom: isEmpty ? 88.h : 24.h),
+        child: AiAssistantFab(onTap: () => context.push('/assistant/chat')),
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       body: SafeArea(
         child: isEmpty ? const _EmptyState() : _ServicesList(items: _mock),
       ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
-      floatingActionButton: Padding(
-        padding: EdgeInsets.symmetric(horizontal: AppSpacing.md),
-        child: PrimaryButton(
-          label: 'Создать услугу',
-          onPressed: () => context.push('/services/create'),
-        ),
-      ),
+      bottomNavigationBar: isEmpty
+          ? SafeArea(
+              top: false,
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(AppSpacing.screenH, 0,
+                    AppSpacing.screenH, AppSpacing.md),
+                child: PrimaryButton(
+                  label: 'Создать услугу',
+                  onPressed: () => context.push('/services/create'),
+                ),
+              ),
+            )
+          : null,
     );
   }
 }
@@ -96,7 +106,7 @@ class _ServicesList extends StatelessWidget {
         AppSpacing.md,
         AppSpacing.md,
         AppSpacing.md,
-        100.h,
+        AppSpacing.xxl,
       ),
       itemCount: items.length,
       separatorBuilder: (_, _) => SizedBox(height: AppSpacing.sm),
@@ -124,24 +134,10 @@ class _EmptyState extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Container(
-              width: 120.w,
-              height: 120.w,
-              decoration: BoxDecoration(
-                color: AppColors.primaryTint,
-                shape: BoxShape.circle,
-              ),
-              alignment: Alignment.center,
-              child: Icon(
-                Icons.work_outline,
-                size: 56.sp,
-                color: AppColors.primary,
-              ),
-            ),
-            SizedBox(height: AppSpacing.lg),
             Text(
               'Здесь появятся ваши услуги',
-              style: AppTextStyles.titleL,
+              style:
+                  AppTextStyles.h3.copyWith(fontWeight: FontWeight.w700),
               textAlign: TextAlign.center,
             ),
             SizedBox(height: AppSpacing.xs),

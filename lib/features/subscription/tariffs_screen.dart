@@ -8,81 +8,45 @@ import 'package:dispatcher_1/core/theme/app_text_styles.dart';
 import 'package:dispatcher_1/core/widgets/primary_button.dart';
 
 /// Paywall: единственный тариф с trial-периодом.
-/// Точная вёрстка из Figma — заголовок, буллеты, кнопка, ссылки внизу.
+/// Поверх фоновой фотографии (handshake) показывается белая карточка
+/// с заголовком, преимуществами и кнопкой «Продолжить».
 class TariffsScreen extends StatelessWidget {
-  const TariffsScreen({super.key});
+  const TariffsScreen({super.key, this.variant = TariffsVariant.orders});
 
-  static const _bullets = [
-    'Откликайтесь на заказы',
-    'Попадайте в список исполнителей',
-    'Получайте новые заявки',
-  ];
+  final TariffsVariant variant;
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF929292),
+      backgroundColor: Colors.black,
       body: Stack(
+        fit: StackFit.expand,
         children: [
-          Positioned.fill(
-            child: Container(color: const Color(0xFF929292)),
+          Image.asset(
+            'assets/images/catalog/subscription_bg.webp',
+            fit: BoxFit.cover,
+            errorBuilder: (_, _, _) => Container(color: const Color(0xFF929292)),
           ),
           Align(
             alignment: Alignment.bottomCenter,
-            child: Container(
-              decoration: const BoxDecoration(
-                color: AppColors.surface,
-                borderRadius: BorderRadius.vertical(
-                  top: Radius.circular(16),
-                ),
-              ),
-              padding: EdgeInsets.fromLTRB(
-                AppSpacing.screenH,
-                AppSpacing.lg,
-                AppSpacing.screenH,
-                AppSpacing.lg,
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Получите доступ к заказам',
-                    style: AppTextStyles.h2.copyWith(color: AppColors.textBlack),
-                  ),
-                  SizedBox(height: AppSpacing.md),
-                  for (final b in _bullets) ...[
-                    Text(b,
-                        style: AppTextStyles.body
-                            .copyWith(color: AppColors.textPrimary)),
-                    SizedBox(height: 4.h),
-                  ],
-                  SizedBox(height: AppSpacing.lg),
-                  Center(
-                    child: Text(
-                      'N дней бесплатно, затем N ₽/месяц',
-                      style: AppTextStyles.subBody
-                          .copyWith(color: const Color(0xFF636362)),
-                    ),
-                  ),
-                  SizedBox(height: AppSpacing.xs),
-                  PrimaryButton(
-                    label: 'Продолжить',
-                    onPressed: () => context.push('/subscription/card'),
-                  ),
-                  SizedBox(height: AppSpacing.md),
-                  _Footer(),
-                ],
-              ),
-            ),
+            child: _TariffsSheet(variant: variant),
           ),
           Positioned(
-            top: 50.h,
+            top: MediaQuery.of(context).padding.top + 8.h,
             right: 16.w,
-            child: IconButton(
-              icon: Icon(Icons.close_rounded,
-                  size: 24.r, color: AppColors.surface),
-              onPressed: () => Navigator.of(context).maybePop(),
+            child: GestureDetector(
+              onTap: () => Navigator.of(context).maybePop(),
+              child: Container(
+                width: 32.r,
+                height: 32.r,
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.2),
+                  shape: BoxShape.circle,
+                ),
+                alignment: Alignment.center,
+                child: Icon(Icons.close_rounded,
+                    size: 20.r, color: Colors.white),
+              ),
             ),
           ),
         ],
@@ -91,7 +55,123 @@ class TariffsScreen extends StatelessWidget {
   }
 }
 
+/// Вариант paywall экрана.
+enum TariffsVariant {
+  /// «Получите доступ к заказам» — стартовая подписка.
+  orders,
+
+  /// «Оплатите размещение услуги» — платное размещение услуги.
+  service,
+
+  /// «Оплатите размещение карточки исполнителя» — платное размещение карточки.
+  executorCard,
+}
+
+class _TariffsSheet extends StatelessWidget {
+  const _TariffsSheet({required this.variant});
+  final TariffsVariant variant;
+
+  static const _ordersBullets = [
+    'Откликайтесь на заказы',
+    'Попадайте в список исполнителей',
+    'Получайте новые заявки',
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final String title;
+    final String description;
+    final String priceLabel;
+    final List<String>? bullets;
+
+    switch (variant) {
+      case TariffsVariant.orders:
+        title = 'Получите доступ к\nзаказам';
+        description = '';
+        priceLabel = 'N дней бесплатно, затем N ₽/месяц';
+        bullets = _ordersBullets;
+      case TariffsVariant.service:
+        title = 'Оплатите размещение\nуслуги';
+        description =
+            'После оплаты ваша услуга появится в\nкаталоге, и заказчики смогут выбрать вас';
+        priceLabel = 'N ₽ за услугу';
+        bullets = null;
+      case TariffsVariant.executorCard:
+        title = 'Оплатите размещение\nкарточки исполнителя';
+        description =
+            'После оплаты ваша карточка появится в\nкаталоге, и заказчики смогут выбрать вас';
+        priceLabel = 'N дней бесплатно, затем N ₽/месяц';
+        bullets = null;
+    }
+
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20.r)),
+      ),
+      padding: EdgeInsets.fromLTRB(
+        AppSpacing.screenH,
+        AppSpacing.lg,
+        AppSpacing.screenH,
+        AppSpacing.md,
+      ),
+      child: SafeArea(
+        top: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Text(
+              title,
+              style: AppTextStyles.h2.copyWith(color: AppColors.textBlack),
+              textAlign: TextAlign.center,
+            ),
+            SizedBox(height: AppSpacing.md),
+            if (bullets != null)
+              Column(
+                children: bullets
+                    .map((b) => Padding(
+                          padding: EdgeInsets.only(bottom: 4.h),
+                          child: Text(
+                            b,
+                            style: AppTextStyles.body
+                                .copyWith(color: AppColors.textPrimary),
+                            textAlign: TextAlign.center,
+                          ),
+                        ))
+                    .toList(),
+              )
+            else if (description.isNotEmpty)
+              Text(
+                description,
+                style: AppTextStyles.body
+                    .copyWith(color: AppColors.textSecondary),
+                textAlign: TextAlign.center,
+              ),
+            SizedBox(height: AppSpacing.lg),
+            Text(
+              priceLabel,
+              style: AppTextStyles.subBody
+                  .copyWith(color: const Color(0xFF636362)),
+            ),
+            SizedBox(height: AppSpacing.xs),
+            PrimaryButton(
+              label: 'Продолжить',
+              onPressed: () => context.push('/subscription/payment'),
+            ),
+            SizedBox(height: AppSpacing.md),
+            const _Footer(),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _Footer extends StatelessWidget {
+  const _Footer();
+
   @override
   Widget build(BuildContext context) {
     final style = TextStyle(
@@ -99,11 +179,19 @@ class _Footer extends StatelessWidget {
       fontWeight: FontWeight.w500,
       color: AppColors.iosGrey,
     );
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return Column(
       children: [
-        Text('Условия использования', style: style),
-        Text('Политика конфиденциальности', style: style),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text('Условия использования', style: style),
+            SizedBox(width: 8.w),
+            Text('•', style: style),
+            SizedBox(width: 8.w),
+            Text('Политика конфиденциальности', style: style),
+          ],
+        ),
+        SizedBox(height: 2.h),
         Text('Восстановить покупки', style: style),
       ],
     );

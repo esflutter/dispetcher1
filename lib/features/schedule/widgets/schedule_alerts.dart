@@ -4,69 +4,65 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_spacing.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
-import 'package:dispatcher_1/core/widgets/bottom_sheet_handle.dart';
 import 'package:dispatcher_1/core/widgets/primary_button.dart';
 
-/// BottomSheet-алерт «Закрыть приём заказов» для группы «Мой график».
+/// Центрированный alert-dialog «Закрыть приём заказов?».
 class ScheduleAlerts {
   ScheduleAlerts._();
 
-  /// Подтверждение закрытия приёма заказов.
   static Future<bool?> showCloseAcceptance(BuildContext context) {
-    return showModalBottomSheet<bool>(
+    return showDialog<bool>(
       context: context,
-      backgroundColor: AppColors.surface,
-      isScrollControlled: true,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24.r)),
-      ),
-      builder: (_) => const _CloseAcceptanceSheet(),
-    );
-  }
-}
-
-class _CloseAcceptanceSheet extends StatelessWidget {
-  const _CloseAcceptanceSheet();
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      top: false,
-      child: Padding(
-        padding: EdgeInsets.fromLTRB(
-          AppSpacing.md,
-          AppSpacing.sm,
-          AppSpacing.md,
-          AppSpacing.lg,
+      barrierDismissible: true,
+      builder: (ctx) => Dialog(
+        backgroundColor: AppColors.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppSpacing.radiusL),
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const BottomSheetHandle(),
-            SizedBox(height: AppSpacing.lg),
-            Text(
-              'Закрыть приём заказов?',
-              style: AppTextStyles.h3,
-              textAlign: TextAlign.center,
-            ),
-            SizedBox(height: AppSpacing.sm),
-            Text(
-              'Новые заказы на этот день поступать не будут',
-              style: AppTextStyles.body.copyWith(color: AppColors.textSecondary),
-              textAlign: TextAlign.center,
-            ),
-            SizedBox(height: AppSpacing.xl),
-            PrimaryButton(
-              label: 'Закрыть',
-              onPressed: () => Navigator.of(context).pop(true),
-            ),
-            SizedBox(height: AppSpacing.sm),
-            SecondaryButton(
-              label: 'Вернуться',
-              onPressed: () => Navigator.of(context).pop(false),
-            ),
-          ],
+        insetPadding: EdgeInsets.symmetric(horizontal: AppSpacing.xl),
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(
+              AppSpacing.md, AppSpacing.sm, AppSpacing.md, AppSpacing.md),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Align(
+                alignment: Alignment.centerRight,
+                child: GestureDetector(
+                  onTap: () => Navigator.of(ctx).pop(false),
+                  child: Icon(Icons.close_rounded,
+                      size: 22.r, color: AppColors.textSecondary),
+                ),
+              ),
+              Text(
+                'Закрыть приём заказов?',
+                style: AppTextStyles.h3.copyWith(fontWeight: FontWeight.w700),
+                textAlign: TextAlign.center,
+              ),
+              SizedBox(height: AppSpacing.xs),
+              Text(
+                'Новые заказы на этот день\nпоступать не будут',
+                style:
+                    AppTextStyles.body.copyWith(color: AppColors.textSecondary),
+                textAlign: TextAlign.center,
+              ),
+              SizedBox(height: AppSpacing.lg),
+              PrimaryButton(
+                label: 'Закрыть',
+                onPressed: () => Navigator.of(ctx).pop(true),
+              ),
+              SizedBox(height: AppSpacing.xs),
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(false),
+                child: Text(
+                  'Вернуться',
+                  style: AppTextStyles.bodyMedium
+                      .copyWith(color: AppColors.textSecondary),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

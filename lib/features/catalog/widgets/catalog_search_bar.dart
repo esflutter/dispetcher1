@@ -68,8 +68,8 @@ class CatalogSearchBar extends StatelessWidget {
           GestureDetector(
             onTap: onFilterTap,
             child: Container(
-              width: 44.h,
-              height: 44.h,
+              width: 44.r,
+              height: 44.r,
               decoration: BoxDecoration(
                 color: AppColors.primary,
                 borderRadius: BorderRadius.circular(10.r),

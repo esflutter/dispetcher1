@@ -33,7 +33,7 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _isRecording = false;
 
   bool get _showQuickActions =>
-      _messages.every((m) => !m.fromUser) && _pendingImages.isEmpty;
+      _messages.length == 1 && !_messages.first.fromUser && _pendingImages.isEmpty;
 
   // Демо-картинки для заглушек вложений
   static const List<String> _demoImages = <String>[

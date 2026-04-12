@@ -9,6 +9,9 @@ class CropResult {
   final Size screenSize;
 
   CropResult(this.center, this.radius, this.screenSize);
+
+  /// Глобальное хранилище последнего результата кропа (до появления бэкенда).
+  static CropResult? saved;
 }
 
 class PhotoCropScreen extends StatefulWidget {

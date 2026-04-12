@@ -104,7 +104,12 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
               child: PrimaryButton(
                 label: 'Готово',
                 enabled: _isValid,
-                onPressed: _isValid ? () => context.go('/assistant') : () {},
+                onPressed: _isValid
+                    ? () {
+                        CropResult.saved = _cropResult;
+                        context.go('/assistant');
+                      }
+                    : () {},
               ),
             ),
           ],
@@ -128,8 +133,8 @@ class _AvatarSlot extends StatelessWidget {
         clipBehavior: Clip.none,
         children: [
           Container(
-            width: 112.w,
-            height: 112.w,
+            width: 112.r,
+            height: 112.r,
             decoration: BoxDecoration(
               color: const Color(0xFFEAEAEA), // Цвет фона-плейсхолдера
               shape: BoxShape.circle,
@@ -164,8 +169,8 @@ class _AvatarSlot extends StatelessWidget {
                   )
                 : Image.asset(
                     'assets/icons/ui/avatar.webp',
-                    width: 112.w,
-                    height: 112.w,
+                    width: 112.r,
+                    height: 112.r,
                     fit: BoxFit.cover,
                   ),
           ),
@@ -174,8 +179,8 @@ class _AvatarSlot extends StatelessWidget {
             bottom: 0,
             child: Image.asset(
               'assets/icons/ui/edit.webp',
-              width: 28.w,
-              height: 28.w,
+              width: 28.r,
+              height: 28.r,
             ),
           ),
         ],
@@ -237,8 +242,8 @@ class _PolicyCheckbox extends StatelessWidget {
             padding: EdgeInsets.zero,
             child: Image.asset(
               value ? 'assets/icons/ui/check_ok.png' : 'assets/icons/ui/check.webp',
-              width: 24.w,
-              height: 24.w,
+              width: 24.r,
+              height: 24.r,
             ),
           ),
           SizedBox(width: 12.w),

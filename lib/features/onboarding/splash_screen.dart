@@ -46,8 +46,8 @@ class _SplashScreenState extends State<SplashScreen> {
                 children: [
                   Image.asset(
                     'assets/images/onboarding/splash_logo.webp',
-                    width: 130.w,
-                    height: 130.w,
+                    width: 130.r,
+                    height: 130.r,
                     fit: BoxFit.contain,
                     errorBuilder: (BuildContext _, Object _, StackTrace? _) => Icon(
                       Icons.engineering,

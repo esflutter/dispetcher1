@@ -306,8 +306,8 @@ class _CatalogHeader extends StatelessWidget {
               GestureDetector(
                 onTap: () => context.push('/catalog/filter'),
                 child: Container(
-                  width: 44.h,
-                  height: 44.h,
+                  width: 44.r,
+                  height: 44.r,
                   decoration: BoxDecoration(
                     color: AppColors.primary,
                     borderRadius: BorderRadius.circular(AppSpacing.radiusM),

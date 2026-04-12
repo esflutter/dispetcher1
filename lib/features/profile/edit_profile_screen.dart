@@ -5,6 +5,11 @@ import 'package:go_router/go_router.dart';
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_spacing.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
+import 'package:dispatcher_1/core/widgets/cropped_avatar.dart';
+import 'package:dispatcher_1/core/widgets/dark_sub_app_bar.dart';
+import 'package:dispatcher_1/features/auth/photo_crop_screen.dart';
+import 'package:dispatcher_1/features/catalog/widgets/catalog_search_bar.dart';
+import 'profile_screen.dart';
 
 class EditProfileScreen extends StatelessWidget {
   const EditProfileScreen({super.key});
@@ -13,61 +18,97 @@ class EditProfileScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(
-        backgroundColor: AppColors.navBarDark,
-        foregroundColor: Colors.white,
-        elevation: 0,
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios_new_rounded,
-              size: 20.r, color: Colors.white),
-          onPressed: () => Navigator.of(context).maybePop(),
-        ),
-        centerTitle: true,
-        title: Text(
-          'Редактирование профиля',
-          style: AppTextStyles.titleS.copyWith(color: Colors.white),
+      appBar: const DarkSubAppBar(title: 'Редактирование профиля'),
+      floatingActionButton: Padding(
+        padding: EdgeInsets.only(bottom: 24.h),
+        child: AiAssistantFab(onTap: () => context.push('/assistant/chat')),
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+      body: SafeArea(
+        child: Padding(
+          padding: EdgeInsets.symmetric(horizontal: 16.w),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SizedBox(height: AppSpacing.lg),
+              Center(child: _PhotoPicker()),
+              SizedBox(height: AppSpacing.xl),
+              const _TintField(
+                icon: Icons.person_outline,
+                text: 'Александр Иванов',
+              ),
+              SizedBox(height: AppSpacing.sm),
+              const _TintField(
+                icon: Icons.phone_outlined,
+                text: '+7 999 123-45-67',
+              ),
+              const Spacer(),
+              _ActionTile(
+                iconAsset: 'assets/icons/profile/logout.webp',
+                text: 'Выйти из аккаунта',
+                arrowAsset: 'assets/icons/profile/arrow_right.webp',
+                onTap: () async {
+                  final confirmed = await showLogoutAlert(context);
+                  if (confirmed == true && context.mounted) {
+                    context.go('/auth/phone');
+                  }
+                },
+              ),
+              SizedBox(height: AppSpacing.sm),
+              _ActionTile(
+                iconAsset: 'assets/icons/profile/delete.webp',
+                text: 'Удалить аккаунт',
+                arrowAsset: 'assets/icons/profile/arrow_right_red.webp',
+                danger: true,
+                onTap: () async {
+                  final confirmed = await showDeleteAccountAlert(context);
+                  if (confirmed == true && context.mounted) {
+                    context.go('/auth/phone');
+                  }
+                },
+              ),
+              SizedBox(height: AppSpacing.lg),
+            ],
+          ),
         ),
       ),
-      body: SingleChildScrollView(
-        padding: EdgeInsets.fromLTRB(
-            AppSpacing.screenH, AppSpacing.lg, AppSpacing.screenH, AppSpacing.xxl),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+    );
+  }
+}
+
+class _PhotoPicker extends StatefulWidget {
+  @override
+  State<_PhotoPicker> createState() => _PhotoPickerState();
+}
+
+class _PhotoPickerState extends State<_PhotoPicker> {
+  Future<void> _openCrop() async {
+    final result = await Navigator.of(context).push<CropResult>(
+      MaterialPageRoute(builder: (_) => const PhotoCropScreen()),
+    );
+    if (result != null && mounted) {
+      setState(() => CropResult.saved = result);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: _openCrop,
+      child: SizedBox(
+        width: 104.r,
+        height: 104.r,
+        child: Stack(
           children: [
-            const Center(child: _PhotoPicker()),
-            SizedBox(height: AppSpacing.xl),
-            const _InfoField(
-              icon: Icons.person_outline,
-              text: 'Александр Иванов',
-              tint: true,
-            ),
-            SizedBox(height: AppSpacing.sm),
-            const _InfoField(
-              icon: Icons.phone_outlined,
-              text: '+7 999 123-45-67',
-              tint: true,
-            ),
-            SizedBox(height: AppSpacing.sm),
-            _InfoField(
-              icon: Icons.logout_rounded,
-              text: 'Выйти из аккаунта',
-              tint: false,
-              onTap: () => context.go('/auth/phone'),
-            ),
-            SizedBox(height: AppSpacing.sm),
-            _InfoField(
-              icon: Icons.delete_outline_rounded,
-              text: 'Удалить аккаунт',
-              tint: false,
-              danger: true,
-              onTap: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Аккаунт удалён (демо)'),
-                    duration: Duration(seconds: 2),
-                  ),
-                );
-              },
+            CroppedAvatar(size: 104.r),
+            Positioned(
+              right: -2.w,
+              bottom: 0,
+              child: Image.asset(
+                'assets/icons/ui/edit.webp',
+                width: 28.r,
+                height: 28.r,
+              ),
             ),
           ],
         ),
@@ -76,40 +117,26 @@ class EditProfileScreen extends StatelessWidget {
   }
 }
 
-class _PhotoPicker extends StatelessWidget {
-  const _PhotoPicker();
+class _TintField extends StatelessWidget {
+  const _TintField({required this.icon, required this.text});
+  final IconData icon;
+  final String text;
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: 100.r,
-      height: 100.r,
-      child: Stack(
+    return Container(
+      height: 56.h,
+      padding: EdgeInsets.symmetric(horizontal: AppSpacing.md),
+      decoration: BoxDecoration(
+        color: AppColors.fieldFill,
+        borderRadius: BorderRadius.circular(AppSpacing.radiusM),
+      ),
+      child: Row(
         children: [
-          Container(
-            width: 100.r,
-            height: 100.r,
-            decoration: const BoxDecoration(
-              color: AppColors.border,
-              shape: BoxShape.circle,
-            ),
-            child: Icon(Icons.person,
-                size: 60.r, color: const Color(0xFF707070)),
-          ),
-          Positioned(
-            right: 0,
-            bottom: 0,
-            child: Container(
-              width: 32.r,
-              height: 32.r,
-              decoration: const BoxDecoration(
-                color: AppColors.surface,
-                shape: BoxShape.circle,
-              ),
-              alignment: Alignment.center,
-              child: Icon(Icons.edit,
-                  size: 18.r, color: AppColors.textHeading),
-            ),
+          Icon(icon, size: 22.r, color: AppColors.textPrimary),
+          SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Text(text, style: AppTextStyles.body),
           ),
         ],
       ),
@@ -117,46 +144,44 @@ class _PhotoPicker extends StatelessWidget {
   }
 }
 
-class _InfoField extends StatelessWidget {
-  const _InfoField({
-    required this.icon,
+class _ActionTile extends StatelessWidget {
+  const _ActionTile({
+    required this.iconAsset,
     required this.text,
-    required this.tint,
-    this.onTap,
+    required this.onTap,
+    required this.arrowAsset,
     this.danger = false,
   });
 
-  final IconData icon;
+  final String iconAsset;
+  final String arrowAsset;
   final String text;
-  final bool tint;
+  final VoidCallback onTap;
   final bool danger;
-  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final color = danger ? AppColors.error : AppColors.textPrimary;
-    return InkWell(
-      onTap: onTap,
+    return Material(
+      color: AppColors.categoryCard,
       borderRadius: BorderRadius.circular(AppSpacing.radiusM),
-      child: Container(
-        height: 56.h,
-        padding: EdgeInsets.symmetric(horizontal: AppSpacing.md),
-        decoration: BoxDecoration(
-          color: tint ? AppColors.primaryTint : const Color(0xFFF1F1F1),
-          borderRadius: BorderRadius.circular(AppSpacing.radiusM),
-        ),
-        child: Row(
-          children: [
-            Icon(icon, size: 22.r, color: color),
-            SizedBox(width: AppSpacing.sm),
-            Expanded(
-              child: Text(text,
-                  style: AppTextStyles.body.copyWith(color: color)),
-            ),
-            if (!tint)
-              Icon(Icons.chevron_right_rounded,
-                  size: 20.r, color: color),
-          ],
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppSpacing.radiusM),
+        child: Container(
+          height: 56.h,
+          padding: EdgeInsets.symmetric(horizontal: AppSpacing.md),
+          child: Row(
+            children: [
+              Image.asset(iconAsset, width: 22.r, height: 22.r),
+              SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Text(text,
+                    style: AppTextStyles.body.copyWith(color: color)),
+              ),
+              Image.asset(arrowAsset, width: 20.r, height: 20.r),
+            ],
+          ),
         ),
       ),
     );

@@ -132,8 +132,8 @@ class _TextInputBar extends StatelessWidget {
             onTap: onAttach,
             child: Image.asset(
               'assets/icons/support/attach.webp',
-              width: 40.h,
-              height: 40.h,
+              width: 40.r,
+              height: 40.r,
             ),
           ),
           SizedBox(width: 16.w),
@@ -196,8 +196,8 @@ class _TextInputBar extends StatelessWidget {
           onTap: onSubmit,
           child: Image.asset(
             'assets/icons/support/send.webp',
-            width: 40.h,
-            height: 40.h,
+            width: 40.r,
+            height: 40.r,
           ),
         ),
       ],
@@ -230,8 +230,8 @@ class _RecordingBar extends StatelessWidget {
           onTap: onCancel,
           child: Image.asset(
             'assets/icons/support/cancel.webp',
-            width: 40.h,
-            height: 40.h,
+            width: 40.r,
+            height: 40.r,
           ),
         ),
         SizedBox(width: 16.w),
@@ -239,8 +239,8 @@ class _RecordingBar extends StatelessWidget {
           onTap: onSend,
           child: Image.asset(
             'assets/icons/support/send.webp',
-            width: 40.h,
-            height: 40.h,
+            width: 40.r,
+            height: 40.r,
           ),
         ),
       ],
@@ -365,7 +365,7 @@ class _PendingImagesRow extends StatelessWidget {
     return Padding(
       padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 16.h),
       child: SizedBox(
-        height: 80.w,
+        height: 80.r,
         child: ListView.separated(
           scrollDirection: Axis.horizontal,
           itemCount: images.length,
@@ -380,12 +380,12 @@ class _PendingImagesRow extends StatelessWidget {
                     borderRadius: BorderRadius.circular(10.r),
                     child: Image.asset(
                       images[i],
-                      width: 80.w,
-                      height: 80.w,
+                      width: 80.r,
+                      height: 80.r,
                       fit: BoxFit.cover,
                       errorBuilder: (_, __, ___) => Container(
-                        width: 80.w,
-                        height: 80.w,
+                        width: 80.r,
+                        height: 80.r,
                         color: AppColors.surfaceMuted,
                       ),
                     ),

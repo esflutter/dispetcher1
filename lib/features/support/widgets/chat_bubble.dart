@@ -57,12 +57,12 @@ class ChatBubble extends StatelessWidget {
                     borderRadius: BorderRadius.circular(8.r),
                     child: Image.asset(
                       asset,
-                      width: 88.w,
-                      height: 88.w,
+                      width: 88.r,
+                      height: 88.r,
                       fit: BoxFit.cover,
                       errorBuilder: (_, __, ___) => Container(
-                        width: 88.w,
-                        height: 88.w,
+                        width: 88.r,
+                        height: 88.r,
                         color: AppColors.surfaceMuted,
                         child: Icon(Icons.image_outlined,
                             color: AppColors.textTertiary, size: 32.r),
@@ -183,8 +183,8 @@ class _TypingBubbleState extends State<TypingBubble>
                   child: Transform.scale(
                     scale: scale,
                     child: Container(
-                      width: 8.w,
-                      height: 8.w,
+                      width: 8.r,
+                      height: 8.r,
                       decoration: const BoxDecoration(
                         color: AppColors.textTertiary,
                         shape: BoxShape.circle,

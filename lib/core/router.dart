@@ -14,7 +14,6 @@ import '../features/catalog/order_on_map_screen.dart';
 import '../features/catalog/orders_map_screen.dart';
 import '../features/executor_card/edit_executor_card_screen.dart';
 import '../features/executor_card/executor_card_screen.dart';
-import '../features/executor_card/verification_documents_screen.dart';
 import '../features/onboarding/onboarding_screen.dart';
 import '../features/onboarding/splash_screen.dart';
 import '../features/orders/my_orders_screen.dart';
@@ -112,10 +111,6 @@ final GoRouter appRouter = GoRouter(
     // Карточка исполнителя
     GoRoute(path: '/executor-card', builder: (_, _) => const ExecutorCardScreen()),
     GoRoute(path: '/executor-card/edit', builder: (_, _) => const EditExecutorCardScreen()),
-    GoRoute(
-      path: '/executor-card/verification',
-      builder: (_, _) => const VerificationDocumentsScreen(),
-    ),
 
     // Мои услуги
     GoRoute(path: '/services', builder: (_, _) => const MyServicesScreen()),

@@ -42,13 +42,13 @@ class ServiceCard extends StatelessWidget {
               ClipRRect(
                 borderRadius: BorderRadius.circular(AppSpacing.radiusM),
                 child: Container(
-                  width: 72.w,
-                  height: 72.w,
+                  width: 72.r,
+                  height: 72.r,
                   color: AppColors.surfaceVariant,
                   alignment: Alignment.center,
                   child: Icon(
                     Icons.photo_outlined,
-                    size: 28.sp,
+                    size: 28.r,
                     color: AppColors.textTertiary,
                   ),
                 ),
@@ -82,7 +82,7 @@ class ServiceCard extends StatelessWidget {
               ),
               Icon(
                 Icons.chevron_right,
-                size: 24.sp,
+                size: 24.r,
                 color: AppColors.textTertiary,
               ),
             ],

@@ -5,24 +5,45 @@ import 'package:go_router/go_router.dart';
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_spacing.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
+import 'package:dispatcher_1/core/widgets/dark_sub_app_bar.dart';
 import 'package:dispatcher_1/core/widgets/primary_button.dart';
+import 'package:dispatcher_1/features/catalog/widgets/catalog_search_bar.dart';
+
+import 'widgets/executor_card_alerts.dart';
 
 /// Длинная форма создания / редактирования карточки исполнителя.
-/// Поля точно как в Figma: имя, телефон, местоположение, спецтехника,
+/// Поля из Figma: ФИО, телефон, местоположение (радиус), спецтехника,
 /// категории услуг, опыт работы, статус, о себе.
 class EditExecutorCardScreen extends StatefulWidget {
-  const EditExecutorCardScreen({super.key});
+  const EditExecutorCardScreen({super.key, this.editing = true});
+
+  final bool editing;
 
   @override
   State<EditExecutorCardScreen> createState() => _EditExecutorCardScreenState();
 }
 
 class _EditExecutorCardScreenState extends State<EditExecutorCardScreen> {
-  final _name = TextEditingController(text: 'Александр Иванов');
-  final _phone = TextEditingController(text: '+7 999 123-45-67');
-  final _location = TextEditingController();
+  final _location = TextEditingController(text: 'Москва');
   final _experience = TextEditingController(text: '5 лет');
-  final _about = TextEditingController();
+  final _about = TextEditingController(
+      text:
+          'Опыт работы более 5 лет. Своя техника в хорошем состоянии, работаю без простоев. Готов выезжать в ближайшие районы.');
+  String? _selectedStatus = 'Физ. лицо';
+  int _radiusIndex = 0;
+
+  static const _radiusOptions = [
+    'В радиусе 10 км',
+    'В радиусе 20 км',
+    'В радиусе 30 км',
+  ];
+
+  static const _statusOptions = [
+    'Физ. лицо',
+    'ИП',
+    'Самозанятый',
+    'Юр. лицо',
+  ];
 
   static const _machinery = [
     'Экскаватор-погрузчик',
@@ -61,54 +82,91 @@ class _EditExecutorCardScreenState extends State<EditExecutorCardScreen> {
 
   @override
   void dispose() {
-    _name.dispose();
-    _phone.dispose();
     _location.dispose();
     _experience.dispose();
     _about.dispose();
     super.dispose();
   }
 
+  void _openStatusPicker() async {
+    final picked = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: AppColors.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20.r)),
+      ),
+      builder: (ctx) => SafeArea(
+        top: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(height: AppSpacing.sm),
+            Container(
+              width: 36.w,
+              height: 4.h,
+              decoration: BoxDecoration(
+                color: const Color(0xFF929292),
+                borderRadius: BorderRadius.circular(12.r),
+              ),
+            ),
+            SizedBox(height: AppSpacing.md),
+            Text('Укажите статус',
+                style: AppTextStyles.titleS
+                    .copyWith(fontWeight: FontWeight.w700)),
+            SizedBox(height: AppSpacing.sm),
+            for (final s in _statusOptions)
+              ListTile(
+                title: Text(s, style: AppTextStyles.body),
+                trailing: _selectedStatus == s
+                    ? Icon(Icons.check_rounded,
+                        color: AppColors.primary, size: 22.r)
+                    : null,
+                onTap: () => Navigator.of(ctx).pop(s),
+              ),
+            SizedBox(height: AppSpacing.sm),
+          ],
+        ),
+      ),
+    );
+    if (picked != null) setState(() => _selectedStatus = picked);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(
-        backgroundColor: AppColors.navBarDark,
-        foregroundColor: Colors.white,
-        elevation: 0,
-        centerTitle: true,
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios_new_rounded,
-              size: 20.r, color: Colors.white),
-          onPressed: () => Navigator.of(context).maybePop(),
-        ),
-        title: Text(
-          'Моя карточка исполнителя',
-          style: AppTextStyles.titleS.copyWith(color: Colors.white),
-        ),
+      appBar: const DarkSubAppBar(title: 'Моя карточка исполнителя'),
+      floatingActionButton: Padding(
+        padding: EdgeInsets.only(bottom: 24.h),
+        child: AiAssistantFab(onTap: () => context.push('/assistant/chat')),
       ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: EdgeInsets.fromLTRB(
-              AppSpacing.screenH, AppSpacing.md, AppSpacing.screenH, AppSpacing.xl),
+          padding: EdgeInsets.fromLTRB(AppSpacing.screenH, AppSpacing.md,
+              AppSpacing.screenH, AppSpacing.md),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _TintField(controller: _name, icon: Icons.person_outline),
-              SizedBox(height: AppSpacing.sm),
-              _TintField(controller: _phone, icon: Icons.phone_outlined),
-              SizedBox(height: AppSpacing.lg),
-              _Section(title: 'Местоположение'),
+              _HeaderRow(),
               SizedBox(height: AppSpacing.xs),
-              _TintField(
-                controller: _location,
-                icon: Icons.location_on_outlined,
-                hint: 'Укажите ваше местоположение',
-              ),
+              Text('+7 999 123-45-67', style: AppTextStyles.body),
               SizedBox(height: AppSpacing.lg),
-              _Section(title: 'Спецтехника'),
+              _SectionTitle('Местоположение'),
+              SizedBox(height: AppSpacing.xs),
+              _LocationField(controller: _location),
               SizedBox(height: AppSpacing.sm),
+              for (int i = 0; i < _radiusOptions.length; i++) ...[
+                _RadiusOption(
+                  label: _radiusOptions[i],
+                  selected: _radiusIndex == i,
+                  onTap: () => setState(() => _radiusIndex = i),
+                ),
+                if (i != _radiusOptions.length - 1) SizedBox(height: 6.h),
+              ],
+              SizedBox(height: AppSpacing.lg),
+              _SectionTitle('Спецтехника'),
+              SizedBox(height: AppSpacing.xs),
               _ChipWrap(
                 items: _machinery,
                 selected: _selMach,
@@ -117,8 +175,8 @@ class _EditExecutorCardScreenState extends State<EditExecutorCardScreen> {
                 }),
               ),
               SizedBox(height: AppSpacing.lg),
-              _Section(title: 'Категории услуг'),
-              SizedBox(height: AppSpacing.sm),
+              _SectionTitle('Категории услуг'),
+              SizedBox(height: AppSpacing.xs),
               _ChipWrap(
                 items: _categories,
                 selected: _selCat,
@@ -127,30 +185,51 @@ class _EditExecutorCardScreenState extends State<EditExecutorCardScreen> {
                 }),
               ),
               SizedBox(height: AppSpacing.lg),
-              _Section(title: 'Опыт работы'),
+              _SectionTitle('Опыт работы'),
               SizedBox(height: AppSpacing.xs),
               _TintField(
                 controller: _experience,
-                icon: Icons.work_outline_rounded,
+                hint: 'Например: 5 лет',
               ),
               SizedBox(height: AppSpacing.lg),
-              _Section(title: 'Статус'),
+              _SectionTitle('Статус'),
               SizedBox(height: AppSpacing.xs),
-              _TintField(
-                controller: TextEditingController(),
-                icon: Icons.badge_outlined,
-                hint: 'Укажите статус',
-                trailing: Icon(Icons.keyboard_arrow_down_rounded,
-                    size: 20.r, color: AppColors.textPrimary),
+              GestureDetector(
+                onTap: _openStatusPicker,
+                behavior: HitTestBehavior.opaque,
+                child: Container(
+                  height: 54.h,
+                  padding: EdgeInsets.symmetric(horizontal: AppSpacing.md),
+                  decoration: BoxDecoration(
+                    color: AppColors.fieldFill,
+                    borderRadius:
+                        BorderRadius.circular(AppSpacing.radiusM),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          _selectedStatus ?? 'Укажите статус',
+                          style: AppTextStyles.body.copyWith(
+                            color: _selectedStatus == null
+                                ? AppColors.textTertiary
+                                : AppColors.textPrimary,
+                          ),
+                        ),
+                      ),
+                      Icon(Icons.keyboard_arrow_down_rounded,
+                          size: 22.r, color: AppColors.textPrimary),
+                    ],
+                  ),
+                ),
               ),
               SizedBox(height: AppSpacing.lg),
-              _Section(title: 'О себе'),
+              _SectionTitle('О себе'),
               SizedBox(height: AppSpacing.xs),
               _TintField(
                 controller: _about,
-                icon: Icons.edit_note_rounded,
                 hint: 'Расскажите о себе',
-                maxLines: 3,
+                maxLines: 4,
               ),
               SizedBox(height: AppSpacing.xs),
               Text(
@@ -161,7 +240,7 @@ class _EditExecutorCardScreenState extends State<EditExecutorCardScreen> {
               ),
               SizedBox(height: AppSpacing.xl),
               PrimaryButton(
-                label: 'Сохранить',
+                label: widget.editing ? 'Сохранить' : 'Создать',
                 onPressed: () {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
@@ -172,11 +251,27 @@ class _EditExecutorCardScreenState extends State<EditExecutorCardScreen> {
                   Navigator.of(context).maybePop();
                 },
               ),
+              if (widget.editing) ...[
+                SizedBox(height: AppSpacing.sm),
+                SizedBox(
+                  width: double.infinity,
+                  height: 54.h,
+                  child: TextButton(
+                    onPressed: () async {
+                      final ok = await showDeleteExecutorCardAlert(context);
+                      if (ok == true && context.mounted) {
+                        Navigator.of(context).maybePop();
+                      }
+                    },
+                    child: Text(
+                      'Удалить карточку',
+                      style: AppTextStyles.button
+                          .copyWith(color: AppColors.error),
+                    ),
+                  ),
+                ),
+              ],
               SizedBox(height: AppSpacing.sm),
-              SecondaryButton(
-                label: 'Отправить документы на верификацию',
-                onPressed: () => context.push('/executor-card/verification'),
-              ),
             ],
           ),
         ),
@@ -185,32 +280,142 @@ class _EditExecutorCardScreenState extends State<EditExecutorCardScreen> {
   }
 }
 
-class _Section extends StatelessWidget {
-  const _Section({required this.title});
+class _HeaderRow extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Container(
+          width: 56.r,
+          height: 56.r,
+          decoration: const BoxDecoration(
+            color: AppColors.surfaceVariant,
+            shape: BoxShape.circle,
+          ),
+          alignment: Alignment.center,
+          child: Icon(Icons.person, size: 32.r, color: AppColors.textTertiary),
+        ),
+        SizedBox(width: AppSpacing.sm),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Александр Иванов',
+                  style: AppTextStyles.titleS
+                      .copyWith(fontWeight: FontWeight.w600)),
+              SizedBox(height: 2.h),
+              Row(
+                children: [
+                  Icon(Icons.star_rounded,
+                      color: AppColors.ratingStar, size: 16.r),
+                  SizedBox(width: 4.w),
+                  Text('4,5', style: AppTextStyles.caption),
+                  SizedBox(width: 6.w),
+                  Text('15 отзывов',
+                      style: AppTextStyles.caption.copyWith(
+                        color: AppColors.primary,
+                        decoration: TextDecoration.underline,
+                        decorationColor: AppColors.primary,
+                      )),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SectionTitle extends StatelessWidget {
+  const _SectionTitle(this.title);
   final String title;
   @override
   Widget build(BuildContext context) {
-    return Text(title,
-        style: AppTextStyles.h3.copyWith(
-          fontSize: 20.sp,
-          fontWeight: FontWeight.w700,
-        ));
+    return Text(
+      title,
+      style: AppTextStyles.bodyMedium.copyWith(fontWeight: FontWeight.w700),
+    );
+  }
+}
+
+class _LocationField extends StatelessWidget {
+  const _LocationField({required this.controller});
+  final TextEditingController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      controller: controller,
+      style: AppTextStyles.body,
+      decoration: InputDecoration(
+        hintText: 'Укажите ваше местоположение',
+        hintStyle:
+            AppTextStyles.body.copyWith(color: AppColors.textTertiary),
+        filled: true,
+        fillColor: AppColors.fieldFill,
+        contentPadding: EdgeInsets.symmetric(
+            horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppSpacing.radiusM),
+          borderSide: BorderSide.none,
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppSpacing.radiusM),
+          borderSide: BorderSide.none,
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppSpacing.radiusM),
+          borderSide: const BorderSide(color: AppColors.primary),
+        ),
+      ),
+    );
+  }
+}
+
+class _RadiusOption extends StatelessWidget {
+  const _RadiusOption({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Padding(
+        padding: EdgeInsets.symmetric(vertical: 4.h),
+        child: Row(
+          children: [
+            Icon(
+              selected ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+              size: 22.r,
+              color: selected ? AppColors.primary : AppColors.textTertiary,
+            ),
+            SizedBox(width: AppSpacing.xs),
+            Text(label, style: AppTextStyles.body),
+          ],
+        ),
+      ),
+    );
   }
 }
 
 class _TintField extends StatelessWidget {
   const _TintField({
     required this.controller,
-    required this.icon,
     this.hint,
     this.maxLines = 1,
-    this.trailing,
   });
   final TextEditingController controller;
-  final IconData icon;
   final String? hint;
   final int maxLines;
-  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -221,8 +426,6 @@ class _TintField extends StatelessWidget {
       decoration: InputDecoration(
         hintText: hint,
         hintStyle: AppTextStyles.body.copyWith(color: AppColors.textTertiary),
-        prefixIcon: Icon(icon, size: 22.r, color: AppColors.textSecondary),
-        suffixIcon: trailing,
         filled: true,
         fillColor: AppColors.fieldFill,
         contentPadding: EdgeInsets.symmetric(
