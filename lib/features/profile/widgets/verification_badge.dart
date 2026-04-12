@@ -34,10 +34,10 @@ _BadgeConfig _configFor(VerificationStatus s) {
         bg: Color(0xFFD7F6CB),
       );
     case VerificationStatus.inProgress:
-      return const _BadgeConfig(
+      return _BadgeConfig(
         label: 'Верификация в процессе',
-        fg: Color(0xFF1976D2),
-        bg: Color(0xFFDCECFA),
+        fg: const Color(0xFF1DAEDE),
+        bg: const Color(0xFF1DAEDE).withValues(alpha: 0.1),
       );
     case VerificationStatus.rejected:
       return const _BadgeConfig(

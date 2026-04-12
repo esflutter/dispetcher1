@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/features/auth/photo_crop_screen.dart';
 
 /// Аватарка с применением кропа из [CropResult].
@@ -57,16 +56,10 @@ class CroppedAvatar extends StatelessWidget {
                 },
               )
             : Image.asset(
-                'assets/images/user1.png',
+                'assets/icons/ui/avatar.webp',
                 fit: BoxFit.cover,
                 width: size,
                 height: size,
-                errorBuilder: (_, _, _) => Container(
-                  color: AppColors.surfaceVariant,
-                  alignment: Alignment.center,
-                  child: Icon(Icons.person,
-                      size: size * 0.5, color: AppColors.textTertiary),
-                ),
               ),
       ),
     );

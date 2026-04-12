@@ -1,38 +1,47 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
-import 'package:go_router/go_router.dart';
-
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_spacing.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
 import 'package:dispatcher_1/core/widgets/dark_sub_app_bar.dart';
-import 'package:dispatcher_1/features/catalog/widgets/catalog_search_bar.dart';
 
 class Review {
   const Review({
     required this.author,
-    required this.role,
+    required this.date,
+    required this.rating,
     required this.text,
-    this.photos = 0,
+    this.avatarIndex = 0,
   });
   final String author;
-  final String role;
+  final String date;
+  final int rating;
   final String text;
-  final int photos;
+  final int avatarIndex;
 }
 
 class ReviewsScreen extends StatelessWidget {
-  const ReviewsScreen({super.key, this.empty = true});
+  const ReviewsScreen({super.key, this.empty = false});
 
   final bool empty;
 
-  static const String _reviewText =
-      'Заказчик очень ответственный и чётко ставит задачи. Предоставил все необходимые материалы и быстро отвечал на вопросы по ремонту кухни. Условия по оплате соблюдал в срок, без задержек. Работать было комфортно, все договорённости выполнялись. С удовольствием взял бы ещё подобные заказы от этого клиента.';
+  static const String _t1 = 'Исполнитель очень ответственный и чётко выполняет задачи. Приехал вовремя, привёз всё необходимое оборудование. Работу сделал качественно и аккуратно, убрал за собой территорию. Общение было комфортным, всегда на связи. Обязательно обращусь ещё раз. Однозначно рекомендую к сотрудничеству.';
+  static const String _t2 = 'Отличный исполнитель! Всё сделал быстро и качественно. Приехал вовремя, никаких проблем. Рекомендую!';
+  static const String _t3 = 'Хороший специалист, но немного затянул со сроками. Пришлось несколько раз уточнять детали по ходу работы. Тем не менее, результат получился хорошим, все замечания учёл и исправил. Техника была в отличном состоянии, работал аккуратно. В целом доволен, но хотелось бы более чёткого соблюдения графика.';
+  static const String _t4 = 'Очень приятный в общении человек. Всё объяснил, показал как будет работать. Результатом полностью довольны.';
+  static const String _t5 = 'Исполнитель знает своё дело. Быстро разобрался с задачей, не затягивал. Работа выполнена на совесть.';
 
   static const List<Review> _mock = [
-    Review(author: 'Алексей К.', role: 'Заказчик', text: _reviewText, photos: 3),
-    Review(author: 'Мария С.', role: 'Заказчик', text: _reviewText, photos: 3),
-    Review(author: 'Дмитрий П.', role: 'Заказчик', text: _reviewText, photos: 3),
+    Review(author: 'Илья Иванов', date: '29/03/2024', rating: 4, text: _t1, avatarIndex: 1),
+    Review(author: 'Илья Иванов', date: '29/03/2024', rating: 5, text: _t2, avatarIndex: 2),
+    Review(author: 'Илья Иванов', date: '29/03/2024', rating: 4, text: _t1, avatarIndex: 3),
+    Review(author: 'Анна Петрова', date: '15/02/2024', rating: 5, text: _t4, avatarIndex: 4),
+    Review(author: 'Сергей Козлов', date: '10/02/2024', rating: 3, text: _t3, avatarIndex: 5),
+    Review(author: 'Мария Смирнова', date: '28/01/2024', rating: 5, text: _t2, avatarIndex: 6),
+    Review(author: 'Дмитрий Волков', date: '15/01/2024', rating: 4, text: _t5, avatarIndex: 1),
+    Review(author: 'Елена Новикова', date: '10/01/2024', rating: 5, text: _t4, avatarIndex: 2),
+    Review(author: 'Артём Соколов', date: '25/12/2023', rating: 4, text: _t1, avatarIndex: 3),
+    Review(author: 'Ольга Морозова', date: '20/12/2023', rating: 5, text: _t5, avatarIndex: 4),
   ];
 
   @override
@@ -40,23 +49,20 @@ class ReviewsScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: const DarkSubAppBar(title: 'Отзывы'),
-      floatingActionButton: Padding(
-        padding: EdgeInsets.only(bottom: 24.h),
-        child: AiAssistantFab(onTap: () => context.push('/assistant/chat')),
-      ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
-      body: empty
+      body: SafeArea(
+        child: empty
           ? const _Empty()
           : ListView.separated(
-              padding: EdgeInsets.symmetric(
-                  horizontal: AppSpacing.screenH, vertical: AppSpacing.md),
+              padding: EdgeInsets.fromLTRB(
+                  AppSpacing.screenH, 28.h, AppSpacing.screenH, AppSpacing.md),
               itemCount: _mock.length + 1,
-              separatorBuilder: (_, _) => SizedBox(height: AppSpacing.md),
+              separatorBuilder: (_, _) => SizedBox(height: 18.h),
               itemBuilder: (context, i) {
                 if (i == 0) return const _RatingHeader(rating: '4,5', count: 10);
                 return _ReviewCard(review: _mock[i - 1]);
               },
             ),
+      ),
     );
   }
 }
@@ -66,21 +72,24 @@ class _Empty extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
+    return Padding(
+      padding: EdgeInsets.only(bottom: 80.h),
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
           Image.asset(
             'assets/icons/profile/star_empty.webp',
-            width: 140.r,
-            height: 140.r,
+            width: 128.r,
+            height: 128.r,
             errorBuilder: (_, _, _) => Icon(Icons.star_rounded,
                 size: 128.r, color: AppColors.primary),
           ),
-          SizedBox(height: AppSpacing.md),
+          SizedBox(height: 16.h),
           Text('Пока нет отзывов',
-              style: AppTextStyles.body.copyWith(color: AppColors.textPrimary)),
-        ],
+              style: AppTextStyles.bodyMRegular.copyWith(color: AppColors.textPrimary)),
+          ],
+        ),
       ),
     );
   }
@@ -98,7 +107,7 @@ class _RatingHeader extends StatelessWidget {
       children: [
         Row(
           children: [
-            Icon(Icons.star_rounded, color: AppColors.ratingStar, size: 32.r),
+            Image.asset('assets/icons/profile/star_result.webp', width: 32.r, height: 32.r),
             SizedBox(width: AppSpacing.xs),
             Text(rating,
                 style: TextStyle(
@@ -109,9 +118,9 @@ class _RatingHeader extends StatelessWidget {
                 )),
           ],
         ),
-        SizedBox(height: AppSpacing.xs),
+        SizedBox(height: 8.h),
         Text('$count отзывов',
-            style: AppTextStyles.body.copyWith(color: AppColors.textTertiary)),
+            style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textTertiary)),
       ],
     );
   }
@@ -121,67 +130,106 @@ class _ReviewCard extends StatelessWidget {
   const _ReviewCard({required this.review});
   final Review review;
 
+  static const List<String> _avatars = [
+    'assets/images/profile/photo_1.webp',
+    'assets/images/profile/photo_2.webp',
+    'assets/images/profile/photo_3.webp',
+    'assets/images/profile/photo_4.webp',
+    'assets/images/profile/photo_5.webp',
+    'assets/images/profile/photo_6.webp',
+  ];
+
   @override
   Widget build(BuildContext context) {
+    final avatarPath = _avatars[(review.avatarIndex - 1) % _avatars.length];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           children: [
-            CircleAvatar(
-              radius: 36.r,
-              backgroundColor: AppColors.surfaceVariant,
-              child: Icon(Icons.person,
-                  size: 36.r, color: AppColors.textTertiary),
+            ClipOval(
+              child: Image.asset(avatarPath,
+                  width: 72.r, height: 72.r, fit: BoxFit.cover),
             ),
-            SizedBox(width: AppSpacing.sm),
+            SizedBox(width: 20.w),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(review.author, style: AppTextStyles.bodyMMedium),
+                  Row(
+                    children: [
+                      Text(review.author,
+                          style: AppTextStyles.bodyMMedium),
+                      SizedBox(width: 8.w),
+                      Image.asset('assets/images/catalog/star.webp',
+                          width: 20.r, height: 20.r),
+                      SizedBox(width: 3.w),
+                      Text('${review.rating}',
+                          style: AppTextStyles.body),
+                    ],
+                  ),
                   SizedBox(height: 2.h),
-                  Text(review.role,
-                      style: AppTextStyles.caption
+                  Text(review.date,
+                      style: AppTextStyles.body
                           .copyWith(color: AppColors.textTertiary)),
                 ],
               ),
             ),
           ],
         ),
-        if (review.photos > 0) ...[
-          SizedBox(height: AppSpacing.sm),
-          Row(
-            children: List.generate(
-              review.photos,
-              (i) => Padding(
-                padding: EdgeInsets.only(right: i == review.photos - 1 ? 0 : 8.w),
-                child: Container(
-                  width: 78.r,
-                  height: 78.r,
-                  decoration: BoxDecoration(
-                    color: AppColors.surfaceVariant,
-                    borderRadius: BorderRadius.circular(AppSpacing.radiusS),
+        SizedBox(height: 12.h),
+        _ExpandableText(text: review.text),
+      ],
+    );
+  }
+}
+
+class _ExpandableText extends StatefulWidget {
+  const _ExpandableText({required this.text});
+  final String text;
+
+  @override
+  State<_ExpandableText> createState() => _ExpandableTextState();
+}
+
+class _ExpandableTextState extends State<_ExpandableText> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final span = TextSpan(text: widget.text, style: AppTextStyles.body);
+        final tp = TextPainter(
+          text: span,
+          maxLines: 5,
+          textDirection: TextDirection.ltr,
+        )..layout(maxWidth: constraints.maxWidth);
+        final overflows = tp.didExceedMaxLines;
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(widget.text,
+                maxLines: _expanded ? null : 5,
+                overflow: _expanded ? null : TextOverflow.ellipsis,
+                style: AppTextStyles.body),
+            if (overflows || _expanded) ...[
+              SizedBox(height: 6.h),
+              GestureDetector(
+                onTap: () => setState(() => _expanded = !_expanded),
+                child: Text(
+                  _expanded ? 'Свернуть' : 'Читать далее',
+                  style: AppTextStyles.body.copyWith(
+                    color: AppColors.primary,
+                    fontWeight: FontWeight.w600,
                   ),
-                  child: Icon(Icons.image_outlined,
-                      color: AppColors.textTertiary, size: 24.r),
                 ),
               ),
-            ),
-          ),
-        ],
-        SizedBox(height: AppSpacing.sm),
-        Text(review.text,
-            maxLines: 4,
-            overflow: TextOverflow.ellipsis,
-            style: AppTextStyles.body),
-        SizedBox(height: AppSpacing.xxs),
-        Text('Читать далее',
-            style: AppTextStyles.body.copyWith(
-              color: AppColors.primary,
-              fontWeight: FontWeight.w600,
-            )),
-      ],
+            ],
+          ],
+        );
+      },
     );
   }
 }

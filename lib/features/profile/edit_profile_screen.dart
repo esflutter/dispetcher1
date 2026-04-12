@@ -8,7 +8,6 @@ import 'package:dispatcher_1/core/theme/app_text_styles.dart';
 import 'package:dispatcher_1/core/widgets/cropped_avatar.dart';
 import 'package:dispatcher_1/core/widgets/dark_sub_app_bar.dart';
 import 'package:dispatcher_1/features/auth/photo_crop_screen.dart';
-import 'package:dispatcher_1/features/catalog/widgets/catalog_search_bar.dart';
 import 'profile_screen.dart';
 
 class EditProfileScreen extends StatelessWidget {
@@ -19,29 +18,18 @@ class EditProfileScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: const DarkSubAppBar(title: 'Редактирование профиля'),
-      floatingActionButton: Padding(
-        padding: EdgeInsets.only(bottom: 24.h),
-        child: AiAssistantFab(onTap: () => context.push('/assistant/chat')),
-      ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       body: SafeArea(
         child: Padding(
           padding: EdgeInsets.symmetric(horizontal: 16.w),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              SizedBox(height: AppSpacing.lg),
+              SizedBox(height: 16.h),
               Center(child: _PhotoPicker()),
               SizedBox(height: AppSpacing.xl),
-              const _TintField(
-                icon: Icons.person_outline,
-                text: 'Александр Иванов',
-              ),
+              const _TintField(text: 'Александр Иванов'),
               SizedBox(height: AppSpacing.sm),
-              const _TintField(
-                icon: Icons.phone_outlined,
-                text: '+7 999 123-45-67',
-              ),
+              const _TintField(text: '+7 999 123-45-67'),
               const Spacer(),
               _ActionTile(
                 iconAsset: 'assets/icons/profile/logout.webp',
@@ -118,8 +106,7 @@ class _PhotoPickerState extends State<_PhotoPicker> {
 }
 
 class _TintField extends StatelessWidget {
-  const _TintField({required this.icon, required this.text});
-  final IconData icon;
+  const _TintField({required this.text});
   final String text;
 
   @override
@@ -129,17 +116,10 @@ class _TintField extends StatelessWidget {
       padding: EdgeInsets.symmetric(horizontal: AppSpacing.md),
       decoration: BoxDecoration(
         color: AppColors.fieldFill,
-        borderRadius: BorderRadius.circular(AppSpacing.radiusM),
+        borderRadius: BorderRadius.circular(14.r),
       ),
-      child: Row(
-        children: [
-          Icon(icon, size: 22.r, color: AppColors.textPrimary),
-          SizedBox(width: AppSpacing.sm),
-          Expanded(
-            child: Text(text, style: AppTextStyles.body),
-          ),
-        ],
-      ),
+      alignment: Alignment.centerLeft,
+      child: Text(text, style: AppTextStyles.body),
     );
   }
 }
@@ -164,10 +144,10 @@ class _ActionTile extends StatelessWidget {
     final color = danger ? AppColors.error : AppColors.textPrimary;
     return Material(
       color: AppColors.categoryCard,
-      borderRadius: BorderRadius.circular(AppSpacing.radiusM),
+      borderRadius: BorderRadius.circular(14.r),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(AppSpacing.radiusM),
+        borderRadius: BorderRadius.circular(14.r),
         child: Container(
           height: 56.h,
           padding: EdgeInsets.symmetric(horizontal: AppSpacing.md),

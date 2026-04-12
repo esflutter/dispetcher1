@@ -1,4 +1,3 @@
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
@@ -9,13 +8,13 @@ import 'package:dispatcher_1/core/theme/app_text_styles.dart';
 import 'package:dispatcher_1/core/widgets/cropped_avatar.dart';
 import 'widgets/verification_badge.dart';
 
-class ProfileScreen extends StatelessWidget {
+class ProfileScreen extends StatefulWidget {
   const ProfileScreen({
     super.key,
     this.status = VerificationStatus.notVerified,
     this.fullName = 'Александр Иванов',
     this.rating = 4.5,
-    this.reviewsCount = 15,
+    this.reviewsCount = 10,
     this.photoUrl,
   });
 
@@ -25,10 +24,24 @@ class ProfileScreen extends StatelessWidget {
   final int reviewsCount;
   final String? photoUrl;
 
-  bool get _isBlocked => status == VerificationStatus.blocked;
+  @override
+  State<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends State<ProfileScreen> {
+  bool get _isBlocked => widget.status == VerificationStatus.blocked;
+
+  Future<void> _openEdit() async {
+    await context.push('/profile/edit');
+    if (mounted) setState(() {});
+  }
 
   @override
   Widget build(BuildContext context) {
+    final status = widget.status;
+    final fullName = widget.fullName;
+    final rating = widget.rating;
+    final reviewsCount = widget.reviewsCount;
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
@@ -49,15 +62,14 @@ class ProfileScreen extends StatelessWidget {
           ),
         ),
         actions: <Widget>[
-          if (!_isBlocked)
-            Padding(
-              padding: EdgeInsets.only(right: 8.w),
-              child: IconButton(
-                icon: Image.asset('assets/icons/profile/pen.webp',
-                    width: 24.r, height: 24.r),
-                onPressed: () => context.push('/profile/edit'),
-              ),
+          Padding(
+            padding: EdgeInsets.only(right: 8.w),
+            child: IconButton(
+              icon: Image.asset('assets/icons/profile/pen.webp',
+                  width: 24.r, height: 24.r),
+              onPressed: _openEdit,
             ),
+          ),
         ],
       ),
       body: SingleChildScrollView(
@@ -70,53 +82,56 @@ class ProfileScreen extends StatelessWidget {
               fullName: fullName,
               rating: rating,
               reviewsCount: reviewsCount,
-              photoUrl: photoUrl,
+              photoUrl: widget.photoUrl,
               onReviewsTap: () => context.push('/profile/reviews'),
             ),
-            SizedBox(height: AppSpacing.sm),
+            SizedBox(height: 16.h),
             FullWidthVerificationPill(status: status),
             if (status == VerificationStatus.notVerified) ...[
-              SizedBox(height: AppSpacing.xs),
+              SizedBox(height: 8.h),
               _PrimaryActionButton(
                 label: 'Пройти верификацию',
                 onPressed: () => context.push('/assistant/chat', extra: <String, Object?>{'initial': 'verify_documents'}),
               ),
             ] else if (status == VerificationStatus.rejected) ...[
-              SizedBox(height: AppSpacing.xs),
+              SizedBox(height: 8.h),
               _PrimaryActionButton(
                 label: 'Пройти ещё раз',
                 onPressed: () => context.push('/assistant/chat', extra: <String, Object?>{'initial': 'verify_documents'}),
               ),
             ] else if (_isBlocked) ...[
-              SizedBox(height: AppSpacing.xs),
+              SizedBox(height: 8.h),
               Text(
-                'Ваш рейтинг ниже 2 звёзд, поэтому доступ\n'
-                'временно ограничен на 30 дней',
-                style: AppTextStyles.body.copyWith(color: AppColors.textPrimary),
-                textAlign: TextAlign.center,
+                'Ваш рейтинг ниже 2 звёзд, поэтому доступ\nвременно ограничен на 30 дней',
+                style: AppTextStyles.subBody.copyWith(
+                  color: AppColors.textPrimary,
+                  fontWeight: FontWeight.w400,
+                  height: 1.3,
+                ),
+                textAlign: TextAlign.left,
               ),
             ],
-            SizedBox(height: AppSpacing.md),
+            SizedBox(height: _isBlocked ? 16.h : (status == VerificationStatus.notVerified || status == VerificationStatus.rejected) ? 20.h : 16.h),
             _ProfileMenuItem(
               label: 'Моя карточка исполнителя',
               onTap: () => context.push('/executor-card'),
             ),
-            SizedBox(height: 8.h),
+            SizedBox(height: 16.h),
             _ProfileMenuItem(
               label: 'Мои услуги',
               onTap: () => context.push('/services'),
             ),
-            SizedBox(height: 8.h),
+            SizedBox(height: 16.h),
             _ProfileMenuItem(
               label: 'Мой график',
               onTap: () => context.push('/schedule'),
             ),
-            SizedBox(height: 8.h),
+            SizedBox(height: 16.h),
             _ProfileMenuItem(
               label: 'Информация о подписке',
               onTap: () => context.push('/subscription'),
             ),
-            SizedBox(height: 24.h),
+            SizedBox(height: 20.h),
             const _SupportFooter(),
             SizedBox(height: 32.h),
           ],
@@ -153,8 +168,7 @@ class _Header extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
               Text(fullName,
-                  style: AppTextStyles.h3
-                      .copyWith(fontWeight: FontWeight.w600)),
+                  style: AppTextStyles.titleS),
               SizedBox(height: 4.h),
               GestureDetector(
                 onTap: onReviewsTap,
@@ -165,12 +179,13 @@ class _Header extends StatelessWidget {
                         width: 20.r, height: 20.r),
                     SizedBox(width: 4.w),
                     Text(rating.toStringAsFixed(1).replaceAll('.', ','),
-                        style: AppTextStyles.bodyMedium),
+                        style: AppTextStyles.body),
                     SizedBox(width: 8.w),
                     Text(
                       '$reviewsCount отзывов',
-                      style: AppTextStyles.bodyMedium.copyWith(
+                      style: AppTextStyles.body.copyWith(
                         color: AppColors.textPrimary,
+                        decoration: TextDecoration.underline,
                       ),
                     ),
                   ],
@@ -199,14 +214,12 @@ class _ProfileMenuItem extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(12.r),
         child: Container(
-          height: 48.h,
+          height: 56.h,
           padding: EdgeInsets.symmetric(horizontal: 16.w),
           child: Row(
             children: <Widget>[
               Expanded(
-                child: Text(label,
-                    style: AppTextStyles.body
-                        .copyWith(fontWeight: FontWeight.w500)),
+                child: Text(label, style: AppTextStyles.body),
               ),
               Image.asset('assets/icons/profile/arrow_right.webp',
                   width: 16.r, height: 16.r),
@@ -227,18 +240,18 @@ class _SupportFooter extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         Text('Возникли вопросы? Напишите нам!',
-            style: AppTextStyles.bodyMedium.copyWith(
+            style: AppTextStyles.body.copyWith(
               color: AppColors.textPrimary,
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w600,
             )),
-        SizedBox(height: 12.h),
+        SizedBox(height: 8.h),
         Row(
           children: [
             Image.asset('assets/icons/profile/telegram.webp',
-                width: 28.r, height: 28.r),
+                width: 40.r, height: 40.r),
             SizedBox(width: 12.w),
             Image.asset('assets/icons/profile/whatsapp.webp',
-                width: 28.r, height: 28.r),
+                width: 40.r, height: 40.r),
           ],
         ),
       ],
@@ -256,7 +269,7 @@ class _PrimaryActionButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return SizedBox(
       width: double.infinity,
-      height: 52.h,
+      height: 40.h,
       child: ElevatedButton(
         onPressed: onPressed,
         style: ElevatedButton.styleFrom(
@@ -264,7 +277,7 @@ class _PrimaryActionButton extends StatelessWidget {
           foregroundColor: Colors.white,
           elevation: 0,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14.r),
+            borderRadius: BorderRadius.circular(10.r),
           ),
         ),
         child: Text(label,
@@ -274,44 +287,86 @@ class _PrimaryActionButton extends StatelessWidget {
   }
 }
 
-/// Показать iOS-стиль алерт для подтверждения выхода.
 Future<bool?> showLogoutAlert(BuildContext context) {
-  return showCupertinoDialog<bool>(
-    context: context,
-    builder: (ctx) => CupertinoAlertDialog(
-      title: const Text('Вы уверены, что хотите\nвыйти?'),
-      actions: <Widget>[
-        CupertinoDialogAction(
-          onPressed: () => Navigator.of(ctx).pop(false),
-          child: const Text('Отмена'),
-        ),
-        CupertinoDialogAction(
-          isDestructiveAction: true,
-          onPressed: () => Navigator.of(ctx).pop(true),
-          child: const Text('Выйти'),
-        ),
-      ],
-    ),
+  return _showProfileAlert(
+    context,
+    title: 'Вы уверены, что хотите выйти?',
+    actionLabel: 'Выйти',
+    isDestructive: true,
   );
 }
 
-/// Показать iOS-стиль алерт для подтверждения удаления аккаунта.
 Future<bool?> showDeleteAccountAlert(BuildContext context) {
-  return showCupertinoDialog<bool>(
+  return _showProfileAlert(
+    context,
+    title: 'Вы уверены, что хотите удалить аккаунт?',
+    actionLabel: 'Удалить',
+    isDestructive: true,
+  );
+}
+
+Future<bool?> _showProfileAlert(
+  BuildContext context, {
+  required String title,
+  required String actionLabel,
+  bool isDestructive = false,
+}) {
+  return showDialog<bool>(
     context: context,
-    builder: (ctx) => CupertinoAlertDialog(
-      title: const Text('Вы уверены, что хотите\nудалить аккаунт?'),
-      actions: <Widget>[
-        CupertinoDialogAction(
-          onPressed: () => Navigator.of(ctx).pop(false),
-          child: const Text('Отмена'),
+    builder: (ctx) => Dialog(
+      backgroundColor: const Color(0xFFDFDFDF),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14.r),
+      ),
+      child: SizedBox(
+        width: 270.w,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: EdgeInsets.fromLTRB(20.w, 20.h, 20.w, 20.h),
+              child: Text(
+                title,
+                textAlign: TextAlign.center,
+                style: AppTextStyles.titleS.copyWith(
+                  color: AppColors.textPrimary,
+                ),
+              ),
+            ),
+            Divider(height: 1, thickness: 0.5, color: Colors.grey.shade400),
+            SizedBox(
+              height: 44.h,
+              child: Row(
+                children: [
+                  Expanded(
+                    child: InkWell(
+                      onTap: () => Navigator.of(ctx).pop(false),
+                      child: Center(
+                        child: Text('Отмена',
+                            style: AppTextStyles.titleS.copyWith(
+                              color: const Color(0xFF007AFF),
+                            )),
+                      ),
+                    ),
+                  ),
+                  Container(width: 0.5, color: Colors.grey.shade400),
+                  Expanded(
+                    child: InkWell(
+                      onTap: () => Navigator.of(ctx).pop(true),
+                      child: Center(
+                        child: Text(actionLabel,
+                            style: AppTextStyles.bodyMRegular.copyWith(
+                              color: isDestructive ? AppColors.error : const Color(0xFF007AFF),
+                            )),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
-        CupertinoDialogAction(
-          isDestructiveAction: true,
-          onPressed: () => Navigator.of(ctx).pop(true),
-          child: const Text('Удалить'),
-        ),
-      ],
+      ),
     ),
   );
 }

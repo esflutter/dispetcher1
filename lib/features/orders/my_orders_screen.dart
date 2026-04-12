@@ -10,12 +10,13 @@ import 'package:dispatcher_1/features/orders/widgets/order_status_pill.dart';
 /// Экран «Мои заказы» — две вкладки «Принятые / Не принятые».
 /// Когда обоих списков пусто — показываем заглушку «Здесь появятся ваши отклики».
 class MyOrdersScreen extends StatefulWidget {
-  const MyOrdersScreen({super.key, this.onGoToCatalog});
+  const MyOrdersScreen({super.key, this.onGoToCatalog, this.isBlocked = false});
 
   /// Колбэк переключения нижнего таба на «Каталог».
   /// Передаётся из MainShell, потому что мы уже находимся внутри /shell —
   /// обычным go_router'ом сюда не перейти.
   final VoidCallback? onGoToCatalog;
+  final bool isBlocked;
 
   @override
   State<MyOrdersScreen> createState() => _MyOrdersScreenState();
@@ -258,6 +259,7 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
                       onRefuse: () =>
                           _moveToRejected(o, MyOrderStatus.rejectedDeclined),
                       onConfirm: () => _moveToAccepted(o),
+                      isBlocked: widget.isBlocked,
                     ),
                   ),
                 ),

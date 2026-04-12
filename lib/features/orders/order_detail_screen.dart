@@ -57,6 +57,7 @@ class MyOrderDetailScreen extends StatefulWidget {
     this.onDecline,
     this.onRefuse,
     this.onConfirm,
+    this.isBlocked = false,
   });
 
   final MyOrderDetailState state;
@@ -86,6 +87,8 @@ class MyOrderDetailScreen extends StatefulWidget {
   /// parent переносит заказ из «Новые» в «Принятые» со статусом
   /// `accepted` и закрывает экран.
   final VoidCallback? onConfirm;
+
+  final bool isBlocked;
 
   @override
   State<MyOrderDetailScreen> createState() => _MyOrderDetailScreenState();
@@ -308,12 +311,10 @@ class _MyOrderDetailScreenState extends State<MyOrderDetailScreen> {
           children: <Widget>[
             PrimaryButton(
               label: 'Подтвердить',
+              enabled: !widget.isBlocked,
               onPressed: () => showConfirmAcceptDialog(
                 context,
                 onConfirm: () {
-                  // Сообщаем родителю (он перенесёт заказ в «Принятые»)
-                  // и одновременно меняем локальный state — экран сразу
-                  // перерисовывается по шаблону «Свяжитесь с заказчиком».
                   widget.onConfirm?.call();
                   setState(() => _state = MyOrderDetailState.confirmed);
                 },
