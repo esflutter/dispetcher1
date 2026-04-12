@@ -209,6 +209,7 @@ class _OrderFeedScreenState extends State<OrderFeedScreen> {
                                     orderId: o.id,
                                     multipleEquipment:
                                         o.equipment.length > 1,
+                                    price: o.price,
                                   ),
                                 ),
                               ),
@@ -330,6 +331,7 @@ class _OrdersMapWithCardState extends State<_OrdersMapWithCard> {
                 builder: (_) => OrderDetailScreen(
                   orderId: o.id,
                   multipleEquipment: o.equipment.length > 1,
+                  price: o.price,
                 ),
               ),
             ),

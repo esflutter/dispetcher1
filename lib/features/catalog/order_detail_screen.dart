@@ -18,10 +18,12 @@ class OrderDetailScreen extends StatefulWidget {
     super.key,
     required this.orderId,
     this.multipleEquipment = false,
+    this.price = '80 000 – 100 000 ₽',
   });
 
   final String orderId;
   final bool multipleEquipment;
+  final String price;
 
   @override
   State<OrderDetailScreen> createState() => _OrderDetailScreenState();
@@ -212,6 +214,16 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                                 style: AppTextStyles.subBody.copyWith(fontWeight: FontWeight.w400)),
                           ],
                         ),
+                      ),
+                      _Section(
+                        title: 'Стоимость',
+                        child: Text(widget.price,
+                            style: TextStyle(
+                              fontFamily: 'Roboto',
+                              fontSize: 16.sp,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.primary,
+                            )),
                       ),
                     ],
                   ),

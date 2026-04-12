@@ -3,41 +3,34 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:dispatcher_1/core/theme/app_colors.dart';
-import 'package:dispatcher_1/core/theme/app_spacing.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
 import 'package:dispatcher_1/core/widgets/dark_sub_app_bar.dart';
 import 'package:dispatcher_1/core/widgets/primary_button.dart';
 import 'package:dispatcher_1/features/catalog/widgets/catalog_search_bar.dart';
+import 'package:dispatcher_1/features/orders/widgets/order_status_pill.dart';
+import 'package:dispatcher_1/features/orders/order_detail_screen.dart';
 import 'package:dispatcher_1/features/schedule/day_settings_screen.dart';
-import 'package:dispatcher_1/features/schedule/widgets/schedule_alerts.dart';
 
 /// Состояние конкретного дня графика.
 enum DayState { noOrders, hasOrders, dayOff }
 
-/// Заказ в выбранном дне графика (mock).
 class _ScheduledOrder {
   const _ScheduledOrder({
     required this.status,
     required this.machinery,
-    required this.category,
     required this.title,
     required this.rentDate,
     required this.address,
     required this.price,
   });
-
-  final _OrderStatus status;
+  final MyOrderStatus status;
   final List<String> machinery;
-  final String category;
   final String title;
   final String rentDate;
   final String address;
   final String price;
 }
 
-enum _OrderStatus { pending, contact }
-
-/// Главный экран «Мой график» — календарь месяца с днями.
 class ScheduleScreen extends StatefulWidget {
   const ScheduleScreen({super.key});
 
@@ -46,132 +39,219 @@ class ScheduleScreen extends StatefulWidget {
 }
 
 class _ScheduleScreenState extends State<ScheduleScreen> {
-  // Контекст Figma: Февраль 2026. 21 февраля — выбранный день.
-  int _year = 2026;
-  int _month = 2;
-  int _selectedDay = 21;
+  late DateTime _selectedDate;
+  late DateTime _weekStart;
 
-  // Mock-состояния для дат. Ключ — день месяца.
-  final Map<int, DayState> _dayStates = <int, DayState>{
-    17: DayState.dayOff,
-  };
+  final Map<DateTime, DayState> _dayStates = {};
 
   bool _acceptingOrders = true;
 
-  // Mock-заказы для 21 февраля (демонстрация «день с заказами»).
-  static const List<_ScheduledOrder> _mockOrders = [
-    _ScheduledOrder(
-      status: _OrderStatus.pending,
-      machinery: ['Автокран', 'Экскаватор'],
-      category: 'Земляные работы',
-      title: 'Земляные работы',
-      rentDate: '21 февраля · 09:00–14:00',
-      address: 'Московская область, Москва, Улица1, д.144',
-      price: '40 000 – 60 000 ₽',
-    ),
-    _ScheduledOrder(
-      status: _OrderStatus.contact,
-      machinery: ['Экскаватор', 'Автокран', 'Эвакуатор', 'Манипулятор', 'Автовышка'],
-      category: 'Разработка котлована под фундамент',
-      title: 'Разработка котлована под фундамент',
-      rentDate: '21 февраля · 15:00–18:00',
-      address: 'Московская область, Москва, Улица1, д.144',
-      price: '120 000 ₽',
-    ),
-  ];
+  /// Заказы по дню недели (1=пн..7=вс). Повторяется каждую неделю.
+  static const Map<int, List<_ScheduledOrder>> _ordersByWeekday = {
+    1: [ // понедельник — 3 заказа
+      _ScheduledOrder(
+        status: MyOrderStatus.waiting,
+        machinery: ['Автокран', 'Экскаватор'],
+        title: 'Земляные работы',
+        rentDate: '09:00–12:00',
+        address: 'Московская область, Москва, Улица1, д.144',
+        price: '40 000 – 60 000 ₽',
+      ),
+      _ScheduledOrder(
+        status: MyOrderStatus.accepted,
+        machinery: ['Погрузчик'],
+        title: 'Погрузка строительного мусора',
+        rentDate: '13:00–16:00',
+        address: 'Московская область, Москва, Проспект Мира, д.12',
+        price: '25 000 ₽',
+      ),
+      _ScheduledOrder(
+        status: MyOrderStatus.waiting,
+        machinery: ['Манипулятор'],
+        title: 'Доставка бетонных плит',
+        rentDate: '17:00–19:00',
+        address: 'Московская область, Химки, ул. Ленина, д.5',
+        price: '35 000 ₽',
+      ),
+    ],
+    2: [ // вторник — 1 заказ
+      _ScheduledOrder(
+        status: MyOrderStatus.accepted,
+        machinery: ['Экскаватор', 'Самосвал'],
+        title: 'Копка траншеи под фундамент',
+        rentDate: '08:00–17:00',
+        address: 'Московская область, Подольск, ул. Кирова, д.88',
+        price: '80 000 ₽',
+      ),
+    ],
+    3: [], // среда — 0 заказов
+    4: [ // четверг — 2 заказа
+      _ScheduledOrder(
+        status: MyOrderStatus.waiting,
+        machinery: ['Автокран', 'Экскаватор'],
+        title: 'Земляные работы',
+        rentDate: '09:00–14:00',
+        address: 'Московская область, Москва, Улица1, д.144',
+        price: '40 000 – 60 000 ₽',
+      ),
+      _ScheduledOrder(
+        status: MyOrderStatus.accepted,
+        machinery: ['Экскаватор', 'Автокран', 'Эвакуатор', 'Манипулятор', 'Автовышка'],
+        title: 'Разработка котлована под фундамент',
+        rentDate: '15:00–18:00',
+        address: 'Московская область, Москва, Улица1, д.144',
+        price: '120 000 ₽',
+      ),
+    ],
+    5: [ // пятница — 1 заказ
+      _ScheduledOrder(
+        status: MyOrderStatus.waiting,
+        machinery: ['Автовышка'],
+        title: 'Монтаж рекламного баннера',
+        rentDate: '10:00–13:00',
+        address: 'Москва, ул. Тверская, д.22',
+        price: '18 000 ₽',
+      ),
+    ],
+    // 6 суббота, 7 воскресенье — 0 заказов
+  };
 
   static const _monthNames = [
-    '',
-    'Январь',
-    'Февраль',
-    'Март',
-    'Апрель',
-    'Май',
-    'Июнь',
-    'Июль',
-    'Август',
-    'Сентябрь',
-    'Октябрь',
-    'Ноябрь',
-    'Декабрь',
+    '', 'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
+    'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь',
   ];
 
-  int get _daysInMonth => DateTime(_year, _month + 1, 0).day;
-
-  int get _firstWeekday {
-    // Monday = 1 .. Sunday = 7, Figma шапка п в с ч п с в.
-    final int w = DateTime(_year, _month, 1).weekday;
-    return w;
+  @override
+  void initState() {
+    super.initState();
+    final now = DateTime.now();
+    _selectedDate = DateTime(now.year, now.month, now.day);
+    _weekStart = _mondayOf(_selectedDate);
   }
 
-  DayState _stateFor(int day) {
-    if (_dayStates.containsKey(day)) return _dayStates[day]!;
-    if (day == _selectedDay) {
-      return _acceptingOrders ? DayState.hasOrders : DayState.noOrders;
+  DateTime _mondayOf(DateTime d) =>
+      d.subtract(Duration(days: d.weekday - 1));
+
+  List<DateTime> get _weekDays =>
+      List.generate(7, (i) => _weekStart.add(Duration(days: i)));
+
+  String get _headerLabel {
+    final first = _weekDays.first;
+    final last = _weekDays.last;
+    if (first.month == last.month) {
+      return '${_monthNames[first.month]}, ${first.year}';
     }
-    return DayState.noOrders;
+    if (first.year == last.year) {
+      return '${_monthNames[first.month]}–${_monthNames[last.month]}, ${first.year}';
+    }
+    return '${_monthNames[first.month]}, ${first.year} – ${_monthNames[last.month]}, ${last.year}';
   }
 
-  void _prevMonth() {
-    setState(() {
-      if (_month == 1) {
-        _month = 12;
-        _year--;
-      } else {
-        _month--;
-      }
-    });
+  DateTime _dateKey(DateTime d) => DateTime(d.year, d.month, d.day);
+
+  DayState _stateFor(DateTime d) {
+    final key = _dateKey(d);
+    if (_dayStates.containsKey(key)) return _dayStates[key]!;
+    final orders = _ordersByWeekday[d.weekday] ?? [];
+    return orders.isNotEmpty ? DayState.hasOrders : DayState.noOrders;
   }
 
-  void _nextMonth() {
-    setState(() {
-      if (_month == 12) {
-        _month = 1;
-        _year++;
-      } else {
-        _month++;
-      }
-    });
-  }
+  void _prevWeek() => setState(() {
+        _weekStart = _weekStart.subtract(const Duration(days: 7));
+        _selectedDate = _weekStart;
+        _acceptingOrders = _stateFor(_selectedDate) != DayState.dayOff;
+      });
+
+  void _nextWeek() => setState(() {
+        _weekStart = _weekStart.add(const Duration(days: 7));
+        _selectedDate = _weekStart;
+        _acceptingOrders = _stateFor(_selectedDate) != DayState.dayOff;
+      });
 
   Future<void> _openDaySettings() async {
+    final key = _dateKey(_selectedDate);
     final DayState? updated = await Navigator.of(context).push<DayState>(
       MaterialPageRoute<DayState>(
         builder: (_) => DaySettingsScreen(
-          dayLabel:
-              '$_selectedDay ${_monthNames[_month]}, $_year',
-          initialState: _stateFor(_selectedDay),
+          dayLabel: '${_selectedDate.day} ${_monthNames[_selectedDate.month]}, ${_selectedDate.year}',
+          initialState: _stateFor(_selectedDate),
         ),
       ),
     );
     if (updated != null) {
       setState(() {
-        _dayStates[_selectedDay] = updated;
-        if (_selectedDay == _selectedDay) {
-          _acceptingOrders = updated != DayState.dayOff && updated != DayState.noOrders;
-        }
+        _dayStates[key] = updated;
+        _acceptingOrders = updated != DayState.dayOff && updated != DayState.noOrders;
       });
     }
   }
 
   Future<void> _toggleAcceptance(bool value) async {
     if (!value) {
-      final bool? ok = await ScheduleAlerts.showCloseAcceptance(context);
+      final bool? ok = await _showCloseDialog();
       if (ok != true) return;
     }
-    setState(() {
-      _acceptingOrders = value;
-      if (!value) {
-        _dayStates[_selectedDay] = DayState.noOrders;
-      } else {
-        _dayStates.remove(_selectedDay);
-      }
-    });
+    setState(() => _acceptingOrders = value);
+  }
+
+  Future<bool?> _showCloseDialog() {
+    return showDialog<bool>(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.35),
+      builder: (ctx) => Dialog(
+        insetPadding: EdgeInsets.symmetric(horizontal: 16.w),
+        backgroundColor: Colors.transparent,
+        child: Container(
+          padding: EdgeInsets.fromLTRB(16.r, 14.r, 16.r, 22.r),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(20.r),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Align(
+                alignment: Alignment.centerRight,
+                child: GestureDetector(
+                  onTap: () => Navigator.of(ctx).pop(false),
+                  child: Icon(Icons.close_rounded,
+                      size: 22.r, color: AppColors.textTertiary),
+                ),
+              ),
+              SizedBox(height: 16.h),
+              Text('Закрыть приём заказов?',
+                  textAlign: TextAlign.center,
+                  style: AppTextStyles.titleL.copyWith(fontWeight: FontWeight.w700)),
+              SizedBox(height: 8.h),
+              Text('Новые заказы на этот день поступать не будут',
+                  textAlign: TextAlign.center,
+                  style: AppTextStyles.body.copyWith(color: AppColors.textSecondary)),
+              SizedBox(height: 18.h),
+              PrimaryButton(
+                label: 'Закрыть',
+                onPressed: () => Navigator.of(ctx).pop(true),
+              ),
+              SizedBox(height: 12.h),
+              GestureDetector(
+                onTap: () => Navigator.of(ctx).pop(false),
+                child: Center(
+                  child: Text('Вернуться',
+                      style: AppTextStyles.bodyMedium
+                          .copyWith(color: AppColors.textPrimary)),
+                ),
+              ),
+              SizedBox(height: 8.h),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final DayState state = _stateFor(_selectedDay);
+    final DayState state = _stateFor(_selectedDate);
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: DarkSubAppBar(
@@ -180,8 +260,8 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
           Padding(
             padding: EdgeInsets.only(right: 8.w),
             child: IconButton(
-              icon: Icon(Icons.edit_outlined,
-                  color: AppColors.primary, size: 24.r),
+              icon: Image.asset('assets/icons/profile/pen.webp',
+                  width: 24.r, height: 24.r),
               onPressed: _openDaySettings,
             ),
           ),
@@ -192,270 +272,257 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
         child: AiAssistantFab(onTap: () => context.push('/assistant/chat')),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          SizedBox(height: AppSpacing.md),
-          _MonthHeader(
-            label: '${_monthNames[_month]}, $_year',
-            onPrev: _prevMonth,
-            onNext: _nextMonth,
-          ),
-          SizedBox(height: AppSpacing.sm),
-          _WeekdayRow(),
-          SizedBox(height: AppSpacing.xs),
-          _MonthGrid(
-            daysInMonth: _daysInMonth,
-            firstWeekday: _firstWeekday,
-            selectedDay: _selectedDay,
-            stateFor: _stateFor,
-            onSelect: (d) => setState(() {
-              _selectedDay = d;
-              _acceptingOrders = _stateFor(d) != DayState.dayOff &&
-                  _stateFor(d) != DayState.noOrders;
-            }),
-          ),
-          SizedBox(height: AppSpacing.md),
-          Divider(height: 1.h, color: AppColors.divider),
-          if (state != DayState.dayOff) ...[
-            _AcceptanceToggle(
-              value: _acceptingOrders,
-              onChanged: _toggleAcceptance,
+      body: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SizedBox(height: 16.h),
+            // Заголовок месяца
+            Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16.w),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      _headerLabel,
+                      style: TextStyle(
+                        fontFamily: 'Roboto',
+                        fontSize: 22.sp,
+                        fontWeight: FontWeight.w500,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: _prevWeek,
+                    child: Padding(
+                      padding: EdgeInsets.all(4.r),
+                      child: Image.asset('assets/icons/profile/arrow_left_calendar.webp',
+                          width: 24.r, height: 24.r),
+                    ),
+                  ),
+                  SizedBox(width: 4.w),
+                  GestureDetector(
+                    onTap: _nextWeek,
+                    child: Padding(
+                      padding: EdgeInsets.all(4.r),
+                      child: Image.asset('assets/icons/profile/arrow_right_calendar.webp',
+                          width: 24.r, height: 24.r),
+                    ),
+                  ),
+                ],
+              ),
             ),
-            Divider(height: 1.h, color: AppColors.divider),
+            SizedBox(height: 12.h),
+            // Дни недели
+            Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16.w),
+              child: Row(
+                children: ['п', 'в', 'с', 'ч', 'п', 'с', 'в']
+                    .map((w) => Expanded(
+                          child: Center(
+                            child: Text(w,
+                                style: AppTextStyles.subBody
+                                    .copyWith(color: AppColors.textTertiary, fontWeight: FontWeight.w400)),
+                          ),
+                        ))
+                    .toList(),
+              ),
+            ),
+            SizedBox(height: 6.h),
+            // Одна неделя
+            Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16.w),
+              child: Row(
+                children: _weekDays.map((day) {
+                  final bool selected = _dateKey(day) == _dateKey(_selectedDate);
+                  final DayState s = _stateFor(day);
+                  Color? bg;
+                  Color textColor = AppColors.textPrimary;
+                  if (selected) {
+                    bg = AppColors.primary;
+                    textColor = Colors.white;
+                  } else if (s == DayState.dayOff) {
+                    bg = const Color(0xFFEB4E3D);
+                    textColor = Colors.white;
+                  }
+                  return Expanded(
+                    child: GestureDetector(
+                      onTap: () => setState(() {
+                        _selectedDate = day;
+                        _acceptingOrders = _stateFor(day) != DayState.dayOff;
+                      }),
+                      behavior: HitTestBehavior.opaque,
+                      child: SizedBox(
+                        height: 44.h,
+                        child: Center(
+                          child: Container(
+                            width: 36.r,
+                            height: 36.r,
+                            decoration: BoxDecoration(
+                              color: bg,
+                              shape: BoxShape.circle,
+                            ),
+                            alignment: Alignment.center,
+                            child: Text('${day.day}',
+                                style: AppTextStyles.bodyL.copyWith(color: textColor)),
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+            SizedBox(height: 12.h),
+            // Тоггл приёма заказов
+            if (state != DayState.dayOff) ...[
+              Divider(height: 1, thickness: 0.5, color: Colors.grey.shade300),
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 14.h),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text('Приём заказов',
+                          style: AppTextStyles.button),  // 16sp w600
+                    ),
+                    ScheduleToggle(
+                      value: _acceptingOrders,
+                      onChanged: _toggleAcceptance,
+                    ),
+                  ],
+                ),
+              ),
+              Divider(height: 1, thickness: 0.5, color: Colors.grey.shade300),
+            ],
+            // Контент дня
+            Expanded(child: _buildDayBody(state)),
+            // Кнопка с тенью
+            Container(
+              decoration: BoxDecoration(
+                color: AppColors.background,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.06),
+                    offset: const Offset(0, -1),
+                    blurRadius: 8,
+                  ),
+                ],
+              ),
+              padding: EdgeInsets.fromLTRB(16.w, 12.h, 16.w, 16.h),
+              child: PrimaryButton(
+                label: state == DayState.dayOff
+                    ? 'Отметить рабочим'
+                    : 'Отметить нерабочим',
+                onPressed: () {
+                  final key = _dateKey(_selectedDate);
+                  setState(() {
+                    if (state == DayState.dayOff) {
+                      _dayStates.remove(key);
+                      _acceptingOrders = true;
+                    } else {
+                      _dayStates[key] = DayState.dayOff;
+                    }
+                  });
+                },
+              ),
+            ),
           ],
-          Expanded(child: _buildDayBody(state)),
-        ],
-      ),
-      bottomNavigationBar: SafeArea(
-        top: false,
-        child: Padding(
-          padding: EdgeInsets.fromLTRB(
-              AppSpacing.screenH, 0, AppSpacing.screenH, AppSpacing.md),
-          child: PrimaryButton(
-            label: state == DayState.dayOff
-                ? 'Отметить рабочим'
-                : 'Отметить нерабочим',
-            onPressed: () {
-              setState(() {
-                if (state == DayState.dayOff) {
-                  _dayStates.remove(_selectedDay);
-                  _acceptingOrders = true;
-                } else {
-                  _dayStates[_selectedDay] = DayState.dayOff;
-                }
-              });
-            },
-          ),
         ),
       ),
     );
   }
 
   Widget _buildDayBody(DayState state) {
-    switch (state) {
-      case DayState.hasOrders:
-        return ListView.separated(
-          padding: EdgeInsets.symmetric(
-              horizontal: AppSpacing.screenH, vertical: AppSpacing.md),
-          itemCount: _mockOrders.length,
-          separatorBuilder: (_, _) => SizedBox(height: AppSpacing.sm),
-          itemBuilder: (_, i) => _OrderCard(order: _mockOrders[i]),
-        );
-      case DayState.dayOff:
-        return Center(
+    if (state == DayState.dayOff) {
+      return Padding(
+        padding: EdgeInsets.only(bottom: 40.h),
+        child: Center(
           child: Padding(
-            padding: EdgeInsets.symmetric(horizontal: AppSpacing.xl),
+            padding: EdgeInsets.symmetric(horizontal: 32.w),
             child: Text(
-              'Вы отметили этот день\nвыходным — заказы на него не\nпринимаются',
-              style: AppTextStyles.body.copyWith(color: AppColors.textPrimary),
+              'Вы отметили этот день выходным — заказы на него не принимаются',
+              style: AppTextStyles.body.copyWith(color: AppColors.textPrimary, height: 1.3),
               textAlign: TextAlign.center,
             ),
           ),
-        );
-      case DayState.noOrders:
-        return Center(
+        ),
+      );
+    }
+
+    final orders = _ordersByWeekday[_selectedDate.weekday] ?? [];
+    if (orders.isEmpty) {
+      return Padding(
+        padding: EdgeInsets.only(bottom: 40.h),
+        child: Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               Image.asset('assets/icons/profile/no_orders.webp',
                   width: 80.r, height: 80.r),
-              SizedBox(height: AppSpacing.sm),
-              Text('Нет заказов',
-                  style: AppTextStyles.body
-                      .copyWith(color: AppColors.textPrimary)),
-            ],
+                SizedBox(height: 12.h),
+                Text('Нет заказов',
+                    style: AppTextStyles.body
+                        .copyWith(color: AppColors.textPrimary)),
+              ],
+            ),
           ),
         );
     }
-  }
-}
 
-class _MonthHeader extends StatelessWidget {
-  const _MonthHeader({
-    required this.label,
-    required this.onPrev,
-    required this.onNext,
-  });
-  final String label;
-  final VoidCallback onPrev;
-  final VoidCallback onNext;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.symmetric(horizontal: AppSpacing.screenH),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              label,
-              style: AppTextStyles.h3.copyWith(fontWeight: FontWeight.w700),
-            ),
-          ),
-          GestureDetector(
-            onTap: onPrev,
-            child: Padding(
-              padding: EdgeInsets.all(4.r),
-              child: Icon(Icons.chevron_left_rounded,
-                  size: 28.r, color: AppColors.textPrimary),
-            ),
-          ),
-          SizedBox(width: AppSpacing.xs),
-          GestureDetector(
-            onTap: onNext,
-            child: Padding(
-              padding: EdgeInsets.all(4.r),
-              child: Icon(Icons.chevron_right_rounded,
-                  size: 28.r, color: AppColors.textPrimary),
-            ),
-          ),
-        ],
+    return ListView.separated(
+      padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
+      itemCount: orders.length,
+      separatorBuilder: (_, _) => Padding(
+        padding: EdgeInsets.symmetric(vertical: 12.h),
+        child: Divider(height: 1, thickness: 1, color: AppColors.primary.withValues(alpha: 0.3)),
       ),
+      itemBuilder: (_, i) => _OrderCard(order: orders[i]),
     );
   }
 }
 
-class _WeekdayRow extends StatelessWidget {
-  static const _weekdays = ['п', 'в', 'с', 'ч', 'п', 'с', 'в'];
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.symmetric(horizontal: AppSpacing.screenH),
-      child: Row(
-        children: _weekdays
-            .map((w) => Expanded(
-                  child: Center(
-                    child: Text(
-                      w,
-                      style: AppTextStyles.body
-                          .copyWith(color: AppColors.textTertiary),
-                    ),
-                  ),
-                ))
-            .toList(),
-      ),
-    );
-  }
-}
-
-class _MonthGrid extends StatelessWidget {
-  const _MonthGrid({
-    required this.daysInMonth,
-    required this.firstWeekday,
-    required this.selectedDay,
-    required this.stateFor,
-    required this.onSelect,
-  });
-
-  final int daysInMonth;
-  final int firstWeekday;
-  final int selectedDay;
-  final DayState Function(int day) stateFor;
-  final ValueChanged<int> onSelect;
-
-  @override
-  Widget build(BuildContext context) {
-    final int leading = firstWeekday - 1; // дней до 1-го
-    final int total = leading + daysInMonth;
-    final int rows = (total / 7).ceil();
-    return Padding(
-      padding: EdgeInsets.symmetric(horizontal: AppSpacing.screenH),
-      child: Column(
-        children: List.generate(rows, (r) {
-          return Row(
-            children: List.generate(7, (c) {
-              final int cell = r * 7 + c;
-              final int day = cell - leading + 1;
-              if (day < 1 || day > daysInMonth) {
-                return const Expanded(child: SizedBox(height: 44));
-              }
-              final DayState s = stateFor(day);
-              final bool selected = day == selectedDay;
-              Color? bg;
-              Color textColor = AppColors.textPrimary;
-              if (selected) {
-                bg = AppColors.primary;
-                textColor = Colors.white;
-              } else if (s == DayState.dayOff) {
-                bg = AppColors.error;
-                textColor = Colors.white;
-              }
-              return Expanded(
-                child: GestureDetector(
-                  onTap: () => onSelect(day),
-                  behavior: HitTestBehavior.opaque,
-                  child: Container(
-                    height: 44.h,
-                    alignment: Alignment.center,
-                    child: Container(
-                      width: 36.r,
-                      height: 36.r,
-                      decoration: BoxDecoration(
-                        color: bg,
-                        shape: BoxShape.circle,
-                      ),
-                      alignment: Alignment.center,
-                      child: Text(
-                        '$day',
-                        style: AppTextStyles.body.copyWith(color: textColor),
-                      ),
-                    ),
-                  ),
-                ),
-              );
-            }),
-          );
-        }),
-      ),
-    );
-  }
-}
-
-class _AcceptanceToggle extends StatelessWidget {
-  const _AcceptanceToggle({required this.value, required this.onChanged});
+class ScheduleToggle extends StatelessWidget {
+  const ScheduleToggle({super.key, required this.value, required this.onChanged});
   final bool value;
   final ValueChanged<bool> onChanged;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.symmetric(
-          horizontal: AppSpacing.screenH, vertical: AppSpacing.xs),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text('Приём заказов',
-                style: AppTextStyles.bodyMedium
-                    .copyWith(fontWeight: FontWeight.w600)),
+    final double w = 52.r;
+    final double h = 32.r;
+    final double thumb = 28.r;
+    final double pad = 2.r;
+    return GestureDetector(
+      onTap: () => onChanged(!value),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        width: w,
+        height: h,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(h / 2),
+          color: value ? const Color(0xFF34C759) : const Color(0xFFE0E0E0),
+        ),
+        child: AnimatedAlign(
+          duration: const Duration(milliseconds: 200),
+          alignment: value ? Alignment.centerRight : Alignment.centerLeft,
+          child: Container(
+            width: thumb,
+            height: thumb,
+            margin: EdgeInsets.all(pad),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: Colors.white,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.15),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
           ),
-          Switch(
-            value: value,
-            onChanged: onChanged,
-            activeThumbColor: Colors.white,
-            activeTrackColor: const Color(0xFF34C759),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -467,99 +534,104 @@ class _OrderCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(AppSpacing.radiusL),
-        border: Border.all(color: AppColors.divider),
+    final TextStyle tagStyle = TextStyle(
+      fontFamily: 'Roboto',
+      fontSize: 12.sp,
+      fontWeight: FontWeight.w400,
+      color: AppColors.textTertiary,
+      height: 1.78,
+    );
+    final detailState = order.status == MyOrderStatus.waiting
+        ? MyOrderDetailState.waitingConfirm
+        : MyOrderDetailState.confirmed;
+    return InkWell(
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => MyOrderDetailScreen(
+            title: order.title,
+            equipment: order.machinery,
+            rentDate: order.rentDate,
+            address: order.address,
+            price: order.price,
+            state: detailState,
+          ),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: double.infinity,
-            padding:
-                EdgeInsets.symmetric(horizontal: 12.w, vertical: 6.h),
-            decoration: BoxDecoration(
-              color: order.status == _OrderStatus.pending
-                  ? const Color(0xFFD7F6CB)
-                  : const Color(0xFFDCECFA),
-              borderRadius: BorderRadius.vertical(
-                top: Radius.circular(AppSpacing.radiusL),
-              ),
-            ),
-            child: Text(
-              order.status == _OrderStatus.pending
-                  ? 'Ждёт подтверждения'
-                  : 'Свяжитесь с заказчиком',
-              style: AppTextStyles.captionBold.copyWith(
-                color: order.status == _OrderStatus.pending
-                    ? const Color(0xFF1F8A2D)
-                    : const Color(0xFF1976D2),
-              ),
-              textAlign: TextAlign.center,
-            ),
+          OrderStatusPill(status: order.status),
+        SizedBox(height: 6.h),
+        Text(
+          order.machinery.join('   '),
+          style: tagStyle,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+        SizedBox(height: 8.h),
+        Text(
+          order.title,
+          style: TextStyle(
+            fontFamily: 'Roboto',
+            fontSize: 17.sp,
+            fontWeight: FontWeight.w700,
+            color: AppColors.textPrimary,
+            height: 1.3,
           ),
-          Padding(
-            padding: EdgeInsets.all(AppSpacing.sm),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Wrap(
-                  spacing: 8.w,
-                  runSpacing: 4.h,
-                  children: order.machinery
-                      .map((m) => Text(
-                            m,
-                            style: AppTextStyles.caption
-                                .copyWith(color: AppColors.textSecondary),
-                          ))
-                      .toList(),
-                ),
-                SizedBox(height: 4.h),
-                Text(order.title,
-                    style: AppTextStyles.titleS
-                        .copyWith(fontWeight: FontWeight.w700)),
-                SizedBox(height: 4.h),
-                _MetaRow(label: 'Дата аренды:', value: order.rentDate),
-                SizedBox(height: 2.h),
-                _MetaRow(label: 'Адрес:', value: order.address, link: true),
-                SizedBox(height: AppSpacing.xs),
-                Text(order.price,
-                    style: AppTextStyles.bodyMedium
-                        .copyWith(fontWeight: FontWeight.w700)),
-              ],
-            ),
-          ),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+        SizedBox(height: 8.h),
+        _LabelLine(label: 'Дата аренды:', value: order.rentDate),
+        SizedBox(height: 5.h),
+        _LabelLine(label: 'Адрес:', value: order.address, underlined: true),
+        SizedBox(height: 8.h),
+        Text(order.price,
+            style: TextStyle(
+              fontFamily: 'Roboto',
+              fontSize: 16.sp,
+              fontWeight: FontWeight.w700,
+              color: AppColors.primary,
+            )),
         ],
       ),
     );
   }
 }
 
-class _MetaRow extends StatelessWidget {
-  const _MetaRow({
+class _LabelLine extends StatelessWidget {
+  const _LabelLine({
     required this.label,
     required this.value,
-    this.link = false,
+    this.underlined = false,
   });
   final String label;
   final String value;
-  final bool link;
+  final bool underlined;
 
   @override
   Widget build(BuildContext context) {
     return RichText(
+      maxLines: 2,
+      overflow: TextOverflow.ellipsis,
       text: TextSpan(
-        style: AppTextStyles.caption.copyWith(color: AppColors.textSecondary),
-        children: [
-          TextSpan(text: '$label '),
+        style: TextStyle(
+          fontFamily: 'Roboto',
+          fontSize: 13.sp,
+          color: AppColors.textPrimary,
+          height: 1.4,
+        ),
+        children: <TextSpan>[
+          TextSpan(
+            text: '$label ',
+            style: const TextStyle(fontWeight: FontWeight.w700),
+          ),
           TextSpan(
             text: value,
-            style: AppTextStyles.caption.copyWith(
-              color: link ? AppColors.primary : AppColors.textPrimary,
-              decoration: link ? TextDecoration.underline : null,
-              decorationColor: AppColors.primary,
+            style: TextStyle(
+              fontWeight: FontWeight.w400,
+              color: AppColors.textSecondary,
+              decoration: underlined ? TextDecoration.underline : TextDecoration.none,
             ),
           ),
         ],

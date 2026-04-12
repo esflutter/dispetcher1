@@ -58,6 +58,7 @@ class MyOrderDetailScreen extends StatefulWidget {
     this.onRefuse,
     this.onConfirm,
     this.isBlocked = false,
+    this.price = '80 000 – 100 000 ₽',
   });
 
   final MyOrderDetailState state;
@@ -89,6 +90,7 @@ class MyOrderDetailScreen extends StatefulWidget {
   final VoidCallback? onConfirm;
 
   final bool isBlocked;
+  final String price;
 
   @override
   State<MyOrderDetailScreen> createState() => _MyOrderDetailScreenState();
@@ -162,7 +164,7 @@ class _MyOrderDetailScreenState extends State<MyOrderDetailScreen> {
         ),
       ),
       floatingActionButton: Padding(
-        padding: EdgeInsets.only(bottom: _hasBottomBar ? 88.h : 24.h),
+        padding: EdgeInsets.only(bottom: _state == MyOrderDetailState.waitingConfirm ? 148.h : _hasBottomBar ? 88.h : 24.h),
         child: AiAssistantFab(onTap: () {}),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
@@ -268,6 +270,16 @@ class _MyOrderDetailScreenState extends State<MyOrderDetailScreen> {
                           ),
                       ],
                     ),
+                  ),
+                  _Section(
+                    title: 'Стоимость',
+                    child: Text(widget.price,
+                        style: TextStyle(
+                          fontFamily: 'Roboto',
+                          fontSize: 16.sp,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.primary,
+                        )),
                   ),
                 ],
               ),

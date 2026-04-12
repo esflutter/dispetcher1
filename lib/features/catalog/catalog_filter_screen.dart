@@ -145,7 +145,7 @@ class _CatalogFilterScreenState extends State<CatalogFilterScreen> {
                       Row(
                         children: <Widget>[
                           Expanded(
-                            child: _PickerField(
+                            child: PickerField(
                               hint: _exactDate ? '' : 'С',
                               value: _dateFrom == null
                                   ? null
@@ -158,7 +158,7 @@ class _CatalogFilterScreenState extends State<CatalogFilterScreen> {
                           ),
                           SizedBox(width: 12.w),
                           Expanded(
-                            child: _PickerField(
+                            child: PickerField(
                               hint: 'По',
                               value: _dateTo == null
                                   ? null
@@ -204,7 +204,7 @@ class _CatalogFilterScreenState extends State<CatalogFilterScreen> {
                         ),
                       ],
                       SizedBox(height: 8.h),
-                      _CheckRow(
+                      CheckRow(
                         label: 'Точная дата',
                         value: _exactDate,
                         onChanged: (bool v) => setState(() {
@@ -220,7 +220,7 @@ class _CatalogFilterScreenState extends State<CatalogFilterScreen> {
                       Row(
                         children: <Widget>[
                           Expanded(
-                            child: _PickerField(
+                            child: PickerField(
                               hint: 'С',
                               value: _timeFrom == null
                                   ? null
@@ -236,7 +236,7 @@ class _CatalogFilterScreenState extends State<CatalogFilterScreen> {
                           ),
                           SizedBox(width: 12.w),
                           Expanded(
-                            child: _PickerField(
+                            child: PickerField(
                               hint: 'По',
                               value: _timeTo == null
                                   ? null
@@ -255,7 +255,7 @@ class _CatalogFilterScreenState extends State<CatalogFilterScreen> {
                       if (_openPicker == 'timeFrom' ||
                           _openPicker == 'timeTo') ...<Widget>[
                         SizedBox(height: 8.h),
-                        _InlineTimePicker(
+                        InlineTimePicker(
                           selected: _openPicker == 'timeFrom'
                               ? _timeFrom
                               : _timeTo,
@@ -274,7 +274,7 @@ class _CatalogFilterScreenState extends State<CatalogFilterScreen> {
                         ),
                       ],
                       SizedBox(height: 8.h),
-                      _CheckRow(
+                      CheckRow(
                         label: 'Весь день',
                         value: _wholeDay,
                         onChanged: (bool v) => setState(() {
@@ -428,8 +428,9 @@ class _ChipGrid extends StatelessWidget {
   }
 }
 
-class _PickerField extends StatelessWidget {
-  const _PickerField({
+class PickerField extends StatelessWidget {
+  const PickerField({
+    super.key,
     required this.hint,
     required this.value,
     this.iconAsset,
@@ -494,8 +495,9 @@ class _PickerField extends StatelessWidget {
   }
 }
 
-class _CheckRow extends StatelessWidget {
-  const _CheckRow({
+class CheckRow extends StatelessWidget {
+  const CheckRow({
+    super.key,
     required this.label,
     required this.value,
     required this.onChanged,
@@ -921,8 +923,9 @@ class _InlineCalendarState extends State<_InlineCalendar> {
 }
 
 /// Инлайн-пикер времени (два колеса: часы + минуты).
-class _InlineTimePicker extends StatefulWidget {
-  const _InlineTimePicker({
+class InlineTimePicker extends StatefulWidget {
+  const InlineTimePicker({
+    super.key,
     required this.selected,
     required this.onDone,
     required this.onCancel,
@@ -933,10 +936,10 @@ class _InlineTimePicker extends StatefulWidget {
   final VoidCallback onCancel;
 
   @override
-  State<_InlineTimePicker> createState() => _InlineTimePickerState();
+  State<InlineTimePicker> createState() => InlineTimePickerState();
 }
 
-class _InlineTimePickerState extends State<_InlineTimePicker> {
+class InlineTimePickerState extends State<InlineTimePicker> {
   late int _hour;
   late int _minute;
   late FixedExtentScrollController _hourCtrl;
