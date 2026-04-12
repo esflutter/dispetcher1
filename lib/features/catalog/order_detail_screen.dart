@@ -4,12 +4,12 @@ import 'package:go_router/go_router.dart';
 
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
-import 'package:dispatcher_1/core/widgets/bottom_sheet_handle.dart';
 import 'package:dispatcher_1/core/widgets/primary_button.dart';
 import 'package:dispatcher_1/features/catalog/customer_card_screen.dart';
 import 'package:dispatcher_1/features/catalog/widgets/catalog_search_bar.dart';
 import 'package:dispatcher_1/features/catalog/widgets/respond_bottom_sheet.dart';
 import 'package:dispatcher_1/features/catalog/widgets/subscription_paywall.dart';
+import 'package:dispatcher_1/features/profile/widgets/verification_badge.dart';
 
 /// Карточка заказа (детали). По Figma — заголовок заказчика сверху,
 /// далее «номер заказа → заголовок → дата публикации → секции».
@@ -36,8 +36,8 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
     'Автовышка',
   ];
 
-  final bool _verified = false;
-  bool _hasSubscription = false;
+  bool get _verified => VerificationStatus.current.isVerified;
+  bool get _hasSubscription => VerificationStatus.hasSubscription;
 
   // Моковый список техники из заказа.
   List<String> get _orderEquipment => widget.multipleEquipment
@@ -54,7 +54,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
         ),
       );
       if (subscribed != true || !mounted) return;
-      setState(() => _hasSubscription = true);
+      VerificationStatus.hasSubscription = true;
     }
 
     // 2. Проверка верификации.
@@ -386,7 +386,6 @@ class _PickEquipmentSheetState extends State<_PickEquipmentSheet> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
-          const BottomSheetHandle(),
           SizedBox(height: 16.h),
           Text(
             'Выберите технику, на которой\nвы готовы выполнить работу',

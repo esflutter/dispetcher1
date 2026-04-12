@@ -4,14 +4,14 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/widgets/primary_button.dart';
 
-class SubscriptionPaywall extends StatefulWidget {
-  const SubscriptionPaywall({super.key});
+class ExecutorCardPaywall extends StatefulWidget {
+  const ExecutorCardPaywall({super.key});
 
   @override
-  State<SubscriptionPaywall> createState() => _SubscriptionPaywallState();
+  State<ExecutorCardPaywall> createState() => _ExecutorCardPaywallState();
 }
 
-class _SubscriptionPaywallState extends State<SubscriptionPaywall>
+class _ExecutorCardPaywallState extends State<ExecutorCardPaywall>
     with SingleTickerProviderStateMixin {
   bool _showPayment = false;
   final List<String> _cards = <String>[];
@@ -77,6 +77,7 @@ class _SubscriptionPaywallState extends State<SubscriptionPaywall>
               child: Icon(Icons.close, color: Colors.white, size: 22.r),
             ),
           ),
+          // Задняя шторка (paywall) — исчезает
           Positioned(
             left: 0,
             right: 0,
@@ -85,6 +86,7 @@ class _SubscriptionPaywallState extends State<SubscriptionPaywall>
                 ? FadeTransition(opacity: _fadeOut, child: _buildPaywall(context))
                 : _buildPaywall(context),
           ),
+          // Передняя шторка (оплата) — поднимается снизу
           if (_showPayment)
             Positioned(
               left: 0,
@@ -123,7 +125,7 @@ class _SubscriptionPaywallState extends State<SubscriptionPaywall>
       child: Column(
         children: <Widget>[
           Text(
-            'Получите доступ к\nзаказам',
+            'Оплатите размещение\nкарточки исполнителя',
             textAlign: TextAlign.center,
             style: TextStyle(
               fontFamily: 'Roboto',
@@ -133,11 +135,16 @@ class _SubscriptionPaywallState extends State<SubscriptionPaywall>
             ),
           ),
           SizedBox(height: 13.h),
-          _BulletItem(text: 'Откликайтесь на заказы'),
-          SizedBox(height: 2.h),
-          _BulletItem(text: 'Попадайте в список исполнителей'),
-          SizedBox(height: 2.h),
-          _BulletItem(text: 'Получайте новые заявки'),
+          Text(
+            'После оплаты ваша карточка появится в\nкаталоге, и заказчики смогут выбрать вас',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontFamily: 'Roboto',
+              fontSize: 16.sp,
+              fontWeight: FontWeight.w400,
+              color: AppColors.textSecondary,
+            ),
+          ),
           SizedBox(height: 24.h),
           Text(
             'N дней бесплатно, затем N ₽/месяц',
@@ -303,29 +310,6 @@ class _SubscriptionPaywallState extends State<SubscriptionPaywall>
           ),
         ],
       ),
-    );
-  }
-}
-
-class _BulletItem extends StatelessWidget {
-  const _BulletItem({required this.text});
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: <Widget>[
-        Text(
-          text,
-          style: TextStyle(
-            fontFamily: 'Roboto',
-            fontSize: 16.sp,
-            fontWeight: FontWeight.w400,
-            color: AppColors.textSecondary,
-          ),
-        ),
-      ],
     );
   }
 }

@@ -11,7 +11,14 @@ enum VerificationStatus {
   inProgress,
   rejected,
   notVerified,
-  blocked,
+  blocked;
+
+  static VerificationStatus current = VerificationStatus.notVerified;
+
+  /// Глобальный флаг активной подписки (до появления бэкенда).
+  static bool hasSubscription = false;
+
+  bool get isVerified => this == VerificationStatus.verified;
 }
 
 class _BadgeConfig {

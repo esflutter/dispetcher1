@@ -369,7 +369,7 @@ class _PendingImagesRow extends StatelessWidget {
         child: ListView.separated(
           scrollDirection: Axis.horizontal,
           itemCount: images.length,
-          separatorBuilder: (_, __) => SizedBox(width: 8.w),
+          separatorBuilder: (_, _) => SizedBox(width: 8.w),
           itemBuilder: (context, i) {
             return Stack(
               clipBehavior: Clip.none,
@@ -383,7 +383,7 @@ class _PendingImagesRow extends StatelessWidget {
                       width: 80.r,
                       height: 80.r,
                       fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => Container(
+                      errorBuilder: (_, _, _) => Container(
                         width: 80.r,
                         height: 80.r,
                         color: AppColors.surfaceMuted,

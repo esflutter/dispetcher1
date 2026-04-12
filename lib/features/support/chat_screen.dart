@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
+import 'package:dispatcher_1/features/profile/widgets/verification_badge.dart';
 import 'package:dispatcher_1/features/support/widgets/chat_bubble.dart';
 import 'package:dispatcher_1/features/support/widgets/chat_input_bar.dart';
 
@@ -100,6 +101,9 @@ class _ChatScreenState extends State<ChatScreen> {
 
     setState(() {
       if (hasImages) {
+        if (_awaitingDocuments) {
+          VerificationStatus.current = VerificationStatus.inProgress;
+        }
         _messages.add(
           ChatMessage(
             id: _nextId(),
@@ -246,7 +250,7 @@ class _ChatScreenState extends State<ChatScreen> {
               controller: _scrollController,
               padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 16.h),
               itemCount: _messages.length,
-              separatorBuilder: (_, __) => SizedBox.shrink(),
+              separatorBuilder: (_, _) => SizedBox.shrink(),
               itemBuilder: (context, index) {
                 return ChatBubble(message: _messages[index]);
               },

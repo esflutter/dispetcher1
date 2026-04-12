@@ -29,7 +29,31 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  bool get _isBlocked => widget.status == VerificationStatus.blocked;
+  late VerificationStatus _status;
+
+  @override
+  void initState() {
+    super.initState();
+    _status = widget.status;
+  }
+
+  bool get _isBlocked => _status == VerificationStatus.blocked;
+
+  // TODO: убрать перед релизом — временное переключение статуса для тестирования
+  void _cycleStatus() {
+    const order = [
+      VerificationStatus.notVerified,
+      VerificationStatus.inProgress,
+      VerificationStatus.verified,
+      VerificationStatus.rejected,
+      VerificationStatus.blocked,
+    ];
+    final next = (order.indexOf(_status) + 1) % order.length;
+    setState(() {
+      _status = order[next];
+      VerificationStatus.current = _status;
+    });
+  }
 
   Future<void> _openEdit() async {
     await context.push('/profile/edit');
@@ -38,7 +62,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final status = widget.status;
+    final status = _status;
     final fullName = widget.fullName;
     final rating = widget.rating;
     final reviewsCount = widget.reviewsCount;
@@ -86,18 +110,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
               onReviewsTap: () => context.push('/profile/reviews'),
             ),
             SizedBox(height: 16.h),
-            FullWidthVerificationPill(status: status),
+            GestureDetector(
+              onTap: _cycleStatus,
+              child: FullWidthVerificationPill(status: status),
+            ),
             if (status == VerificationStatus.notVerified) ...[
               SizedBox(height: 8.h),
               _PrimaryActionButton(
                 label: 'Пройти верификацию',
-                onPressed: () => context.push('/assistant/chat', extra: <String, Object?>{'initial': 'verify_documents'}),
+                onPressed: () async {
+                  await context.push('/assistant/chat', extra: <String, Object?>{'initial': 'verify_documents'});
+                  if (mounted) setState(() => _status = VerificationStatus.current);
+                },
               ),
             ] else if (status == VerificationStatus.rejected) ...[
               SizedBox(height: 8.h),
               _PrimaryActionButton(
                 label: 'Пройти ещё раз',
-                onPressed: () => context.push('/assistant/chat', extra: <String, Object?>{'initial': 'verify_documents'}),
+                onPressed: () async {
+                  await context.push('/assistant/chat', extra: <String, Object?>{'initial': 'verify_documents'});
+                  if (mounted) setState(() => _status = VerificationStatus.current);
+                },
               ),
             ] else if (_isBlocked) ...[
               SizedBox(height: 8.h),

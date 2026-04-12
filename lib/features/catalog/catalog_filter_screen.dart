@@ -4,7 +4,6 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
-import 'package:dispatcher_1/core/widgets/bottom_sheet_handle.dart';
 import 'package:dispatcher_1/core/widgets/primary_button.dart';
 import 'package:dispatcher_1/features/catalog/widgets/catalog_search_bar.dart';
 
@@ -295,7 +294,7 @@ class _CatalogFilterScreenState extends State<CatalogFilterScreen> {
                             context: context,
                             isScrollControlled: true,
                             backgroundColor: Colors.transparent,
-                            builder: (_) => const _AddressBottomSheet(),
+                            builder: (_) => const AddressBottomSheet(),
                           );
                           if (result != null) {
                             setState(() => _address = result);
@@ -313,9 +312,7 @@ class _CatalogFilterScreenState extends State<CatalogFilterScreen> {
                               Expanded(
                                 child: Text(
                                   _address ?? 'Введите адрес',
-                                  style: AppTextStyles.bodyMRegular.copyWith(
-                                    fontSize: 13.sp,
-                                    fontWeight: FontWeight.w400,
+                                  style: AppTextStyles.body.copyWith(
                                     color: _address == null
                                         ? AppColors.textTertiary
                                         : AppColors.textPrimary,
@@ -375,8 +372,8 @@ class _SectionTitle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Text(text,
-        style: AppTextStyles.bodyMedium
-            .copyWith(fontWeight: FontWeight.w700, fontSize: 20.sp));
+        style: AppTextStyles.bodyL
+            .copyWith(fontWeight: FontWeight.w700));
   }
 }
 
@@ -531,8 +528,7 @@ class _CheckRow extends StatelessWidget {
                   : null,
             ),
             SizedBox(width: 12.w),
-            Text(label, style: AppTextStyles.bodyMRegular.copyWith(
-                fontSize: 13.sp, fontWeight: FontWeight.w400)),
+            Text(label, style: AppTextStyles.body),
           ],
         ),
       ),
@@ -555,7 +551,7 @@ class _RadioRow extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       child: Padding(
-        padding: EdgeInsets.symmetric(vertical: 6.h),
+        padding: EdgeInsets.symmetric(vertical: 8.h),
         child: Row(
           children: <Widget>[
             Container(
@@ -582,8 +578,7 @@ class _RadioRow extends StatelessWidget {
                   : null,
             ),
             SizedBox(width: 12.w),
-            Text(label, style: AppTextStyles.bodyMRegular.copyWith(
-                fontSize: 13.sp, fontWeight: FontWeight.w400)),
+            Text(label, style: AppTextStyles.body),
           ],
         ),
       ),
@@ -1127,22 +1122,22 @@ class _InlineTimePickerState extends State<_InlineTimePicker> {
 }
 
 /// Bottom Sheet для выбора адреса в фильтре «Местоположение».
-class _AddressBottomSheet extends StatefulWidget {
-  const _AddressBottomSheet();
+class AddressBottomSheet extends StatefulWidget {
+  const AddressBottomSheet({super.key});
 
   @override
-  State<_AddressBottomSheet> createState() => _AddressBottomSheetState();
+  State<AddressBottomSheet> createState() => AddressBottomSheetState();
 }
 
-class _AddressBottomSheetState extends State<_AddressBottomSheet> {
+class AddressBottomSheetState extends State<AddressBottomSheet> {
   final TextEditingController _ctrl = TextEditingController();
   String _query = '';
 
-  static const List<_MockAddress> _all = <_MockAddress>[
-    _MockAddress('Моё местоположение', null),
-    _MockAddress('Адрес', 'Москва, Московская область'),
-    _MockAddress('Адрес', 'Москва, Московская область'),
-    _MockAddress('Адрес', 'Москва, Московская область'),
+  static const List<MockAddress> _all = <MockAddress>[
+    MockAddress('Моё местоположение', null),
+    MockAddress('Адрес', 'Москва, Московская область'),
+    MockAddress('Адрес', 'Москва, Московская область'),
+    MockAddress('Адрес', 'Москва, Московская область'),
   ];
 
   @override
@@ -1165,11 +1160,7 @@ class _AddressBottomSheetState extends State<_AddressBottomSheet> {
           ),
           child: Column(
             children: <Widget>[
-              // Индикатор перетаскивания.
-              Padding(
-                padding: EdgeInsets.only(top: 12.h, bottom: 16.h),
-                child: const BottomSheetHandle(),
-              ),
+              SizedBox(height: 16.h),
               // Поле поиска.
               Padding(
                 padding: EdgeInsets.symmetric(horizontal: 16.w),
@@ -1223,7 +1214,7 @@ class _AddressBottomSheetState extends State<_AddressBottomSheet> {
                   padding: EdgeInsets.symmetric(horizontal: 16.w),
                   itemCount: _all.length,
                   itemBuilder: (BuildContext context, int i) {
-                    final _MockAddress a = _all[i];
+                    final MockAddress a = _all[i];
                     return InkWell(
                       onTap: () => Navigator.of(context).pop(a.title),
                       child: Padding(
@@ -1280,8 +1271,8 @@ class _AddressBottomSheetState extends State<_AddressBottomSheet> {
   }
 }
 
-class _MockAddress {
-  const _MockAddress(this.title, this.subtitle);
+class MockAddress {
+  const MockAddress(this.title, this.subtitle);
   final String title;
   final String? subtitle;
 }

@@ -512,7 +512,7 @@ class _AddressSuggestions extends StatelessWidget {
         shrinkWrap: true,
         padding: EdgeInsets.symmetric(vertical: 8.h),
         itemCount: _all.length,
-        separatorBuilder: (_, __) => Divider(
+        separatorBuilder: (_, _) => Divider(
           height: 1,
           thickness: 0.5,
           indent: 16.w,

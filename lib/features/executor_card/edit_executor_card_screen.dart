@@ -6,10 +6,13 @@ import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_spacing.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
 import 'package:dispatcher_1/core/widgets/dark_sub_app_bar.dart';
+import 'package:dispatcher_1/core/widgets/cropped_avatar.dart';
 import 'package:dispatcher_1/core/widgets/primary_button.dart';
+import 'package:dispatcher_1/features/auth/photo_crop_screen.dart';
+import 'package:dispatcher_1/features/catalog/catalog_filter_screen.dart';
 import 'package:dispatcher_1/features/catalog/widgets/catalog_search_bar.dart';
 
-import 'widgets/executor_card_alerts.dart';
+import 'executor_card_screen.dart';
 
 /// Длинная форма создания / редактирования карточки исполнителя.
 /// Поля из Figma: ФИО, телефон, местоположение (радиус), спецтехника,
@@ -24,43 +27,42 @@ class EditExecutorCardScreen extends StatefulWidget {
 }
 
 class _EditExecutorCardScreenState extends State<EditExecutorCardScreen> {
-  final _location = TextEditingController(text: 'Москва');
-  final _experience = TextEditingController(text: '5 лет');
-  final _about = TextEditingController(
-      text:
-          'Опыт работы более 5 лет. Своя техника в хорошем состоянии, работаю без простоев. Готов выезжать в ближайшие районы.');
-  String? _selectedStatus = 'Физ. лицо';
-  int _radiusIndex = 0;
+  late final TextEditingController _location;
+  late final TextEditingController _experience;
+  late final TextEditingController _about;
+  String? _selectedStatus;
+  int _radiusIndex = -1;
 
   static const _radiusOptions = [
     'В радиусе 10 км',
     'В радиусе 20 км',
-    'В радиусе 30 км',
+    'В радиусе 50 км',
   ];
+
+  bool _statusExpanded = false;
 
   static const _statusOptions = [
     'Физ. лицо',
-    'ИП',
     'Самозанятый',
+    'ИП',
     'Юр. лицо',
   ];
 
   static const _machinery = [
     'Экскаватор-погрузчик',
+    'Экскаватор',
     'Погрузчик',
     'Миниэкскаватор',
-    'Минипогрузчик',
     'Буроям',
     'Самогруз',
     'Автокран',
-    'Самосвалы (до 5тн, 15, 25)',
     'Бетононасос',
     'Эвакуатор',
     'Автовышка',
     'Манипулятор',
+    'Минипогрузчик',
+    'Самосвал',
     'Минитрактор',
-    'Экскаватор',
-    'Инертные материалы',
   ];
   static const _categories = [
     'Земляные работы',
@@ -74,11 +76,22 @@ class _EditExecutorCardScreenState extends State<EditExecutorCardScreen> {
     'Благоустройство территории',
   ];
 
-  final Set<String> _selMach = {'Экскаватор-погрузчик', 'Погрузчик'};
-  final Set<String> _selCat = {
-    'Земляные работы',
-    'Погрузочно-разгрузочные работы',
-  };
+  late final Set<String> _selMach;
+  late final Set<String> _selCat;
+
+  @override
+  void initState() {
+    super.initState();
+    _location = TextEditingController(text: ExecutorCardData.location ?? '');
+    _experience = TextEditingController(text: ExecutorCardData.experience ?? '');
+    _about = TextEditingController(text: ExecutorCardData.about ?? '');
+    _selectedStatus = ExecutorCardData.status;
+    _selMach = Set<String>.from(ExecutorCardData.machinery);
+    _selCat = Set<String>.from(ExecutorCardData.categories);
+    final savedRadius = ExecutorCardData.radius;
+    _radiusIndex = savedRadius != null ? _radiusOptions.indexOf(savedRadius) : -1;
+    if (_radiusIndex < 0) _radiusIndex = -1;
+  }
 
   @override
   void dispose() {
@@ -88,48 +101,6 @@ class _EditExecutorCardScreenState extends State<EditExecutorCardScreen> {
     super.dispose();
   }
 
-  void _openStatusPicker() async {
-    final picked = await showModalBottomSheet<String>(
-      context: context,
-      backgroundColor: AppColors.surface,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20.r)),
-      ),
-      builder: (ctx) => SafeArea(
-        top: false,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            SizedBox(height: AppSpacing.sm),
-            Container(
-              width: 36.w,
-              height: 4.h,
-              decoration: BoxDecoration(
-                color: const Color(0xFF929292),
-                borderRadius: BorderRadius.circular(12.r),
-              ),
-            ),
-            SizedBox(height: AppSpacing.md),
-            Text('Укажите статус',
-                style: AppTextStyles.titleS
-                    .copyWith(fontWeight: FontWeight.w700)),
-            SizedBox(height: AppSpacing.sm),
-            for (final s in _statusOptions)
-              ListTile(
-                title: Text(s, style: AppTextStyles.body),
-                trailing: _selectedStatus == s
-                    ? Icon(Icons.check_rounded,
-                        color: AppColors.primary, size: 22.r)
-                    : null,
-                onTap: () => Navigator.of(ctx).pop(s),
-              ),
-            SizedBox(height: AppSpacing.sm),
-          ],
-        ),
-      ),
-    );
-    if (picked != null) setState(() => _selectedStatus = picked);
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -137,48 +108,105 @@ class _EditExecutorCardScreenState extends State<EditExecutorCardScreen> {
       backgroundColor: AppColors.background,
       appBar: const DarkSubAppBar(title: 'Моя карточка исполнителя'),
       floatingActionButton: Padding(
-        padding: EdgeInsets.only(bottom: 24.h),
+        padding: EdgeInsets.only(bottom: 88.h),
         child: AiAssistantFab(onTap: () => context.push('/assistant/chat')),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: EdgeInsets.fromLTRB(AppSpacing.screenH, AppSpacing.md,
-              AppSpacing.screenH, AppSpacing.md),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+        child: Column(
+          children: [
+            Expanded(
+              child: SingleChildScrollView(
+                padding: EdgeInsets.fromLTRB(AppSpacing.screenH, AppSpacing.md,
+                    AppSpacing.screenH, AppSpacing.md),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
               _HeaderRow(),
-              SizedBox(height: AppSpacing.xs),
-              Text('+7 999 123-45-67', style: AppTextStyles.body),
+              SizedBox(height: 16.h),
+              Container(
+                height: 56.h,
+                padding: EdgeInsets.symmetric(horizontal: 16.w),
+                decoration: BoxDecoration(
+                  color: AppColors.fieldFill,
+                  borderRadius: BorderRadius.circular(14.r),
+                ),
+                alignment: Alignment.centerLeft,
+                child: Text('Александр Иванов', style: AppTextStyles.body),
+              ),
+              SizedBox(height: 8.h),
+              Container(
+                height: 56.h,
+                padding: EdgeInsets.symmetric(horizontal: 16.w),
+                decoration: BoxDecoration(
+                  color: AppColors.fieldFill,
+                  borderRadius: BorderRadius.circular(14.r),
+                ),
+                alignment: Alignment.centerLeft,
+                child: Text('+7 999 123-45-67', style: AppTextStyles.body),
+              ),
               SizedBox(height: AppSpacing.lg),
               _SectionTitle('Местоположение'),
-              SizedBox(height: AppSpacing.xs),
-              _LocationField(controller: _location),
-              SizedBox(height: AppSpacing.sm),
-              for (int i = 0; i < _radiusOptions.length; i++) ...[
-                _RadiusOption(
+              SizedBox(height: 12.h),
+              GestureDetector(
+                onTap: () async {
+                  final String? result = await showModalBottomSheet<String>(
+                    context: context,
+                    isScrollControlled: true,
+                    backgroundColor: Colors.transparent,
+                    builder: (_) => const AddressBottomSheet(),
+                  );
+                  if (result != null) {
+                    setState(() => _location.text = result);
+                  }
+                },
+                child: Container(
+                  height: 44.h,
+                  padding: EdgeInsets.symmetric(horizontal: 12.w),
+                  decoration: BoxDecoration(
+                    color: AppColors.fieldFill,
+                    borderRadius: BorderRadius.circular(12.r),
+                  ),
+                  child: Row(
+                    children: <Widget>[
+                      Expanded(
+                        child: Text(
+                          _location.text.isEmpty ? 'Введите адрес' : _location.text,
+                          style: AppTextStyles.body.copyWith(
+                            color: _location.text.isEmpty
+                                ? AppColors.textTertiary
+                                : AppColors.textPrimary,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              SizedBox(height: 12.h),
+              for (int i = 0; i < _radiusOptions.length; i++)
+                _RadioRow(
                   label: _radiusOptions[i],
                   selected: _radiusIndex == i,
                   onTap: () => setState(() => _radiusIndex = i),
                 ),
-                if (i != _radiusOptions.length - 1) SizedBox(height: 6.h),
-              ],
-              SizedBox(height: AppSpacing.lg),
+              SizedBox(height: 24.h),
               _SectionTitle('Спецтехника'),
-              SizedBox(height: AppSpacing.xs),
-              _ChipWrap(
-                items: _machinery,
+              SizedBox(height: 12.h),
+              _ChipGrid(
+                values: _machinery,
                 selected: _selMach,
                 onToggle: (v) => setState(() {
                   _selMach.contains(v) ? _selMach.remove(v) : _selMach.add(v);
                 }),
               ),
-              SizedBox(height: AppSpacing.lg),
+              SizedBox(height: 24.h),
               _SectionTitle('Категории услуг'),
-              SizedBox(height: AppSpacing.xs),
-              _ChipWrap(
-                items: _categories,
+              SizedBox(height: 12.h),
+              _ChipGrid(
+                values: _categories,
                 selected: _selCat,
                 onToggle: (v) => setState(() {
                   _selCat.contains(v) ? _selCat.remove(v) : _selCat.add(v);
@@ -190,20 +218,21 @@ class _EditExecutorCardScreenState extends State<EditExecutorCardScreen> {
               _TintField(
                 controller: _experience,
                 hint: 'Например: 5 лет',
+                maxLength: 25,
               ),
               SizedBox(height: AppSpacing.lg),
               _SectionTitle('Статус'),
               SizedBox(height: AppSpacing.xs),
               GestureDetector(
-                onTap: _openStatusPicker,
-                behavior: HitTestBehavior.opaque,
+                onTap: () => setState(() => _statusExpanded = !_statusExpanded),
                 child: Container(
                   height: 54.h,
                   padding: EdgeInsets.symmetric(horizontal: AppSpacing.md),
                   decoration: BoxDecoration(
                     color: AppColors.fieldFill,
-                    borderRadius:
-                        BorderRadius.circular(AppSpacing.radiusM),
+                    borderRadius: _statusExpanded
+                        ? BorderRadius.vertical(top: Radius.circular(12.r))
+                        : BorderRadius.circular(AppSpacing.radiusM),
                   ),
                   child: Row(
                     children: [
@@ -217,19 +246,61 @@ class _EditExecutorCardScreenState extends State<EditExecutorCardScreen> {
                           ),
                         ),
                       ),
-                      Icon(Icons.keyboard_arrow_down_rounded,
-                          size: 22.r, color: AppColors.textPrimary),
+                      Icon(
+                        _statusExpanded
+                            ? Icons.keyboard_arrow_up_rounded
+                            : Icons.keyboard_arrow_down_rounded,
+                        size: 22.r,
+                        color: AppColors.textPrimary,
+                      ),
                     ],
                   ),
                 ),
               ),
+              if (_statusExpanded)
+                Container(
+                  decoration: BoxDecoration(
+                    color: AppColors.fieldFill,
+                    borderRadius: BorderRadius.vertical(
+                        bottom: Radius.circular(12.r)),
+                  ),
+                  child: Column(
+                    children: [
+                      Divider(height: 1, thickness: 0.5, color: Colors.grey.shade300),
+                      for (final s in _statusOptions)
+                        GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () => setState(() {
+                            _selectedStatus = s;
+                            _statusExpanded = false;
+                          }),
+                          child: Padding(
+                            padding: EdgeInsets.symmetric(
+                                horizontal: AppSpacing.md, vertical: 12.h),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Text(s, style: AppTextStyles.body),
+                                ),
+                                if (_selectedStatus == s)
+                                  Icon(Icons.check_rounded,
+                                      color: AppColors.primary, size: 22.r),
+                              ],
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
               SizedBox(height: AppSpacing.lg),
               _SectionTitle('О себе'),
               SizedBox(height: AppSpacing.xs),
               _TintField(
                 controller: _about,
                 hint: 'Расскажите о себе',
-                maxLines: 4,
+                minLines: 1,
+                maxLength: 500,
+                maxLines: 5,
               ),
               SizedBox(height: AppSpacing.xs),
               Text(
@@ -238,85 +309,108 @@ class _EditExecutorCardScreenState extends State<EditExecutorCardScreen> {
                 style: AppTextStyles.caption
                     .copyWith(color: const Color(0xFF707070)),
               ),
-              SizedBox(height: AppSpacing.xl),
-              PrimaryButton(
-                label: widget.editing ? 'Сохранить' : 'Создать',
+                  SizedBox(height: AppSpacing.md),
+                  ],
+                ),
+              ),
+            ),
+            Container(
+              decoration: BoxDecoration(
+                color: AppColors.background,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.06),
+                    offset: const Offset(0, -1),
+                    blurRadius: 8,
+                  ),
+                ],
+              ),
+              padding: EdgeInsets.fromLTRB(16.w, 12.h, 16.w, 16.h),
+              child: PrimaryButton(
+                label: 'Сохранить',
                 onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Сохранено'),
-                      duration: Duration(seconds: 2),
-                    ),
-                  );
-                  Navigator.of(context).maybePop();
+                  ExecutorCardData.location = _location.text;
+                  ExecutorCardData.radius = _radiusIndex >= 0 ? _radiusOptions[_radiusIndex] : null;
+                  ExecutorCardData.machinery = _selMach.toList();
+                  ExecutorCardData.categories = _selCat.toList();
+                  ExecutorCardData.experience = _experience.text;
+                  ExecutorCardData.status = _selectedStatus;
+                  ExecutorCardData.about = _about.text;
+                  Navigator.of(context).pop();
                 },
               ),
-              if (widget.editing) ...[
-                SizedBox(height: AppSpacing.sm),
-                SizedBox(
-                  width: double.infinity,
-                  height: 54.h,
-                  child: TextButton(
-                    onPressed: () async {
-                      final ok = await showDeleteExecutorCardAlert(context);
-                      if (ok == true && context.mounted) {
-                        Navigator.of(context).maybePop();
-                      }
-                    },
-                    child: Text(
-                      'Удалить карточку',
-                      style: AppTextStyles.button
-                          .copyWith(color: AppColors.error),
-                    ),
-                  ),
-                ),
-              ],
-              SizedBox(height: AppSpacing.sm),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
   }
 }
 
-class _HeaderRow extends StatelessWidget {
+class _HeaderRow extends StatefulWidget {
+  @override
+  State<_HeaderRow> createState() => _HeaderRowState();
+}
+
+class _HeaderRowState extends State<_HeaderRow> {
+  Future<void> _openCrop() async {
+    final result = await Navigator.of(context).push<CropResult>(
+      MaterialPageRoute(builder: (_) => const PhotoCropScreen()),
+    );
+    if (result != null && mounted) {
+      setState(() => CropResult.saved = result);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        Container(
-          width: 56.r,
-          height: 56.r,
-          decoration: const BoxDecoration(
-            color: AppColors.surfaceVariant,
-            shape: BoxShape.circle,
+        GestureDetector(
+          onTap: _openCrop,
+          child: SizedBox(
+            width: 80.r,
+            height: 80.r,
+            child: Stack(
+              children: [
+                CroppedAvatar(size: 80.r),
+                Positioned(
+                  right: -2.w,
+                  bottom: 0,
+                  child: Image.asset(
+                    'assets/icons/ui/edit.webp',
+                    width: 28.r,
+                    height: 28.r,
+                  ),
+                ),
+              ],
+            ),
           ),
-          alignment: Alignment.center,
-          child: Icon(Icons.person, size: 32.r, color: AppColors.textTertiary),
         ),
-        SizedBox(width: AppSpacing.sm),
+        SizedBox(width: 12.w),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('Александр Иванов',
-                  style: AppTextStyles.titleS
-                      .copyWith(fontWeight: FontWeight.w600)),
-              SizedBox(height: 2.h),
+                  style: AppTextStyles.titleS),
+              SizedBox(height: 4.h),
               Row(
                 children: [
-                  Icon(Icons.star_rounded,
-                      color: AppColors.ratingStar, size: 16.r),
+                  Image.asset('assets/images/catalog/star.webp',
+                      width: 20.r, height: 20.r),
                   SizedBox(width: 4.w),
-                  Text('4,5', style: AppTextStyles.caption),
-                  SizedBox(width: 6.w),
-                  Text('15 отзывов',
-                      style: AppTextStyles.caption.copyWith(
-                        color: AppColors.primary,
-                        decoration: TextDecoration.underline,
-                        decorationColor: AppColors.primary,
-                      )),
+                  Text('4,5', style: AppTextStyles.body),
+                  SizedBox(width: 8.w),
+                  GestureDetector(
+                    onTap: () => context.push('/profile/reviews'),
+                    child: Text('10 отзывов',
+                        style: AppTextStyles.body.copyWith(
+                          color: AppColors.textPrimary,
+                          decoration: TextDecoration.underline,
+                        )),
+                  ),
                 ],
               ),
             ],
@@ -334,71 +428,53 @@ class _SectionTitle extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       title,
-      style: AppTextStyles.bodyMedium.copyWith(fontWeight: FontWeight.w700),
+      style: AppTextStyles.bodyL.copyWith(fontWeight: FontWeight.w700),
     );
   }
 }
 
-class _LocationField extends StatelessWidget {
-  const _LocationField({required this.controller});
-  final TextEditingController controller;
-
-  @override
-  Widget build(BuildContext context) {
-    return TextField(
-      controller: controller,
-      style: AppTextStyles.body,
-      decoration: InputDecoration(
-        hintText: 'Укажите ваше местоположение',
-        hintStyle:
-            AppTextStyles.body.copyWith(color: AppColors.textTertiary),
-        filled: true,
-        fillColor: AppColors.fieldFill,
-        contentPadding: EdgeInsets.symmetric(
-            horizontal: AppSpacing.md, vertical: AppSpacing.sm),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppSpacing.radiusM),
-          borderSide: BorderSide.none,
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppSpacing.radiusM),
-          borderSide: BorderSide.none,
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppSpacing.radiusM),
-          borderSide: const BorderSide(color: AppColors.primary),
-        ),
-      ),
-    );
-  }
-}
-
-class _RadiusOption extends StatelessWidget {
-  const _RadiusOption({
+class _RadioRow extends StatelessWidget {
+  const _RadioRow({
     required this.label,
     required this.selected,
     required this.onTap,
   });
-
   final String label;
   final bool selected;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return InkWell(
       onTap: onTap,
-      behavior: HitTestBehavior.opaque,
       child: Padding(
-        padding: EdgeInsets.symmetric(vertical: 4.h),
+        padding: EdgeInsets.symmetric(vertical: 8.h),
         child: Row(
-          children: [
-            Icon(
-              selected ? Icons.radio_button_checked : Icons.radio_button_unchecked,
-              size: 22.r,
-              color: selected ? AppColors.primary : AppColors.textTertiary,
+          children: <Widget>[
+            Container(
+              width: 20.r,
+              height: 20.r,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: selected ? AppColors.primary : AppColors.border,
+                  width: 1.5,
+                ),
+              ),
+              child: selected
+                  ? Center(
+                      child: Container(
+                        width: 10.r,
+                        height: 10.r,
+                        decoration: const BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                    )
+                  : null,
             ),
-            SizedBox(width: AppSpacing.xs),
+            SizedBox(width: 12.w),
             Text(label, style: AppTextStyles.body),
           ],
         ),
@@ -411,17 +487,24 @@ class _TintField extends StatelessWidget {
   const _TintField({
     required this.controller,
     this.hint,
+    this.minLines = 1,
     this.maxLines = 1,
+    this.maxLength,
   });
   final TextEditingController controller;
   final String? hint;
+  final int minLines;
   final int maxLines;
+  final int? maxLength;
 
   @override
   Widget build(BuildContext context) {
     return TextField(
       controller: controller,
+      minLines: minLines,
       maxLines: maxLines,
+      maxLength: maxLength,
+      buildCounter: maxLength != null ? (_, {required currentLength, required isFocused, required maxLength}) => null : null,
       style: AppTextStyles.body,
       decoration: InputDecoration(
         hintText: hint,
@@ -447,42 +530,47 @@ class _TintField extends StatelessWidget {
   }
 }
 
-class _ChipWrap extends StatelessWidget {
-  const _ChipWrap({
-    required this.items,
+class _ChipGrid extends StatelessWidget {
+  const _ChipGrid({
+    required this.values,
     required this.selected,
     required this.onToggle,
   });
-  final List<String> items;
+  final List<String> values;
   final Set<String> selected;
-  final void Function(String) onToggle;
+  final ValueChanged<String> onToggle;
 
   @override
   Widget build(BuildContext context) {
     return Wrap(
       spacing: 8.w,
       runSpacing: 8.h,
-      children: items.map((label) {
-        final on = selected.contains(label);
+      children: values.map((String v) {
+        final bool sel = selected.contains(v);
         return GestureDetector(
-          onTap: () => onToggle(label),
+          onTap: () => onToggle(v),
           child: Container(
             padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 6.h),
             decoration: BoxDecoration(
-              color: on ? AppColors.primary : AppColors.surfaceVariant,
-              borderRadius: BorderRadius.circular(AppSpacing.radiusPill),
+              color: sel ? AppColors.primary : AppColors.surface,
+              border: Border.all(color: AppColors.primary, width: 1),
+              borderRadius: BorderRadius.circular(100.r),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(label,
-                    style: AppTextStyles.chip.copyWith(
-                      fontSize: 13.sp,
-                      color: on ? Colors.white : AppColors.textPrimary,
-                    )),
-                if (on) ...[
+              children: <Widget>[
+                Text(
+                  v,
+                  style: AppTextStyles.chip.copyWith(
+                    color: sel ? Colors.white : AppColors.textPrimary,
+                    fontSize: 13.sp,
+                    fontWeight: FontWeight.w400,
+                  ),
+                ),
+                if (sel) ...<Widget>[
                   SizedBox(width: 6.w),
-                  Icon(Icons.close_rounded, size: 12.r, color: Colors.white),
+                  Icon(Icons.close_rounded,
+                      size: 14.r, color: Colors.white),
                 ],
               ],
             ),

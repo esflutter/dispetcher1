@@ -1,4 +1,3 @@
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
@@ -9,19 +8,18 @@ import 'package:dispatcher_1/core/theme/app_text_styles.dart';
 import 'package:dispatcher_1/core/widgets/dark_sub_app_bar.dart';
 import 'package:dispatcher_1/core/widgets/primary_button.dart';
 import 'package:dispatcher_1/features/catalog/widgets/catalog_search_bar.dart';
+import 'package:dispatcher_1/core/widgets/cropped_avatar.dart';
 import 'package:dispatcher_1/features/profile/widgets/verification_badge.dart';
 
 import 'widgets/executor_card_alerts.dart';
+import 'widgets/executor_card_paywall.dart';
 
-/// Состояние верификации карточки исполнителя.
-enum ExecutorCardStatus { empty, inReview, rejected, verified }
+enum ExecutorCardStatus { empty, inReview, rejected, verified, blocked }
 
-/// Экран «Моя карточка исполнителя» с разными состояниями верификации.
-/// Кнопки и баннер меняются в зависимости от [status].
 class ExecutorCardScreen extends StatefulWidget {
-  const ExecutorCardScreen({super.key, this.status = ExecutorCardStatus.empty});
+  const ExecutorCardScreen({super.key});
 
-  final ExecutorCardStatus status;
+  static bool cardCreated = false;
 
   @override
   State<ExecutorCardScreen> createState() => _ExecutorCardScreenState();
@@ -30,23 +28,70 @@ class ExecutorCardScreen extends StatefulWidget {
 class _ExecutorCardScreenState extends State<ExecutorCardScreen> {
   bool _alertShown = false;
 
+  bool get _filled => VerificationStatus.current == VerificationStatus.blocked ||
+      (VerificationStatus.current.isVerified && VerificationStatus.hasSubscription);
+
+  ExecutorCardStatus get _status {
+    switch (VerificationStatus.current) {
+      case VerificationStatus.verified:
+        return ExecutorCardScreen.cardCreated
+            ? ExecutorCardStatus.verified
+            : ExecutorCardStatus.empty;
+      case VerificationStatus.inProgress:
+        return ExecutorCardStatus.inReview;
+      case VerificationStatus.blocked:
+        return ExecutorCardStatus.blocked;
+      case VerificationStatus.rejected:
+      case VerificationStatus.notVerified:
+        return ExecutorCardStatus.empty;
+    }
+  }
+
   @override
   void initState() {
     super.initState();
-    if (widget.status == ExecutorCardStatus.inReview ||
-        widget.status == ExecutorCardStatus.rejected) {
+    if (_status == ExecutorCardStatus.inReview) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted && !_alertShown) {
           _alertShown = true;
-          showExecutorCardStatusDialog(context, widget.status);
+          showExecutorCardStatusDialog(context, _status);
         }
       });
     }
   }
 
+  Future<void> _onCreateTap() async {
+    if (_status == ExecutorCardStatus.inReview) {
+      await showExecutorCardStatusDialog(context, _status);
+      return;
+    }
+
+    if (VerificationStatus.current.isVerified) {
+      if (!VerificationStatus.hasSubscription) {
+        final bool? paid = await Navigator.of(context).push<bool>(
+          MaterialPageRoute<bool>(
+            fullscreenDialog: true,
+            builder: (_) => const ExecutorCardPaywall(),
+          ),
+        );
+        if (paid != true || !mounted) return;
+        VerificationStatus.hasSubscription = true;
+      }
+      if (mounted) context.push('/executor-card/edit');
+      return;
+    }
+
+    await showCreateExecutorCardAlert(context);
+    if (!mounted) return;
+
+    if (_status == ExecutorCardStatus.inReview && mounted) {
+      await showExecutorCardStatusDialog(context, _status);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final bool filled = widget.status == ExecutorCardStatus.verified;
+    final bool filled = _filled;
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: const DarkSubAppBar(title: 'Моя карточка исполнителя'),
@@ -56,30 +101,34 @@ class _ExecutorCardScreenState extends State<ExecutorCardScreen> {
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       body: SafeArea(
-        child: filled ? const _FilledCard() : _EmptyContent(status: widget.status),
-      ),
-      bottomNavigationBar: SafeArea(
-        top: false,
-        child: Padding(
-          padding: EdgeInsets.fromLTRB(
-              AppSpacing.screenH, 0, AppSpacing.screenH, AppSpacing.md),
-          child: filled
-              ? PrimaryButton(
-                  label: 'Редактировать',
-                  onPressed: () => context.push('/executor-card/edit'),
-                )
-              : PrimaryButton(
-                  label: 'Создать',
-                  onPressed: () async {
-                    final result = await showCreateExecutorCardAlert(context);
-                    if (result == true && context.mounted) {
-                      context.push('/assistant/chat',
-                          extra: <String, Object?>{
-                            'initial': 'verify_documents'
-                          });
-                    }
-                  },
-                ),
+        child: Column(
+          children: [
+            Expanded(
+              child: filled ? const _FilledCard() : _EmptyContent(status: _status),
+            ),
+            Container(
+              decoration: BoxDecoration(
+                color: AppColors.background,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.06),
+                    offset: const Offset(0, -1),
+                    blurRadius: 8,
+                  ),
+                ],
+              ),
+              padding: EdgeInsets.fromLTRB(16.w, 12.h, 16.w, 16.h),
+              child: filled
+                  ? PrimaryButton(
+                      label: 'Редактировать',
+                      onPressed: () => context.push('/executor-card/edit'),
+                    )
+                  : PrimaryButton(
+                      label: 'Создать',
+                      onPressed: _onCreateTap,
+                    ),
+            ),
+          ],
         ),
       ),
     );
@@ -97,8 +146,8 @@ class _EmptyContent extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          SizedBox(height: AppSpacing.md),
-          if (status == ExecutorCardStatus.verified)
+          SizedBox(height: 22.h),
+          if (VerificationStatus.current.isVerified)
             const FullWidthVerificationPill(
                 status: VerificationStatus.verified),
           Expanded(
@@ -106,22 +155,17 @@ class _EmptyContent extends StatelessWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Image.asset('assets/icons/profile/executor_card.webp',
-                      width: 80.r, height: 80.r),
-                  SizedBox(height: AppSpacing.md),
                   Text(
                     'Создайте карточку\nисполнителя',
-                    style: AppTextStyles.h3
-                        .copyWith(fontWeight: FontWeight.w700),
+                    style: AppTextStyles.titleL,
                     textAlign: TextAlign.center,
                   ),
-                  SizedBox(height: AppSpacing.xs),
+                  SizedBox(height: 6.h),
                   Padding(
                     padding:
-                        EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+                        EdgeInsets.symmetric(horizontal: 16.w),
                     child: Text(
-                      'Заказчики смогут посмотреть информацию '
-                      'о вас, услугах и связаться с вами.',
+                      'Заказчики смогут посмотреть информацию о вас, услугах и связаться с вами.',
                       style: AppTextStyles.body.copyWith(
                         color: AppColors.textSecondary,
                       ),
@@ -138,84 +182,69 @@ class _EmptyContent extends StatelessWidget {
   }
 }
 
+/// Данные карточки исполнителя (до появления бэкенда).
+class ExecutorCardData {
+  static String phone = '+7 999 123-45-67';
+  static String? location;
+  static String? radius;
+  static List<String> machinery = [];
+  static List<String> categories = [];
+  static String? experience;
+  static String? status;
+  static String? about;
+}
+
 class _FilledCard extends StatelessWidget {
   const _FilledCard();
 
-  static const _machinery = <String>[
-    'Экскаватор-погрузчик',
-    'Погрузчик',
-    'Миниэкскаватор',
-    'Минипогрузчик',
-    'Буроям',
-    'Самогруз',
-    'Автокран',
-    'Самосвалы (до 5тн, 15, 25)',
-    'Бетононасос',
-    'Эвакуатор',
-    'Автовышка',
-    'Манипулятор',
-    'Минитрактор',
-    'Экскаватор',
-    'Инертные материалы',
-  ];
-
-  static const _categories = <String>[
-    'Земляные работы',
-    'Погрузочно-разгрузочные работы',
-    'Перевозка материалов',
-    'Строительные работы',
-    'Дорожные работы',
-    'Буровые работы',
-    'Высотные работы',
-    'Демонтажные работы',
-    'Благоустройство территории',
-  ];
+  String _val(String? v) => (v != null && v.isNotEmpty) ? v : '—';
 
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
-      padding: EdgeInsets.fromLTRB(
-          AppSpacing.screenH, AppSpacing.md, AppSpacing.screenH, AppSpacing.xl),
+      padding: EdgeInsets.fromLTRB(16.w, 16.h, 16.w, 24.h),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _HeaderRow(),
-          SizedBox(height: AppSpacing.lg),
+          SizedBox(height: 20.h),
           _SectionTitle('Номер телефона'),
           SizedBox(height: 4.h),
-          Text('+7 999 123-45-67', style: AppTextStyles.body),
-          SizedBox(height: AppSpacing.md),
+          Text(ExecutorCardData.phone, style: AppTextStyles.body),
+          SizedBox(height: 16.h),
           _SectionTitle('Местоположение'),
           SizedBox(height: 4.h),
-          Text('Московская область, Москва', style: AppTextStyles.body),
-          SizedBox(height: 2.h),
-          Text('Заказы в радиусе 10 км',
-              style: AppTextStyles.caption
-                  .copyWith(color: AppColors.textTertiary)),
-          SizedBox(height: AppSpacing.md),
+          Text(_val(ExecutorCardData.location), style: AppTextStyles.body),
+          if (ExecutorCardData.radius != null && ExecutorCardData.radius!.isNotEmpty) ...[
+            SizedBox(height: 2.h),
+            Text(ExecutorCardData.radius!,
+                style: AppTextStyles.caption
+                    .copyWith(color: AppColors.textTertiary)),
+          ],
+          SizedBox(height: 16.h),
           _SectionTitle('Спецтехника'),
-          SizedBox(height: AppSpacing.xs),
-          _ChipWrap(items: _machinery),
-          SizedBox(height: AppSpacing.md),
+          SizedBox(height: 8.h),
+          ExecutorCardData.machinery.isNotEmpty
+              ? _ChipWrap(items: ExecutorCardData.machinery)
+              : Text('—', style: AppTextStyles.body),
+          SizedBox(height: 16.h),
           _SectionTitle('Категории услуг'),
-          SizedBox(height: AppSpacing.xs),
-          _ChipWrap(items: _categories),
-          SizedBox(height: AppSpacing.md),
+          SizedBox(height: 8.h),
+          ExecutorCardData.categories.isNotEmpty
+              ? _ChipWrap(items: ExecutorCardData.categories)
+              : Text('—', style: AppTextStyles.body),
+          SizedBox(height: 16.h),
           _SectionTitle('Опыт работы'),
           SizedBox(height: 4.h),
-          Text('5 лет', style: AppTextStyles.body),
-          SizedBox(height: AppSpacing.md),
+          Text(_val(ExecutorCardData.experience), style: AppTextStyles.body),
+          SizedBox(height: 16.h),
           _SectionTitle('Статус'),
           SizedBox(height: 4.h),
-          Text('Физ. лицо', style: AppTextStyles.body),
-          SizedBox(height: AppSpacing.md),
+          Text(_val(ExecutorCardData.status), style: AppTextStyles.body),
+          SizedBox(height: 16.h),
           _SectionTitle('О себе'),
           SizedBox(height: 4.h),
-          Text(
-            'Опыт работы более 5 лет. Своя техника в хорошем состоянии, '
-            'работаю без простоев. Готов выезжать в ближайшие районы.',
-            style: AppTextStyles.body,
-          ),
+          Text(_val(ExecutorCardData.about), style: AppTextStyles.body),
         ],
       ),
     );
@@ -228,38 +257,30 @@ class _HeaderRow extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: <Widget>[
-        Container(
-          width: 64.r,
-          height: 64.r,
-          decoration: const BoxDecoration(
-            color: AppColors.surfaceVariant,
-            shape: BoxShape.circle,
-          ),
-          alignment: Alignment.center,
-          child: Icon(Icons.person, size: 36.r, color: AppColors.textTertiary),
-        ),
-        SizedBox(width: AppSpacing.sm),
+        CroppedAvatar(size: 72.r),
+        SizedBox(width: 12.w),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
               Text('Александр Иванов',
-                  style:
-                      AppTextStyles.h3.copyWith(fontWeight: FontWeight.w600)),
+                  style: AppTextStyles.titleS),
               SizedBox(height: 4.h),
               Row(
                 children: [
-                  Icon(Icons.star_rounded,
-                      color: AppColors.ratingStar, size: 18.r),
+                  Image.asset('assets/images/catalog/star.webp',
+                      width: 20.r, height: 20.r),
                   SizedBox(width: 4.w),
-                  Text('4,5', style: AppTextStyles.bodyMedium),
+                  Text('4,5', style: AppTextStyles.body),
                   SizedBox(width: 8.w),
-                  Text(
-                    '15 отзывов',
-                    style: AppTextStyles.bodyMedium.copyWith(
-                      color: AppColors.primary,
-                      decoration: TextDecoration.underline,
-                      decorationColor: AppColors.primary,
+                  GestureDetector(
+                    onTap: () => context.push('/profile/reviews'),
+                    child: Text(
+                      '10 отзывов',
+                      style: AppTextStyles.body.copyWith(
+                        color: AppColors.textPrimary,
+                        decoration: TextDecoration.underline,
+                      ),
                     ),
                   ),
                 ],
@@ -299,7 +320,7 @@ class _ChipWrap extends StatelessWidget {
                 padding:
                     EdgeInsets.symmetric(horizontal: 12.w, vertical: 6.h),
                 decoration: BoxDecoration(
-                  color: AppColors.primary,
+                  color: AppColors.fieldFill,
                   borderRadius:
                       BorderRadius.circular(AppSpacing.radiusPill),
                 ),
@@ -307,7 +328,7 @@ class _ChipWrap extends StatelessWidget {
                   label,
                   style: AppTextStyles.chip.copyWith(
                     fontSize: 13.sp,
-                    color: Colors.white,
+                    color: AppColors.textPrimary,
                   ),
                 ),
               ))
@@ -316,30 +337,32 @@ class _ChipWrap extends StatelessWidget {
   }
 }
 
-/// Центрированный alert-dialog о статусе верификации карточки исполнителя.
 Future<void> showExecutorCardStatusDialog(
     BuildContext context, ExecutorCardStatus status) {
   final String title;
   final String text;
   if (status == ExecutorCardStatus.inReview) {
     title = 'Ваши документы ещё\nна проверке';
-    text = 'Вы получите уведомление, когда\nпроверка завершится';
+    text = 'Вы получите уведомление, когда проверка завершится';
+  } else if (status == ExecutorCardStatus.blocked) {
+    title = 'Ваш профиль заблокирован\nна 30 дней';
+    text = 'Во избежание дальнейших блокировок избегайте отзывов с низкой оценкой';
   } else {
     title = 'Документы не прошли\nпроверку';
-    text = 'Проверьте данные и отправьте\nдокументы ещё раз';
+    text = 'Проверьте данные и отправьте документы ещё раз';
   }
-  return showCupertinoDialog<void>(
+  return showDialog<void>(
     context: context,
-    barrierDismissible: true,
+    barrierColor: Colors.black.withValues(alpha: 0.35),
     builder: (ctx) => Dialog(
-      backgroundColor: AppColors.surface,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(AppSpacing.radiusL),
-      ),
-      insetPadding: EdgeInsets.symmetric(horizontal: AppSpacing.xl),
-      child: Padding(
-        padding: EdgeInsets.fromLTRB(
-            AppSpacing.md, AppSpacing.md, AppSpacing.md, AppSpacing.md),
+      insetPadding: EdgeInsets.symmetric(horizontal: 16.w),
+      backgroundColor: Colors.transparent,
+      child: Container(
+        padding: EdgeInsets.fromLTRB(16.r, 14.r, 16.r, 22.r),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(20.r),
+        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -349,26 +372,28 @@ Future<void> showExecutorCardStatusDialog(
               child: GestureDetector(
                 onTap: () => Navigator.of(ctx).pop(),
                 child: Icon(Icons.close_rounded,
-                    size: 22.r, color: AppColors.textSecondary),
+                    size: 22.r, color: AppColors.textTertiary),
               ),
             ),
+            SizedBox(height: 20.h),
             Text(
               title,
-              style: AppTextStyles.h3.copyWith(fontWeight: FontWeight.w700),
               textAlign: TextAlign.center,
+              style: AppTextStyles.titleL.copyWith(fontWeight: FontWeight.w700),
             ),
-            SizedBox(height: AppSpacing.xs),
+            SizedBox(height: 8.h),
             Text(
               text,
-              style:
-                  AppTextStyles.body.copyWith(color: AppColors.textSecondary),
               textAlign: TextAlign.center,
+              style: AppTextStyles.bodyMRegular
+                  .copyWith(color: AppColors.textSecondary),
             ),
-            SizedBox(height: AppSpacing.lg),
+            SizedBox(height: 18.h),
             PrimaryButton(
               label: 'Ок',
               onPressed: () => Navigator.of(ctx).pop(),
             ),
+            SizedBox(height: 12.h),
           ],
         ),
       ),
