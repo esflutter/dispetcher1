@@ -1,21 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 
-/// Состояния заказа исполнителя — определяют цвет и текст пилюли статуса.
+/// Состояния заказа заказчика — определяют цвет и текст пилюли статуса.
 enum MyOrderStatus {
-  /// Заказ принят исполнителем, ждём подтверждения от заказчика.
+  /// Заказ на рассмотрении — ждём откликов от исполнителей.
   waiting,
 
-  /// Заказчик выбрал — можно связаться. Зелёная.
+  /// Исполнитель выбран — можно связаться.
   accepted,
 
   /// Заказ выполнен.
   completed,
 
-  /// Выбран другой исполнитель.
+  /// Не нашёлся исполнитель.
   rejectedOther,
 
-  /// Заказ был отклонён.
+  /// Заказ был отменён.
   rejectedDeclined,
 
   /// Заказ был снят с публикации.
@@ -26,15 +26,15 @@ extension MyOrderStatusX on MyOrderStatus {
   String get label {
     switch (this) {
       case MyOrderStatus.waiting:
-        return 'Ждёт подтверждения';
+        return 'Ждёт подтверждения от исполнителя';
       case MyOrderStatus.accepted:
-        return 'Свяжитесь с заказчиком';
+        return 'Свяжитесь с исполнителем';
       case MyOrderStatus.completed:
         return 'Завершён';
       case MyOrderStatus.rejectedOther:
-        return 'Выбран другой исполнитель';
+        return 'Исполнитель не найден';
       case MyOrderStatus.rejectedDeclined:
-        return 'Заказ был отклонён';
+        return 'Заказ отменён';
       case MyOrderStatus.rejectedRemoved:
         return 'Заказ был снят с публикации';
     }

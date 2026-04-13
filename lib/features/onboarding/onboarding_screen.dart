@@ -22,18 +22,18 @@ class _OnbStep {
 const List<_OnbStep> _steps = <_OnbStep>[
   _OnbStep(
     image: 'assets/images/onboarding/onb_1.webp',
-    title: 'Откликайтесь на заказы',
-    description: 'Предлагайте свои услуги и получайте\nпредложения от заказчиков',
+    title: 'Найдите технику под задачу',
+    description: 'Опишите задачу — исполнители\nоткликнутся',
   ),
   _OnbStep(
     image: 'assets/images/onboarding/onb_2.webp',
-    title: 'Находите заказы рядом',
-    description: 'Выбирайте подходящие заявки\nпод свою технику',
+    title: 'Выберите исполнителя',
+    description: 'Сравните предложения\nи выберите подходящего',
   ),
   _OnbStep(
     image: 'assets/images/onboarding/onb_3.webp',
-    title: 'Работайте напрямую',
-    description: 'Получайте контакты заказчика\nи договаривайтесь без посредников',
+    title: 'Начните работу',
+    description: 'Свяжитесь напрямую\nи договоритесь о деталях',
   ),
 ];
 

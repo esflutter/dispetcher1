@@ -57,7 +57,7 @@ class _SplashScreenState extends State<SplashScreen> {
                   ),
                   SizedBox(height: 24.h),
                   Text(
-                    'Диспетчер №1 PRO',
+                    'Диспетчер №1',
                     style: AppTextStyles.h3.copyWith(
                       fontWeight: FontWeight.w700,
                       color: AppColors.textPrimary,

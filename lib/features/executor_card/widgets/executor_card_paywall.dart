@@ -121,7 +121,7 @@ class _ExecutorCardPaywallState extends State<ExecutorCardPaywall>
       child: Column(
         children: <Widget>[
           Text(
-            'Оплатите размещение\nкарточки исполнителя',
+            'Оплатите размещение\nкарточки заказчика',
             textAlign: TextAlign.center,
             style: TextStyle(
               fontFamily: 'Roboto',

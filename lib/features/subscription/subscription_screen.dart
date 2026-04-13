@@ -186,7 +186,7 @@ class _StatusCard extends StatelessWidget {
       case SubscriptionStatus.inactive:
         title = 'Подписка неактивна';
         subtitle =
-            'Оплатите подписку, чтобы откликаться на заказы и заказчики видели ваш профиль';
+            'Оплатите подписку, чтобы размещать заказы и находить исполнителей';
     }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

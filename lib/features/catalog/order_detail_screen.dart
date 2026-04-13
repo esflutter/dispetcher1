@@ -11,8 +11,8 @@ import 'package:dispatcher_1/features/catalog/widgets/respond_bottom_sheet.dart'
 import 'package:dispatcher_1/features/catalog/widgets/subscription_paywall.dart';
 import 'package:dispatcher_1/features/profile/widgets/verification_badge.dart';
 
-/// Карточка заказа (детали). По Figma — заголовок заказчика сверху,
-/// далее «номер заказа → заголовок → дата публикации → секции».
+/// Карточка исполнителя (детали). По Figma — заголовок исполнителя сверху,
+/// далее «техника → местоположение → категории → описание → стоимость».
 class OrderDetailScreen extends StatefulWidget {
   const OrderDetailScreen({
     super.key,
@@ -137,7 +137,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
         title: Padding(
           padding: EdgeInsets.only(top: 2.h),
           child: Text(
-            'Нужен экскаватор для копки тран...',
+            'Карточка исполнителя',
             style: AppTextStyles.titleS.copyWith(color: Colors.white),
             overflow: TextOverflow.ellipsis,
           ),
@@ -167,34 +167,22 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                           ),
                         ),
                       ),
-                      SizedBox(height: 10.h),
-                      Text('№123456',
-                          style: AppTextStyles.caption
-                              .copyWith(color: AppColors.textTertiary)),
-                      SizedBox(height: 4.h),
-                      Text('Разработка котлована под фундамент',
-                          style: AppTextStyles.titleL.copyWith(height: 1.2)),
-                      SizedBox(height: 7.h),
-                      Text('Вчера в 14:30',
-                          style: AppTextStyles.caption
-                              .copyWith(color: AppColors.textTertiary)),
-                      SizedBox(height: 11.h),
+                      SizedBox(height: 16.h),
                       _Section(
-                        title: 'Дата и время аренды',
-                        child: Text('15 июня · 09:00–18:00',
-                            style: AppTextStyles.subBody.copyWith(fontWeight: FontWeight.w400)),
-                      ),
-                      _Section(
-                        title: 'Адрес',
+                        title: 'Местоположение',
                         child: Text(
-                            'Московская область, Москва, Улица1, д 144',
+                            'Московская область, Москва',
                             style: AppTextStyles.subBody.copyWith(
                               fontWeight: FontWeight.w400,
-                              decoration: TextDecoration.underline,
                             )),
                       ),
+                      Text('Заказы в радиусе 10 км',
+                          style: AppTextStyles.caption.copyWith(
+                            color: AppColors.textTertiary,
+                          )),
+                      SizedBox(height: 12.h),
                       _Section(
-                        title: 'Требуемая спецтехника',
+                        title: 'Спецтехника',
                         child: Wrap(
                           spacing: 8.w,
                           runSpacing: 8.h,
@@ -204,38 +192,64 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                         ),
                       ),
                       _Section(
-                        title: 'Категория работ',
+                        title: 'Категории услуг',
                         child: Wrap(
                           spacing: 8.w,
                           runSpacing: 8.h,
                           children: const <Widget>[
                             _OutlinedChip(label: 'Земляные работы'),
-                            _OutlinedChip(
-                                label: 'Подготовка строительной площадки'),
+                            _OutlinedChip(label: 'Погрузочно-разгрузочные работы'),
                           ],
                         ),
                       ),
                       _Section(
-                        title: 'Характер работ',
+                        title: 'Опыт работы',
+                        child: Text('5 лет',
+                            style: AppTextStyles.subBody.copyWith(fontWeight: FontWeight.w400)),
+                      ),
+                      _Section(
+                        title: 'Статус',
+                        child: Text('Физ. лицо',
+                            style: AppTextStyles.subBody.copyWith(fontWeight: FontWeight.w400)),
+                      ),
+                      _Section(
+                        title: 'О себе',
+                        child: Text(
+                            'Опыт работы более 5 лет. Своя техника в хорошем состоянии, работаю без простоев. Готов выезжать в ближайшие районы.',
+                            style: AppTextStyles.subBody.copyWith(fontWeight: FontWeight.w400)),
+                      ),
+                      _Section(
+                        title: 'Занятость',
+                        child: Text('С 9:00 до 18:00',
+                            style: AppTextStyles.subBody.copyWith(fontWeight: FontWeight.w400)),
+                      ),
+                      _Section(
+                        title: 'Услуги',
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: <Widget>[
-                            Text('Разработка грунта — 40 м³',
-                                style: AppTextStyles.subBody.copyWith(fontWeight: FontWeight.w400)),
-                            Text('Планировка участка — 2 × 12 × 15 м',
-                                style: AppTextStyles.subBody.copyWith(fontWeight: FontWeight.w400)),
+                            _ServiceItem(
+                              title: 'Экскаватор для копки траншеи',
+                              description: 'Экскаватор для земляных работ. Копка траншей, разработка котлованов, выравнивание участка. Работаю аккуратно, соблюдаю сроки. Возможен выезд в ближайшие районы.',
+                              priceHour: '1 000 ₽',
+                              priceDay: '14 000 ₽',
+                            ),
+                            SizedBox(height: 12.h),
+                            _ServiceItem(
+                              title: 'Самосвал для вывоза грунта',
+                              description: 'Вывоз грунта, мусора и сыпучих материалов. Работаю быстро, без задержек. Возможен выезд в ближайшие районы.',
+                              priceHour: '1 500 ₽',
+                              priceDay: '18 000 ₽',
+                            ),
+                            SizedBox(height: 12.h),
+                            _ServiceItem(
+                              title: 'Работы на высоте',
+                              description: 'Работы на высоте: монтаж, обслуживание, обрезка деревьев. Техника исправна, работаю аккуратно.',
+                              priceHour: '2 000 ₽',
+                              priceDay: '20 000 ₽',
+                            ),
                           ],
                         ),
-                      ),
-                      _Section(
-                        title: 'Стоимость',
-                        child: Text(widget.price,
-                            style: TextStyle(
-                              fontFamily: 'Roboto',
-                              fontSize: 16.sp,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.primary,
-                            )),
                       ),
                     ],
                   ),
@@ -258,7 +272,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                 16.w,
                 16.h + MediaQuery.of(context).padding.bottom),
             child: PrimaryButton(
-              label: 'Откликнуться',
+              label: 'Предложить заказ',
               onPressed: _onRespondTap,
             ),
           ),
@@ -382,6 +396,88 @@ class _OutlinedChip extends StatelessWidget {
   }
 }
 
+class _ServiceItem extends StatelessWidget {
+  const _ServiceItem({
+    required this.title,
+    required this.description,
+    this.priceHour,
+    this.priceDay,
+  });
+  final String title;
+  final String description;
+  final String? priceHour;
+  final String? priceDay;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.all(12.r),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceVariant,
+        borderRadius: BorderRadius.circular(12.r),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            title,
+            style: TextStyle(
+              fontFamily: 'Roboto',
+              fontSize: 15.sp,
+              fontWeight: FontWeight.w600,
+              height: 1.3,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          SizedBox(height: 4.h),
+          Text(
+            description,
+            style: TextStyle(
+              fontFamily: 'Roboto',
+              fontSize: 13.sp,
+              fontWeight: FontWeight.w400,
+              height: 1.4,
+              color: AppColors.textSecondary,
+            ),
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
+          ),
+          if (priceHour != null || priceDay != null) ...<Widget>[
+            SizedBox(height: 8.h),
+            Row(
+              children: <Widget>[
+                if (priceHour != null) ...<Widget>[
+                  Text('₽ / час  ', style: TextStyle(
+                    fontFamily: 'Roboto', fontSize: 12.sp,
+                    color: AppColors.textTertiary,
+                  )),
+                  Text(priceHour!, style: TextStyle(
+                    fontFamily: 'Roboto', fontSize: 14.sp,
+                    fontWeight: FontWeight.w700, color: AppColors.primary,
+                  )),
+                ],
+                if (priceHour != null && priceDay != null)
+                  SizedBox(width: 16.w),
+                if (priceDay != null) ...<Widget>[
+                  Text('₽ / день  ', style: TextStyle(
+                    fontFamily: 'Roboto', fontSize: 12.sp,
+                    color: AppColors.textTertiary,
+                  )),
+                  Text(priceDay!, style: TextStyle(
+                    fontFamily: 'Roboto', fontSize: 14.sp,
+                    fontWeight: FontWeight.w700, color: AppColors.primary,
+                  )),
+                ],
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
 class _PickEquipmentSheet extends StatefulWidget {
   const _PickEquipmentSheet({required this.options});
   final List<String> options;
@@ -412,7 +508,7 @@ class _PickEquipmentSheetState extends State<_PickEquipmentSheet> {
         children: <Widget>[
           SizedBox(height: 16.h),
           Text(
-            'Выберите технику, на которой\nвы готовы выполнить работу',
+            'Выберите технику, которая\nвам необходима',
             textAlign: TextAlign.center,
             style: TextStyle(
               fontFamily: 'Roboto',
@@ -432,7 +528,7 @@ class _PickEquipmentSheetState extends State<_PickEquipmentSheet> {
             ),
           SizedBox(height: 16.h),
           PrimaryButton(
-            label: 'Откликнуться',
+            label: 'Предложить заказ',
             onPressed: _picked.isEmpty
                 ? null
                 : () => Navigator.of(context).pop(_picked.toList()),

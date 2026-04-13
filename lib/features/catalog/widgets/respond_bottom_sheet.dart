@@ -7,9 +7,9 @@ import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
 import 'package:dispatcher_1/core/widgets/primary_button.dart';
 
-/// Модальное окно отклика на заказ. Два состояния по Figma:
+/// Модальное окно предложения заказа исполнителю. Два состояния:
 ///   verified == false → «Подтвердите свои данные»
-///   verified == true  → «Ваш отклик отправлен!»
+///   verified == true  → «Ваше предложение отправлено!»
 class RespondModalDialog extends StatelessWidget {
   const RespondModalDialog({super.key, required this.verified});
 
@@ -52,8 +52,8 @@ class RespondModalDialog extends StatelessWidget {
         ),
         SizedBox(height: 10.h),
         Text(
-          'Заказчик рассмотрит вашу заявку на заказ. Если он выберет вас, '
-          'заказ появится в разделе «Мои заказы».',
+          'Исполнитель рассмотрит вашу заявку на заказ. Если он согласен — '
+          'заказ появится в разделе Мои заказы.',
           textAlign: TextAlign.center,
           style: AppTextStyles.bodyMRegular
               .copyWith(color: AppColors.textSecondary),
@@ -90,7 +90,7 @@ class RespondModalDialog extends StatelessWidget {
         ),
         SizedBox(height: 10.h),
         Text(
-          'Чтобы откликаться на заказы, нужно отправить документы на проверку. '
+          'Чтобы предлагать заказы исполнителям, нужно отправить документы на проверку. '
           'Это займёт пару минут.',
           textAlign: TextAlign.center,
           style: AppTextStyles.body

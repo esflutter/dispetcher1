@@ -11,8 +11,8 @@ import 'package:dispatcher_1/features/catalog/order_feed_screen.dart';
 import 'package:dispatcher_1/features/catalog/widgets/category_card.dart';
 import 'package:dispatcher_1/features/catalog/widgets/order_card.dart';
 
-/// Экран «Каталог / категории» — заголовок «Поиск заказов» в тёмном
-/// nav-баре, поле поиска и сетка 2×5 категорий (Figma 8:2139).
+/// Экран «Каталог / категории» — заголовок «Поиск исполнителей» в тёмном
+/// nav-баре, поле поиска и сетка категорий техники (Figma заказчик).
 class CatalogCategoriesScreen extends StatefulWidget {
   const CatalogCategoriesScreen({super.key});
 
@@ -51,48 +51,46 @@ class _CatalogCategoriesScreenState extends State<CatalogCategoriesScreen> {
   static const List<_SearchableOrder> _allOrders = <_SearchableOrder>[
     _SearchableOrder(
       id: '1',
-      title: 'Нужен экскаватор для копки траншеи',
-      address: 'Московская область, Москва, Улица1, д 144',
-      rentDate: '15 июня · 09:00–18:00',
-      publishedAgo: '2 часа назад',
+      title: 'Иванов Александр',
+      address: 'Московская область, Москва',
+      rentDate: 'Экскаватор JCB 3CX',
+      publishedAgo: 'Опыт: 5 лет',
       equipment: <String>['Экскаватор'],
     ),
     _SearchableOrder(
       id: '2',
-      title: 'Земляные работы',
-      address: 'Московская область, Москва, Улица1, д 144',
-      rentDate: '15 июня · 09:00–18:00',
-      publishedAgo: 'Сегодня в 11:30',
+      title: 'Петров Сергей',
+      address: 'Московская область, Подольск',
+      rentDate: 'Автокран Liebherr LTM',
+      publishedAgo: 'Опыт: 8 лет',
       equipment: <String>['Автокран', 'Экскаватор'],
     ),
     _SearchableOrder(
       id: '3',
-      title: 'Разработка котлована под фундамент',
-      address: 'Московская область, Москва, Улица1, д 144',
-      rentDate: '15 июня · 09:00–18:00',
-      publishedAgo: 'Сегодня в 11:30',
+      title: 'Сидоров Дмитрий',
+      address: 'Московская область, Химки',
+      rentDate: 'Экскаватор-погрузчик CAT',
+      publishedAgo: 'Опыт: 3 года',
       equipment: <String>[
         'Экскаватор',
         'Автокран',
-        'Эвакуатор',
         'Манипулятор',
-        'Автовышка',
       ],
     ),
     _SearchableOrder(
       id: '4',
-      title: 'Погрузка и вывоз строительного мусора',
-      address: 'Московская область, Москва, Улица1, д 144',
-      rentDate: '16 июня · 09:00–18:00',
-      publishedAgo: 'Сегодня в 09:10',
+      title: 'Козлов Андрей',
+      address: 'Московская область, Люберцы',
+      rentDate: 'Самосвал КАМАЗ',
+      publishedAgo: 'Опыт: 10 лет',
       equipment: <String>['Самосвал', 'Погрузчик'],
     ),
     _SearchableOrder(
       id: '5',
-      title: 'Монтаж вентиляции на крыше',
-      address: 'Московская область, Москва, Улица1, д 144',
-      rentDate: '17 июня · 09:00–18:00',
-      publishedAgo: 'Вчера',
+      title: 'Морозов Виктор',
+      address: 'Московская область, Одинцово',
+      rentDate: 'Автовышка 22 м',
+      publishedAgo: 'Опыт: 6 лет',
       equipment: <String>['Автовышка'],
     ),
   ];
@@ -240,7 +238,7 @@ class _CatalogHeader extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: <Widget>[
               Text(
-                'Поиск заказов',
+                'Поиск исполнителя',
                 style: AppTextStyles.h1.copyWith(color: AppColors.surface),
               ),
               GestureDetector(

@@ -72,9 +72,9 @@ class _TariffsSheet extends StatelessWidget {
   final TariffsVariant variant;
 
   static const _ordersBullets = [
-    'Откликайтесь на заказы',
-    'Попадайте в список исполнителей',
-    'Получайте новые заявки',
+    'Размещайте заказы',
+    'Находите проверенных исполнителей',
+    'Получайте отклики на заказы',
   ];
 
   @override
@@ -97,9 +97,9 @@ class _TariffsSheet extends StatelessWidget {
         priceLabel = 'N ₽ за услугу';
         bullets = null;
       case TariffsVariant.executorCard:
-        title = 'Оплатите размещение\nкарточки исполнителя';
+        title = 'Оплатите размещение\nкарточки заказчика';
         description =
-            'После оплаты ваша карточка появится в\nкаталоге, и заказчики смогут выбрать вас';
+            'После оплаты ваша карточка появится в\nкаталоге, и исполнители смогут связаться с вами';
         priceLabel = 'N дней бесплатно, затем N ₽/месяц';
         bullets = null;
     }

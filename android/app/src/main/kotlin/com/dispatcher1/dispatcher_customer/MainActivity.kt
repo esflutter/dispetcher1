@@ -1,4 +1,4 @@
-package com.dispatcher1.dispatcher_1
+package com.dispatcher1.dispatcher_customer
 
 import io.flutter.embedding.android.FlutterActivity
 

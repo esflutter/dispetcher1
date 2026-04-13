@@ -4,9 +4,9 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
 
-/// Карточка заказа в ленте каталога. По Figma — без рамки, разделение
-/// нижней линией, сверху строка тэгов техники + время публикации,
-/// ниже жирный заголовок и две строки «Дата аренды:» / «Адрес:».
+/// Карточка исполнителя в ленте каталога. По Figma — без рамки, разделение
+/// нижней линией, сверху строка тэгов техники + доп. инфо,
+/// ниже жирный заголовок и две строки «Техника:» / «Местоположение:».
 class OrderCard extends StatelessWidget {
   const OrderCard({
     super.key,
@@ -67,9 +67,9 @@ class OrderCard extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
             ),
             SizedBox(height: 8.h),
-            _LabelLine(label: 'Дата аренды:', value: rentDate),
+            _LabelLine(label: 'Техника:', value: rentDate),
             SizedBox(height: 5.h),
-            _LabelLine(label: 'Адрес:', value: address),
+            _LabelLine(label: 'Местоположение:', value: address),
             if (price != null && price!.isNotEmpty) ...<Widget>[
               SizedBox(height: 10.h),
               Text(

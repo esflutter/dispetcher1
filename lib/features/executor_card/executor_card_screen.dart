@@ -97,7 +97,7 @@ class _ExecutorCardScreenState extends State<ExecutorCardScreen> {
     final bool filled = _filled;
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: const DarkSubAppBar(title: 'Моя карточка исполнителя'),
+      appBar: const DarkSubAppBar(title: 'Моя карточка заказчика'),
       floatingActionButton: Padding(
         padding: EdgeInsets.only(bottom: 88.h),
         child: AiAssistantFab(onTap: () => context.push('/assistant/chat')),
@@ -162,7 +162,7 @@ class _EmptyContent extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    'Создайте карточку\nисполнителя',
+                    'Создайте карточку\nзаказчика',
                     style: AppTextStyles.titleL,
                     textAlign: TextAlign.center,
                   ),
@@ -171,7 +171,7 @@ class _EmptyContent extends StatelessWidget {
                     padding:
                         EdgeInsets.symmetric(horizontal: 16.w),
                     child: Text(
-                      'Заказчики смогут посмотреть информацию о вас, услугах и связаться с вами.',
+                      'Создайте карточку, чтобы исполнители могли видеть информацию о вас и ваших заказах',
                       style: AppTextStyles.body.copyWith(
                         color: AppColors.textSecondary,
                       ),
@@ -188,7 +188,7 @@ class _EmptyContent extends StatelessWidget {
   }
 }
 
-/// Данные карточки исполнителя (до появления бэкенда).
+/// Данные карточки заказчика (до появления бэкенда).
 class ExecutorCardData {
   static String phone = '+7 999 123-45-67';
   static String? location;
@@ -218,39 +218,18 @@ class _FilledCard extends StatelessWidget {
           SizedBox(height: 4.h),
           Text(ExecutorCardData.phone, style: AppTextStyles.body),
           SizedBox(height: 16.h),
-          _SectionTitle('Местоположение'),
+          _SectionTitle('О себе'),
           SizedBox(height: 4.h),
-          Text(_val(ExecutorCardData.location), style: AppTextStyles.body),
-          if (ExecutorCardData.radius != null && ExecutorCardData.radius!.isNotEmpty) ...[
-            SizedBox(height: 2.h),
-            Text(ExecutorCardData.radius!,
-                style: AppTextStyles.caption
-                    .copyWith(color: AppColors.textTertiary)),
-          ],
-          SizedBox(height: 16.h),
-          _SectionTitle('Спецтехника'),
-          SizedBox(height: 8.h),
-          ExecutorCardData.machinery.isNotEmpty
-              ? _ChipWrap(items: ExecutorCardData.machinery)
-              : Text('—', style: AppTextStyles.body),
-          SizedBox(height: 16.h),
-          _SectionTitle('Категории услуг'),
-          SizedBox(height: 8.h),
-          ExecutorCardData.categories.isNotEmpty
-              ? _ChipWrap(items: ExecutorCardData.categories)
-              : Text('—', style: AppTextStyles.body),
-          SizedBox(height: 16.h),
-          _SectionTitle('Опыт работы'),
-          SizedBox(height: 4.h),
-          Text(_val(ExecutorCardData.experience), style: AppTextStyles.body),
+          Text(
+            _val(ExecutorCardData.about).isNotEmpty && _val(ExecutorCardData.about) != '—'
+                ? _val(ExecutorCardData.about)
+                : 'Частный заказчик. Периодически нужны услуги спецтехники для строительных работ и благоустройства участка.',
+            style: AppTextStyles.body,
+          ),
           SizedBox(height: 16.h),
           _SectionTitle('Статус'),
           SizedBox(height: 4.h),
           Text(_val(ExecutorCardData.status), style: AppTextStyles.body),
-          SizedBox(height: 16.h),
-          _SectionTitle('О себе'),
-          SizedBox(height: 4.h),
-          Text(_val(ExecutorCardData.about), style: AppTextStyles.body),
         ],
       ),
     );
@@ -308,37 +287,6 @@ class _SectionTitle extends StatelessWidget {
       title,
       style: AppTextStyles.bodyMedium
           .copyWith(fontWeight: FontWeight.w700),
-    );
-  }
-}
-
-class _ChipWrap extends StatelessWidget {
-  const _ChipWrap({required this.items});
-  final List<String> items;
-
-  @override
-  Widget build(BuildContext context) {
-    return Wrap(
-      spacing: 8.w,
-      runSpacing: 8.h,
-      children: items
-          .map((label) => Container(
-                padding:
-                    EdgeInsets.symmetric(horizontal: 12.w, vertical: 6.h),
-                decoration: BoxDecoration(
-                  color: AppColors.fieldFill,
-                  borderRadius:
-                      BorderRadius.circular(AppSpacing.radiusPill),
-                ),
-                child: Text(
-                  label,
-                  style: AppTextStyles.chip.copyWith(
-                    fontSize: 13.sp,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-              ))
-          .toList(),
     );
   }
 }

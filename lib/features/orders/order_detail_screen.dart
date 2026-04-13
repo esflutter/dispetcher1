@@ -10,24 +10,24 @@ import 'package:dispatcher_1/features/orders/review_screen.dart';
 import 'package:dispatcher_1/features/orders/widgets/order_alerts.dart';
 import 'package:dispatcher_1/features/orders/widgets/order_status_pill.dart';
 
-/// Состояние экрана деталей «моего» заказа.
+/// Состояние экрана деталей «моего» заказа (для заказчика).
 enum MyOrderDetailState {
-  /// Заказ только пришёл — нужно «Подтвердить / Отклонить».
-  /// Без секции «Номер телефона».
+  /// Заказ на рассмотрении — ожидаем откликов от исполнителей.
+  /// Можно «Отменить заказ».
   waitingConfirm,
 
-  /// Исполнитель уже подтвердил — показываем телефон заказчика
-  /// и единственную кнопку «Отказаться от заказа».
+  /// Исполнитель выбран — показываем телефон исполнителя
+  /// и кнопку «Отменить заказ».
   confirmed,
 
   /// Заказ выполнен. Виден телефон, кнопка «Оставить отзыв».
   completed,
 
-  /// Заказ не принят (выбран другой / отклонён / снят). Без телефона и кнопок.
+  /// Заказ отменён / завершён. Без телефона и кнопок.
   rejected,
 }
 
-/// Детали моего заказа (НЕ путать с публичной карточкой из features/catalog).
+/// Детали моего заказа для заказчика (НЕ путать с карточкой исполнителя из features/catalog).
 class MyOrderDetailScreen extends StatefulWidget {
   const MyOrderDetailScreen({
     super.key,
@@ -46,7 +46,7 @@ class MyOrderDetailScreen extends StatefulWidget {
     ],
     this.rentDate = '15 июня · 09:00–18:00',
     this.address = 'Московская область, Москва, Улица1, д 144',
-    this.customerName = 'Александр Иванов',
+    this.customerName = 'Иванов Александр',
     this.customerPhone = '+7 999 123-45-67',
     this.publishedAgo = 'Вчера в 14:30',
     this.orderNumber = '№123456',
@@ -191,7 +191,7 @@ class _MyOrderDetailScreenState extends State<MyOrderDetailScreen> {
                   if (_showPhone) ...<Widget>[
                     SizedBox(height: 12.h),
                     Text(
-                      'Номер телефона',
+                      'Номер телефона исполнителя',
                       style: TextStyle(
                         fontFamily: 'Roboto',
                         fontSize: 16.sp,
@@ -330,19 +330,13 @@ class _MyOrderDetailScreenState extends State<MyOrderDetailScreen> {
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
             PrimaryButton(
-              label: 'Подтвердить',
+              label: 'Выбрать другого исполнителя',
               enabled: !widget.isBlocked,
-              onPressed: () => showConfirmAcceptDialog(
-                context,
-                onConfirm: () {
-                  widget.onConfirm?.call();
-                  setState(() => _state = MyOrderDetailState.confirmed);
-                },
-              ),
+              onPressed: () => Navigator.of(context).maybePop(),
             ),
             SizedBox(height: 8.h),
             SecondaryButton(
-              label: 'Отклонить',
+              label: 'Переместить в архив',
               onPressed: () => showConfirmDeclineDialog(
                 context,
                 onDecline: () {
@@ -358,7 +352,7 @@ class _MyOrderDetailScreenState extends State<MyOrderDetailScreen> {
         );
       case MyOrderDetailState.confirmed:
         return PrimaryButton(
-          label: 'Отказаться от заказа',
+          label: 'Переместить в архив',
           onPressed: () => showConfirmRefuseDialog(
             context,
             onRefuse: () {

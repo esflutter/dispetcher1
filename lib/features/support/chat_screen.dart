@@ -281,13 +281,13 @@ class _ChatScreenState extends State<ChatScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   _QuickActionChip(
-                    label: 'Разместить услугу',
-                    onTap: () => _handleSend('Разместить услугу'),
+                    label: 'Разместить заказ',
+                    onTap: () => _handleSend('Разместить заказ'),
                   ),
                   SizedBox(height: 8.h),
                   _QuickActionChip(
-                    label: 'Создать карточку исполнителя',
-                    onTap: () => _handleSend('Создать карточку исполнителя'),
+                    label: 'Найти исполнителя',
+                    onTap: () => _handleSend('Найти исполнителя'),
                   ),
                 ],
               ),

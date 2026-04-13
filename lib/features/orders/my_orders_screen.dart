@@ -7,8 +7,8 @@ import 'package:dispatcher_1/features/orders/order_detail_screen.dart';
 import 'package:dispatcher_1/features/orders/widgets/my_order_card.dart';
 import 'package:dispatcher_1/features/orders/widgets/order_status_pill.dart';
 
-/// Экран «Мои заказы» — две вкладки «Принятые / Не принятые».
-/// Когда обоих списков пусто — показываем заглушку «Здесь появятся ваши отклики».
+/// Экран «Мои заказы» — три вкладки «На рассмотрении / Принятые / Архив».
+/// Когда всех списков пусто — показываем заглушку «Здесь появятся ваши заказы».
 class MyOrdersScreen extends StatefulWidget {
   const MyOrdersScreen({super.key, this.onGoToCatalog, this.isBlocked = false});
 
@@ -26,7 +26,7 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tab;
 
-  // Моковые данные. Новые: «Ждёт подтверждения» — исполнитель ещё не принял.
+  // Моковые данные. На рассмотрении: заказ ожидает отклика исполнителей.
   final List<_OrderMock> _newOrders = <_OrderMock>[
     _OrderMock(
       id: 'n1',
@@ -63,7 +63,7 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
     ),
   ];
 
-  // Принятые: «Свяжитесь с заказчиком» + один «Завершён».
+  // Принятые: «Свяжитесь с исполнителем» + один «Завершён».
   final List<_OrderMock> _accepted = <_OrderMock>[
     _OrderMock(
       id: 'a1',
@@ -73,7 +73,7 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
       rentDate: '15 июня · 09:00–18:00',
       address: 'Московская область, Москва, Улица1, д 144',
       publishedAgo: '2 часа назад',
-      customerName: 'Александр Иванов',
+      customerName: 'Иванов Александр',
       customerPhone: '+7 999 123-45-67',
     ),
     _OrderMock(
@@ -90,8 +90,8 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
       rentDate: '15 июня · 09:00–18:00',
       address: 'Московская область, Москва, Улица1, д 144',
       publishedAgo: 'Сегодня в 11:30',
-      customerName: 'Пётр Иванов',
-      customerPhone: '+7 999 123-45-67',
+      customerName: 'Петров Сергей',
+      customerPhone: '+7 999 765-43-21',
     ),
     _OrderMock(
       id: 'a3',
@@ -101,7 +101,7 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
       rentDate: '15 июня · 09:00–18:00',
       address: 'Московская область, Москва, Улица1, д 144',
       publishedAgo: 'Вчера в 14:30',
-      customerName: 'Александр Иванов',
+      customerName: 'Иванов Александр',
       customerPhone: '+7 999 123-45-67',
     ),
   ];
@@ -202,7 +202,7 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
           padding: EdgeInsets.fromLTRB(16.w, 17.h, 16.w, 5.h),
           child: _OrdersSegmented(
             controller: _tab,
-            items: const <String>['Новые', 'Принятые', 'Не принятые'],
+            items: const <String>['Ожидает', 'В работе', 'Архив'],
           ),
         ),
         Expanded(
@@ -267,7 +267,7 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
                     ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
                     content:
-                        Text('Звоним: ${o.customerName ?? 'заказчику'}'),
+                        Text('Звоним: ${o.customerName ?? 'исполнителю'}'),
                     duration: const Duration(seconds: 2),
                   ),
                 ),
@@ -464,7 +464,7 @@ class _EmptyOrders extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
           Text(
-            'Здесь появятся ваши отклики',
+            'Здесь появятся ваши заказы',
             style: TextStyle(
               fontFamily: 'Roboto',
               fontSize: 20.sp,
@@ -476,7 +476,7 @@ class _EmptyOrders extends StatelessWidget {
           ),
           SizedBox(height: 6.h),
           Text(
-            'Откликнитесь на заказ и получайте\nпредложения от заказчиков',
+            'Создайте заказ, чтобы найти\nисполнителя',
             style: TextStyle(
               fontFamily: 'Roboto',
               fontSize: 16.sp,
@@ -488,7 +488,7 @@ class _EmptyOrders extends StatelessWidget {
           ),
           SizedBox(height: 26.h),
           PrimaryButton(
-            label: 'В каталог',
+            label: 'Создать заказ',
             onPressed: onGoToCatalog,
           ),
         ],

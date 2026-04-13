@@ -182,7 +182,7 @@ class _OrdersMapFullScreenState extends State<OrdersMapFullScreen> {
                 layoutBuilder: (Widget? current, List<Widget> previous) =>
                     Stack(
                   alignment: Alignment.bottomCenter,
-                  children: [...previous, if (current != null) current],
+                  children: [...previous, ?current],
                 ),
                 transitionBuilder: (Widget child, Animation<double> anim) {
                   final bool isIn = child.key == ValueKey<int>(_current);

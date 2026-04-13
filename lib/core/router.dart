@@ -22,11 +22,6 @@ import '../features/orders/review_screen.dart';
 import '../features/profile/edit_profile_screen.dart';
 import '../features/profile/profile_screen.dart';
 import '../features/profile/reviews_screen.dart';
-import '../features/schedule/day_settings_screen.dart';
-import '../features/schedule/schedule_screen.dart';
-import '../features/services/create_service_screen.dart';
-import '../features/services/my_services_screen.dart';
-import '../features/services/service_detail_screen.dart';
 import '../features/shell/main_shell.dart';
 import '../features/subscription/add_card_screen.dart';
 import '../features/subscription/payment_result_screen.dart';
@@ -108,37 +103,9 @@ final GoRouter appRouter = GoRouter(
     GoRoute(path: '/profile/edit', builder: (_, _) => const EditProfileScreen()),
     GoRoute(path: '/profile/reviews', builder: (_, _) => const ReviewsScreen()),
 
-    // Карточка исполнителя
+    // Карточка заказчика
     GoRoute(path: '/executor-card', builder: (_, _) => const ExecutorCardScreen()),
     GoRoute(path: '/executor-card/edit', builder: (_, _) => const EditExecutorCardScreen()),
-
-    // Мои услуги
-    GoRoute(path: '/services', builder: (_, _) => const MyServicesScreen()),
-    GoRoute(path: '/services/create', builder: (_, _) => const CreateServiceScreen()),
-    GoRoute(
-      path: '/services/:id',
-      builder: (_, state) =>
-          ServiceDetailScreen(serviceId: state.pathParameters['id'] ?? ''),
-    ),
-    GoRoute(
-      path: '/services/:id/edit',
-      builder: (_, state) =>
-          CreateServiceScreen(serviceId: state.pathParameters['id']),
-    ),
-
-    // Мой график
-    GoRoute(path: '/schedule', builder: (_, _) => const ScheduleScreen()),
-    GoRoute(
-      path: '/schedule/day',
-      builder: (_, state) {
-        final extra = state.extra as Map<String, Object?>?;
-        return DaySettingsScreen(
-          dayLabel: (extra?['dayLabel'] as String?) ?? 'Сегодня',
-          initialState:
-              (extra?['initialState'] as DayState?) ?? DayState.noOrders,
-        );
-      },
-    ),
 
     // Подписка
     GoRoute(path: '/subscription', builder: (_, _) => const SubscriptionScreen()),

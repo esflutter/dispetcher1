@@ -4,8 +4,8 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/widgets/primary_button.dart';
 
-/// Алерт «Вы уверены, что хотите отказаться от заказа?»
-/// Используется на экране подтверждённого заказа (исполнитель уже принял).
+/// Алерт «Вы уверены, что хотите переместить заказ в архив?»
+/// Используется, когда заказчик хочет убрать заказ.
 Future<void> showConfirmRefuseDialog(
   BuildContext context, {
   required VoidCallback onRefuse,
@@ -14,8 +14,8 @@ Future<void> showConfirmRefuseDialog(
     context: context,
     barrierColor: Colors.black.withValues(alpha: 0.35),
     builder: (BuildContext ctx) => _ConfirmDialog(
-      title: 'Вы уверены, что хотите\nотказаться от заказа?',
-      primaryLabel: 'Отказаться',
+      title: 'Вы уверены, что хотите\nпереместить заказ в архив?',
+      primaryLabel: 'Переместить в архив',
       onPrimary: () {
         Navigator.of(ctx).pop();
         onRefuse();
@@ -24,8 +24,8 @@ Future<void> showConfirmRefuseDialog(
   );
 }
 
-/// Алерт «Вы уверены, что хотите отклонить заказ?»
-/// Используется на экране, где исполнитель ещё не подтвердил заказ.
+/// Алерт «Вы уверены, что хотите переместить заказ в архив?»
+/// Используется, когда заказ ещё ожидает.
 Future<void> showConfirmDeclineDialog(
   BuildContext context, {
   required VoidCallback onDecline,
@@ -34,8 +34,8 @@ Future<void> showConfirmDeclineDialog(
     context: context,
     barrierColor: Colors.black.withValues(alpha: 0.35),
     builder: (BuildContext ctx) => _ConfirmDialog(
-      title: 'Вы уверены, что хотите\nотклонить заказ?',
-      primaryLabel: 'Отклонить заказ',
+      title: 'Вы уверены, что хотите\nпереместить заказ в архив?',
+      primaryLabel: 'Переместить в архив',
       onPrimary: () {
         Navigator.of(ctx).pop();
         onDecline();
@@ -44,7 +44,7 @@ Future<void> showConfirmDeclineDialog(
   );
 }
 
-/// Подтверждение принятия заказа исполнителем (опционально, по флоу).
+/// Подтверждение выбора исполнителя заказчиком.
 Future<void> showConfirmAcceptDialog(
   BuildContext context, {
   required VoidCallback onConfirm,
@@ -53,7 +53,7 @@ Future<void> showConfirmAcceptDialog(
     context: context,
     barrierColor: Colors.black.withValues(alpha: 0.35),
     builder: (BuildContext ctx) => _ConfirmDialog(
-      title: 'Вы уверены, что хотите\nпринять заказ?',
+      title: 'Вы уверены, что хотите\nвыбрать этого исполнителя?',
       primaryLabel: 'Подтвердить',
       onPrimary: () {
         Navigator.of(ctx).pop();

@@ -9,14 +9,12 @@ import 'package:dispatcher_1/core/widgets/dark_sub_app_bar.dart';
 import 'package:dispatcher_1/core/widgets/cropped_avatar.dart';
 import 'package:dispatcher_1/core/widgets/primary_button.dart';
 import 'package:dispatcher_1/features/auth/photo_crop_screen.dart';
-import 'package:dispatcher_1/features/catalog/catalog_filter_screen.dart';
 import 'package:dispatcher_1/features/catalog/widgets/catalog_search_bar.dart';
 
 import 'executor_card_screen.dart';
 
-/// Длинная форма создания / редактирования карточки исполнителя.
-/// Поля из Figma: ФИО, телефон, местоположение (радиус), спецтехника,
-/// категории услуг, опыт работы, статус, о себе.
+/// Форма создания / редактирования карточки заказчика.
+/// Поля: ФИО, телефон, местоположение, статус, о себе.
 class EditExecutorCardScreen extends StatefulWidget {
   const EditExecutorCardScreen({super.key, this.editing = true});
 
@@ -27,17 +25,8 @@ class EditExecutorCardScreen extends StatefulWidget {
 }
 
 class _EditExecutorCardScreenState extends State<EditExecutorCardScreen> {
-  late final TextEditingController _location;
-  late final TextEditingController _experience;
   late final TextEditingController _about;
   String? _selectedStatus;
-  int _radiusIndex = -1;
-
-  static const _radiusOptions = [
-    'В радиусе 10 км',
-    'В радиусе 20 км',
-    'В радиусе 50 км',
-  ];
 
   bool _statusExpanded = false;
 
@@ -48,55 +37,15 @@ class _EditExecutorCardScreenState extends State<EditExecutorCardScreen> {
     'Юр. лицо',
   ];
 
-  static const _machinery = [
-    'Экскаватор-погрузчик',
-    'Экскаватор',
-    'Погрузчик',
-    'Миниэкскаватор',
-    'Буроям',
-    'Самогруз',
-    'Автокран',
-    'Бетононасос',
-    'Эвакуатор',
-    'Автовышка',
-    'Манипулятор',
-    'Минипогрузчик',
-    'Самосвал',
-    'Минитрактор',
-  ];
-  static const _categories = [
-    'Земляные работы',
-    'Погрузочно-разгрузочные работы',
-    'Перевозка материалов',
-    'Строительные работы',
-    'Дорожные работы',
-    'Буровые работы',
-    'Высотные работы',
-    'Демонтажные работы',
-    'Благоустройство территории',
-  ];
-
-  late final Set<String> _selMach;
-  late final Set<String> _selCat;
-
   @override
   void initState() {
     super.initState();
-    _location = TextEditingController(text: ExecutorCardData.location ?? '');
-    _experience = TextEditingController(text: ExecutorCardData.experience ?? '');
     _about = TextEditingController(text: ExecutorCardData.about ?? '');
     _selectedStatus = ExecutorCardData.status;
-    _selMach = Set<String>.from(ExecutorCardData.machinery);
-    _selCat = Set<String>.from(ExecutorCardData.categories);
-    final savedRadius = ExecutorCardData.radius;
-    _radiusIndex = savedRadius != null ? _radiusOptions.indexOf(savedRadius) : -1;
-    if (_radiusIndex < 0) _radiusIndex = -1;
   }
 
   @override
   void dispose() {
-    _location.dispose();
-    _experience.dispose();
     _about.dispose();
     super.dispose();
   }
@@ -106,7 +55,7 @@ class _EditExecutorCardScreenState extends State<EditExecutorCardScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: const DarkSubAppBar(title: 'Моя карточка исполнителя'),
+      appBar: const DarkSubAppBar(title: 'Моя карточка заказчика'),
       floatingActionButton: Padding(
         padding: EdgeInsets.only(bottom: 88.h),
         child: AiAssistantFab(onTap: () => context.push('/assistant/chat')),
@@ -144,81 +93,6 @@ class _EditExecutorCardScreenState extends State<EditExecutorCardScreen> {
                 ),
                 alignment: Alignment.centerLeft,
                 child: Text('+7 999 123-45-67', style: AppTextStyles.body),
-              ),
-              SizedBox(height: AppSpacing.lg),
-              _SectionTitle('Местоположение'),
-              SizedBox(height: 12.h),
-              GestureDetector(
-                onTap: () async {
-                  final String? result = await showModalBottomSheet<String>(
-                    context: context,
-                    isScrollControlled: true,
-                    backgroundColor: Colors.transparent,
-                    builder: (_) => const AddressBottomSheet(),
-                  );
-                  if (result != null) {
-                    setState(() => _location.text = result);
-                  }
-                },
-                child: Container(
-                  height: 44.h,
-                  padding: EdgeInsets.symmetric(horizontal: 12.w),
-                  decoration: BoxDecoration(
-                    color: AppColors.fieldFill,
-                    borderRadius: BorderRadius.circular(12.r),
-                  ),
-                  child: Row(
-                    children: <Widget>[
-                      Expanded(
-                        child: Text(
-                          _location.text.isEmpty ? 'Введите адрес' : _location.text,
-                          style: AppTextStyles.body.copyWith(
-                            color: _location.text.isEmpty
-                                ? AppColors.textTertiary
-                                : AppColors.textPrimary,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              SizedBox(height: 12.h),
-              for (int i = 0; i < _radiusOptions.length; i++)
-                _RadioRow(
-                  label: _radiusOptions[i],
-                  selected: _radiusIndex == i,
-                  onTap: () => setState(() => _radiusIndex = i),
-                ),
-              SizedBox(height: 24.h),
-              _SectionTitle('Спецтехника'),
-              SizedBox(height: 12.h),
-              _ChipGrid(
-                values: _machinery,
-                selected: _selMach,
-                onToggle: (v) => setState(() {
-                  _selMach.contains(v) ? _selMach.remove(v) : _selMach.add(v);
-                }),
-              ),
-              SizedBox(height: 24.h),
-              _SectionTitle('Категории услуг'),
-              SizedBox(height: 12.h),
-              _ChipGrid(
-                values: _categories,
-                selected: _selCat,
-                onToggle: (v) => setState(() {
-                  _selCat.contains(v) ? _selCat.remove(v) : _selCat.add(v);
-                }),
-              ),
-              SizedBox(height: AppSpacing.lg),
-              _SectionTitle('Опыт работы'),
-              SizedBox(height: AppSpacing.xs),
-              _TintField(
-                controller: _experience,
-                hint: 'Например: 5 лет',
-                maxLength: 25,
               ),
               SizedBox(height: AppSpacing.lg),
               _SectionTitle('Статус'),
@@ -329,11 +203,6 @@ class _EditExecutorCardScreenState extends State<EditExecutorCardScreen> {
               child: PrimaryButton(
                 label: 'Сохранить',
                 onPressed: () {
-                  ExecutorCardData.location = _location.text;
-                  ExecutorCardData.radius = _radiusIndex >= 0 ? _radiusOptions[_radiusIndex] : null;
-                  ExecutorCardData.machinery = _selMach.toList();
-                  ExecutorCardData.categories = _selCat.toList();
-                  ExecutorCardData.experience = _experience.text;
                   ExecutorCardData.status = _selectedStatus;
                   ExecutorCardData.about = _about.text;
                   ExecutorCardScreen.cardCreated = true;
@@ -434,56 +303,6 @@ class _SectionTitle extends StatelessWidget {
   }
 }
 
-class _RadioRow extends StatelessWidget {
-  const _RadioRow({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: EdgeInsets.symmetric(vertical: 8.h),
-        child: Row(
-          children: <Widget>[
-            Container(
-              width: 20.r,
-              height: 20.r,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: selected ? AppColors.primary : AppColors.border,
-                  width: 1.5,
-                ),
-              ),
-              child: selected
-                  ? Center(
-                      child: Container(
-                        width: 10.r,
-                        height: 10.r,
-                        decoration: const BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: AppColors.primary,
-                        ),
-                      ),
-                    )
-                  : null,
-            ),
-            SizedBox(width: 12.w),
-            Text(label, style: AppTextStyles.body),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class _TintField extends StatelessWidget {
   const _TintField({
     required this.controller,
@@ -531,53 +350,3 @@ class _TintField extends StatelessWidget {
   }
 }
 
-class _ChipGrid extends StatelessWidget {
-  const _ChipGrid({
-    required this.values,
-    required this.selected,
-    required this.onToggle,
-  });
-  final List<String> values;
-  final Set<String> selected;
-  final ValueChanged<String> onToggle;
-
-  @override
-  Widget build(BuildContext context) {
-    return Wrap(
-      spacing: 8.w,
-      runSpacing: 8.h,
-      children: values.map((String v) {
-        final bool sel = selected.contains(v);
-        return GestureDetector(
-          onTap: () => onToggle(v),
-          child: Container(
-            padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 6.h),
-            decoration: BoxDecoration(
-              color: sel ? AppColors.primary : AppColors.surface,
-              border: Border.all(color: AppColors.primary, width: 1),
-              borderRadius: BorderRadius.circular(100.r),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                Text(
-                  v,
-                  style: AppTextStyles.chip.copyWith(
-                    color: sel ? Colors.white : AppColors.textPrimary,
-                    fontSize: 13.sp,
-                    fontWeight: FontWeight.w400,
-                  ),
-                ),
-                if (sel) ...<Widget>[
-                  SizedBox(width: 6.w),
-                  Icon(Icons.close_rounded,
-                      size: 14.r, color: Colors.white),
-                ],
-              ],
-            ),
-          ),
-        );
-      }).toList(),
-    );
-  }
-}

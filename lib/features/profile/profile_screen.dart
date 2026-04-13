@@ -157,23 +157,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ],
             SizedBox(height: _isBlocked ? 16.h : (status == VerificationStatus.notVerified || status == VerificationStatus.rejected) ? 20.h : 16.h),
             _ProfileMenuItem(
-              label: 'Моя карточка исполнителя',
+              label: 'Моя карточка заказчика',
               onTap: () => context.push('/executor-card'),
-            ),
-            SizedBox(height: 16.h),
-            _ProfileMenuItem(
-              label: 'Мои услуги',
-              onTap: () => context.push('/services'),
-            ),
-            SizedBox(height: 16.h),
-            _ProfileMenuItem(
-              label: 'Мой график',
-              onTap: () => context.push('/schedule'),
-            ),
-            SizedBox(height: 16.h),
-            _ProfileMenuItem(
-              label: 'Информация о подписке',
-              onTap: () => context.push('/subscription'),
             ),
             SizedBox(height: 20.h),
             const _SupportFooter(),

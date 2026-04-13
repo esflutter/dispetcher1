@@ -72,7 +72,7 @@ class _ReviewScreenState extends State<ReviewScreen> {
                 children: <Widget>[
                   Text(
                     'Ваш отзыв поможет другим понять, с кем лучше '
-                    'работать. Оцените заказчика и при желании '
+                    'работать. Оцените исполнителя и при желании '
                     'оставьте комментарий.',
                     style: TextStyle(
                       fontFamily: 'Roboto',

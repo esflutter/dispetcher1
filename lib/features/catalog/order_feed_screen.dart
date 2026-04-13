@@ -13,7 +13,7 @@ import 'package:dispatcher_1/features/catalog/widgets/order_card.dart';
 import 'package:dispatcher_1/features/shell/main_shell.dart';
 import 'package:dispatcher_1/features/shell/widgets/main_bottom_nav_bar.dart';
 
-/// Лента заказов категории. Соответствует Figma «Лента заказов»:
+/// Лента исполнителей категории. Соответствует Figma «Лента исполнителей»:
 /// тёмный AppBar → строка поиска + оранжевый фильтр → pill-табы
 /// «Списком / На карте» → список карточек или карта.
 class OrderFeedScreen extends StatefulWidget {
@@ -58,42 +58,43 @@ class _OrderFeedScreenState extends State<OrderFeedScreen> {
   static const List<_MockOrder> _orders = <_MockOrder>[
     _MockOrder(
       id: '1',
-      title: 'Нужен экскаватор для копки траншеи',
-      address: 'Московская область, Москва, Улица1, д 144',
-      rentDate: '15 июня · 09:00–18:00',
-      publishedAgo: '2 часа назад',
+      title: 'Иванов Александр',
+      address: 'Московская область, Москва',
+      rentDate: 'Экскаватор JCB 3CX',
+      publishedAgo: 'Опыт: 5 лет',
       equipment: <String>['Экскаватор'],
+      price: 'от 3 000 ₽/час',
     ),
     _MockOrder(
       id: '2',
-      title: 'Земляные работы',
-      address: 'Московская область, Москва, Улица1, д 144',
-      rentDate: '15 июня · 09:00–18:00',
-      publishedAgo: 'Сегодня в 11:30',
+      title: 'Петров Сергей',
+      address: 'Московская область, Подольск',
+      rentDate: 'Автокран Liebherr LTM',
+      publishedAgo: 'Опыт: 8 лет',
       equipment: <String>['Автокран', 'Экскаватор'],
-      price: '120 000 – 150 000 ₽',
+      price: 'от 5 000 ₽/час',
     ),
     _MockOrder(
       id: '3',
-      title: 'Разработка котлована под фундамент',
-      address: 'Московская область, Москва, Улица1, д 144',
-      rentDate: '15 июня · 09:00–18:00',
-      publishedAgo: 'Сегодня в 11:30',
+      title: 'Сидоров Дмитрий',
+      address: 'Московская область, Химки',
+      rentDate: 'Экскаватор-погрузчик CAT',
+      publishedAgo: 'Опыт: 3 года',
       equipment: <String>[
         'Экскаватор',
         'Автокран',
-        'Эвакуатор',
         'Манипулятор',
-        'Автовышка',
       ],
+      price: 'от 2 500 ₽/час',
     ),
     _MockOrder(
       id: '4',
-      title: 'Нужен экскаватор для копки траншеи',
-      address: 'Московская область, Москва, Улица1, д 144',
-      rentDate: '15 июня · 09:00–18:00',
-      publishedAgo: '2 часа назад',
-      equipment: <String>['Экскаватор'],
+      title: 'Козлов Андрей',
+      address: 'Московская область, Люберцы',
+      rentDate: 'Самосвал КАМАЗ 6520',
+      publishedAgo: 'Опыт: 10 лет',
+      equipment: <String>['Самосвал'],
+      price: 'от 4 000 ₽/час',
     ),
   ];
 
@@ -133,7 +134,7 @@ class _OrderFeedScreenState extends State<OrderFeedScreen> {
         title: Padding(
           padding: EdgeInsets.only(top: 2.h),
           child: Text(
-            'Лента заказов',
+            'Список исполнителей',
             style: AppTextStyles.titleS.copyWith(color: Colors.white),
           ),
         ),
@@ -439,9 +440,9 @@ class _OrdersMapWithCardState extends State<_OrdersMapWithCard> {
                       ),
                     ),
                     SizedBox(height: 8.h),
-                    _MapCardLine(label: 'Дата аренды:', value: o.rentDate),
+                    _MapCardLine(label: 'Техника:', value: o.rentDate),
                     SizedBox(height: 4.h),
-                    _MapCardLine(label: 'Адрес:', value: o.address),
+                    _MapCardLine(label: 'Местоположение:', value: o.address),
                     SizedBox(height: 10.h),
                     Text(
                       o.price,
