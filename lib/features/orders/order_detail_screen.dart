@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:go_router/go_router.dart';
 
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
@@ -169,7 +170,7 @@ class _MyOrderDetailScreenState extends State<MyOrderDetailScreen> {
       ),
       floatingActionButton: Padding(
         padding: EdgeInsets.only(bottom: _state == MyOrderDetailState.waitingConfirm ? 148.h : _hasBottomBar ? 88.h : 24.h),
-        child: AiAssistantFab(onTap: () {}),
+        child: AiAssistantFab(onTap: () => context.push('/assistant/chat')),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       body: Column(

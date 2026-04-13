@@ -433,9 +433,9 @@ class _CreateServiceScreenState extends State<CreateServiceScreen> {
                 ServiceData.services
                     .removeWhere((s) => s.id == widget.serviceId);
                 if (mounted) {
-                  // Возвращаемся на список услуг (pop редактирование + просмотр)
-                  Navigator.of(context).pop();
-                  Navigator.of(context).pop();
+                  final nav = Navigator.of(context);
+                  nav.pop(); // закрыть редактирование
+                  if (nav.canPop()) nav.pop(); // закрыть просмотр
                 }
               }
             },

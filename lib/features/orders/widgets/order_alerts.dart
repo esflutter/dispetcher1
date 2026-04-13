@@ -157,16 +157,13 @@ class _ConfirmDialog extends StatelessWidget {
       insetPadding: EdgeInsets.symmetric(horizontal: 16.w),
       backgroundColor: Colors.transparent,
       child: Container(
-        // Высота примерно 252 в дизайне 375×812 (≈ 280 −10%),
-        // .h адаптирует под другие разрешения. Ширина — на
-        // оставшееся после боковых отступов 16+16 = 343 на эталонном фрейме.
-        height: 252.h,
         padding: EdgeInsets.fromLTRB(16.r, 14.r, 16.r, 22.r),
         decoration: BoxDecoration(
           color: AppColors.surface,
           borderRadius: BorderRadius.circular(20.r),
         ),
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
             Align(
@@ -180,7 +177,7 @@ class _ConfirmDialog extends StatelessWidget {
                 ),
               ),
             ),
-            const Spacer(),
+            SizedBox(height: 20.h),
             Text(
               title,
               textAlign: TextAlign.center,

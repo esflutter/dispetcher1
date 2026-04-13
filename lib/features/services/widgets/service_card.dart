@@ -80,19 +80,14 @@ class ServiceCard extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
             ),
             SizedBox(height: 10.h),
-            Row(
+            Wrap(
+              spacing: 9.w,
+              runSpacing: 4.h,
               children: [
-                if (_hasHour) ...[
-                  Text('₽ / час', style: priceStyle),
-                  SizedBox(width: 9.w),
-                  Text('$pricePerHour ₽', style: priceStyle),
-                ],
-                if (_hasHour && _hasDay) SizedBox(width: 36.w),
-                if (_hasDay) ...[
-                  Text('₽ / день', style: priceStyle),
-                  SizedBox(width: 9.w),
-                  Text('$pricePerDay ₽', style: priceStyle),
-                ],
+                if (_hasHour)
+                  Text('₽ / час   $pricePerHour ₽', style: priceStyle),
+                if (_hasDay)
+                  Text('₽ / день   $pricePerDay ₽', style: priceStyle),
               ],
             ),
           ],

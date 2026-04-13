@@ -26,7 +26,7 @@ class ExecutorCardScreen extends StatefulWidget {
 }
 
 class _ExecutorCardScreenState extends State<ExecutorCardScreen> {
-  bool _alertShown = false;
+  static bool _alertShown = false;
 
   bool get _filled => VerificationStatus.current == VerificationStatus.blocked ||
       (VerificationStatus.current.isVerified && VerificationStatus.hasSubscription && ExecutorCardScreen.cardCreated);
