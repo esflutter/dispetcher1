@@ -97,14 +97,18 @@ class MyOrderDetailScreen extends StatefulWidget {
 }
 
 class _MyOrderDetailScreenState extends State<MyOrderDetailScreen> {
+  static final Set<String> _reviewedOrders = {};
+
   late MyOrderDetailState _state;
   late MyOrderStatus _rejectedStatus;
+  bool _reviewLeft = false;
 
   @override
   void initState() {
     super.initState();
     _state = widget.state;
     _rejectedStatus = widget.rejectedStatus;
+    _reviewLeft = _reviewedOrders.contains(widget.orderNumber);
   }
 
   MyOrderStatus get _pillStatus {
@@ -172,7 +176,8 @@ class _MyOrderDetailScreenState extends State<MyOrderDetailScreen> {
         children: <Widget>[
           Expanded(
             child: SingleChildScrollView(
-              padding: EdgeInsets.fromLTRB(16.w, 16.h, 16.w, 24.h),
+              padding: EdgeInsets.fromLTRB(16.w, 16.h, 16.w,
+                  _hasBottomBar ? 24.h : 24.h + MediaQuery.of(context).padding.bottom),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
@@ -291,7 +296,9 @@ class _MyOrderDetailScreenState extends State<MyOrderDetailScreen> {
     );
   }
 
-  bool get _hasBottomBar => _state != MyOrderDetailState.rejected;
+  bool get _hasBottomBar =>
+      _state != MyOrderDetailState.rejected &&
+      !(_state == MyOrderDetailState.completed && _reviewLeft);
 
   Widget _buildBottomBar() {
     return Container(
@@ -363,13 +370,20 @@ class _MyOrderDetailScreenState extends State<MyOrderDetailScreen> {
           ),
         );
       case MyOrderDetailState.completed:
+        if (_reviewLeft) return const SizedBox.shrink();
         return PrimaryButton(
           label: 'Оставить отзыв',
-          onPressed: () => Navigator.of(context).push(
-            MaterialPageRoute<void>(
-              builder: (_) => const ReviewScreen(),
-            ),
-          ),
+          onPressed: () async {
+            await Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const ReviewScreen(),
+              ),
+            );
+            if (mounted) {
+              _reviewedOrders.add(widget.orderNumber);
+              setState(() => _reviewLeft = true);
+            }
+          },
         );
       case MyOrderDetailState.rejected:
         return const SizedBox.shrink();

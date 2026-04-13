@@ -29,7 +29,7 @@ class _ExecutorCardScreenState extends State<ExecutorCardScreen> {
   bool _alertShown = false;
 
   bool get _filled => VerificationStatus.current == VerificationStatus.blocked ||
-      (VerificationStatus.current.isVerified && VerificationStatus.hasSubscription);
+      (VerificationStatus.current.isVerified && VerificationStatus.hasSubscription && ExecutorCardScreen.cardCreated);
 
   ExecutorCardStatus get _status {
     switch (VerificationStatus.current) {
@@ -77,7 +77,10 @@ class _ExecutorCardScreenState extends State<ExecutorCardScreen> {
         if (paid != true || !mounted) return;
         VerificationStatus.hasSubscription = true;
       }
-      if (mounted) context.push('/executor-card/edit');
+      if (mounted) {
+        await context.push('/executor-card/edit');
+        if (mounted) setState(() {});
+      }
       return;
     }
 
@@ -121,7 +124,10 @@ class _ExecutorCardScreenState extends State<ExecutorCardScreen> {
               child: filled
                   ? PrimaryButton(
                       label: 'Редактировать',
-                      onPressed: () => context.push('/executor-card/edit'),
+                      onPressed: () async {
+                        await context.push('/executor-card/edit');
+                        if (mounted) setState(() {});
+                      },
                     )
                   : PrimaryButton(
                       label: 'Создать',

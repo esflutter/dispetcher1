@@ -34,6 +34,7 @@ class _OrderFeedScreenState extends State<OrderFeedScreen> {
   int _tab = 0;
   final TextEditingController _searchCtrl = TextEditingController();
   String _query = '';
+  bool _addressSelected = false;
 
   @override
   void dispose() {
@@ -166,7 +167,10 @@ class _OrderFeedScreenState extends State<OrderFeedScreen> {
                   controller: _searchCtrl,
                   hintText: _tab == 1 ? 'Поиск по адресу' : 'Поиск',
                   onFilterTap: _openFilter,
-                  onChanged: (String v) => setState(() => _query = v),
+                  onChanged: (String v) => setState(() {
+                    _query = v;
+                    _addressSelected = false;
+                  }),
                 ),
               ),
               SizedBox(height: 12.h),
@@ -231,7 +235,7 @@ class _OrderFeedScreenState extends State<OrderFeedScreen> {
             ],
           ),
           // Выпадающий список адресов при вводе на вкладке «На карте».
-          if (_tab == 1 && _query.trim().isNotEmpty)
+          if (_tab == 1 && _query.trim().isNotEmpty && !_addressSelected)
             Positioned(
               // Вплотную под строкой поиска: высота поиска (44h) + нижний
               // паддинг CatalogSearchBar (12h).
@@ -242,7 +246,10 @@ class _OrderFeedScreenState extends State<OrderFeedScreen> {
                 query: _query,
                 onSelect: (String address) {
                   _searchCtrl.text = address;
-                  setState(() => _query = address);
+                  setState(() {
+                    _query = address;
+                    _addressSelected = true;
+                  });
                   FocusScope.of(context).unfocus();
                 },
               ),

@@ -29,15 +29,26 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  late VerificationStatus _status;
+  VerificationStatus get _status => VerificationStatus.current;
+  set _status(VerificationStatus v) => VerificationStatus.current = v;
+
+  bool get _isBlocked => _status == VerificationStatus.blocked;
 
   @override
   void initState() {
     super.initState();
-    _status = widget.status;
+    VerificationStatus.notifier.addListener(_refresh);
   }
 
-  bool get _isBlocked => _status == VerificationStatus.blocked;
+  @override
+  void dispose() {
+    VerificationStatus.notifier.removeListener(_refresh);
+    super.dispose();
+  }
+
+  void _refresh() {
+    if (mounted) setState(() {});
+  }
 
   // TODO: убрать перед релизом — временное переключение статуса для тестирования
   void _cycleStatus() {
@@ -50,8 +61,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     ];
     final next = (order.indexOf(_status) + 1) % order.length;
     setState(() {
-      _status = order[next];
-      VerificationStatus.current = _status;
+      VerificationStatus.current = order[next];
     });
   }
 

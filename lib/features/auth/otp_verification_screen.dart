@@ -98,7 +98,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
       height: 64.h,
       textStyle: AppTextStyles.h3.copyWith(
         color: AppColors.textBlack,
-        fontSize: 18.sp,
+        fontSize: 22.sp,
         fontWeight: FontWeight.w600,
       ),
       decoration: BoxDecoration(
@@ -220,6 +220,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                                 _codeResent = true;
                               });
                               _startTimer();
+                              _pinFocusNode.requestFocus();
                             },
                             child: RichText(
                               text: TextSpan(

@@ -59,7 +59,18 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
       VerificationStatus.hasSubscription = true;
     }
 
-    // 2. Проверка верификации.
+    // 2. Проверка верификации — в процессе.
+    if (VerificationStatus.current == VerificationStatus.inProgress) {
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        barrierColor: Colors.black.withValues(alpha: 0.35),
+        builder: (_) => _InProgressDialog(),
+      );
+      return;
+    }
+
+    // 3. Верификация не пройдена — предлагаем отправить документы.
     if (!_verified) {
       if (!mounted) return;
       await showDialog<void>(
@@ -67,10 +78,12 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
         barrierColor: Colors.black.withValues(alpha: 0.35),
         builder: (_) => RespondModalDialog(verified: false),
       );
+      // После закрытия диалога проверяем, начался ли процесс верификации
+      if (mounted) setState(() {});
       return;
     }
 
-    // 3. Выбор техники (если несколько).
+    // 4. Выбор техники (если несколько).
     final List<String> eq = _orderEquipment;
     if (eq.length > 1) {
       final List<String>? picked = await showModalBottomSheet<List<String>>(
@@ -84,7 +97,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
       }
     }
 
-    // 4. Отклик отправлен.
+    // 5. Отклик отправлен.
     if (!mounted) return;
     await showDialog<void>(
       context: context,
@@ -466,6 +479,56 @@ class _CheckRow extends StatelessWidget {
             ),
             SizedBox(width: 16.w),
             Text(label, style: AppTextStyles.body),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _InProgressDialog extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      insetPadding: EdgeInsets.symmetric(horizontal: 16.w),
+      backgroundColor: Colors.transparent,
+      child: Container(
+        padding: EdgeInsets.fromLTRB(16.r, 14.r, 16.r, 22.r),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(20.r),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Align(
+              alignment: Alignment.centerRight,
+              child: GestureDetector(
+                onTap: () => Navigator.of(context).pop(),
+                child: Icon(Icons.close_rounded,
+                    size: 22.r, color: AppColors.textTertiary),
+              ),
+            ),
+            SizedBox(height: 20.h),
+            Text(
+              'Ваши документы ещё\nна проверке',
+              textAlign: TextAlign.center,
+              style: AppTextStyles.titleL.copyWith(fontWeight: FontWeight.w700),
+            ),
+            SizedBox(height: 8.h),
+            Text(
+              'Вы получите уведомление, когда проверка завершится',
+              textAlign: TextAlign.center,
+              style: AppTextStyles.bodyMRegular
+                  .copyWith(color: AppColors.textSecondary),
+            ),
+            SizedBox(height: 18.h),
+            PrimaryButton(
+              label: 'Ок',
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+            SizedBox(height: 12.h),
           ],
         ),
       ),

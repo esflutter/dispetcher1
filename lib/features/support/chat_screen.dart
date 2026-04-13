@@ -70,13 +70,28 @@ class _ChatScreenState extends State<ChatScreen> {
             _scrollToBottom();
           });
         });
+      } else if (initial.trim() == 'create_service') {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          setState(() {
+            _messages.add(ChatMessage(
+              id: _nextId(),
+              text: 'Опишите услугу — текстом или голосом, я заполню всё за вас',
+              fromUser: false,
+            ));
+            _scrollToBottom();
+          });
+        });
       } else {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           _handleSend(initial.trim());
         });
       }
     }
-    _scrollToBottom();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollController.hasClients) {
+        _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+      }
+    });
   }
 
   String _nextId() {

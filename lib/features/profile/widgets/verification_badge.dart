@@ -13,7 +13,14 @@ enum VerificationStatus {
   notVerified,
   blocked;
 
-  static VerificationStatus current = VerificationStatus.notVerified;
+  static final ValueNotifier<VerificationStatus> _notifier =
+      ValueNotifier<VerificationStatus>(VerificationStatus.notVerified);
+
+  static VerificationStatus get current => _notifier.value;
+  static set current(VerificationStatus v) => _notifier.value = v;
+
+  /// Подписка на изменения статуса верификации.
+  static ValueNotifier<VerificationStatus> get notifier => _notifier;
 
   /// Глобальный флаг активной подписки (до появления бэкенда).
   static bool hasSubscription = false;

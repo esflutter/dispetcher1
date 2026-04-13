@@ -6,6 +6,7 @@ import 'package:dispatcher_1/core/theme/app_text_styles.dart';
 import 'package:dispatcher_1/core/widgets/dark_sub_app_bar.dart';
 import 'package:dispatcher_1/core/widgets/primary_button.dart';
 import 'package:dispatcher_1/features/catalog/catalog_filter_screen.dart';
+import 'package:dispatcher_1/features/support/chat_screen.dart';
 import 'package:dispatcher_1/features/services/my_services_screen.dart';
 
 import 'widgets/service_alerts.dart';
@@ -399,7 +400,9 @@ class _CreateServiceScreenState extends State<CreateServiceScreen> {
           label: 'Заполнить автоматически',
           onPressed: () => Navigator.of(context).push(
             MaterialPageRoute<void>(
-              builder: (_) => const _AiCreateServiceScreen(),
+              builder: (_) => const ChatScreen(
+                initialMessage: 'create_service',
+              ),
             ),
           ),
         ),

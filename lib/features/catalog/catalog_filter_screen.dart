@@ -51,14 +51,8 @@ class _CatalogFilterScreenState extends State<CatalogFilterScreen> {
     'Минитрактор',
   ];
 
-  final Set<String> _selectedCategories = <String>{
-    'Земляные работы',
-    'Погрузочно-разгрузочные работы',
-  };
-  final Set<String> _selectedEquipment = <String>{
-    'Экскаватор-погрузчик',
-    'Погрузчик',
-  };
+  final Set<String> _selectedCategories = <String>{};
+  final Set<String> _selectedEquipment = <String>{};
 
   bool _exactDate = false;
   bool _wholeDay = false;
@@ -78,6 +72,8 @@ class _CatalogFilterScreenState extends State<CatalogFilterScreen> {
 
   String _formatTime(TimeOfDay t) =>
       '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+
+  int _toMinutes(TimeOfDay t) => t.hour * 60 + t.minute;
 
   void _togglePicker(String key) {
     setState(() => _openPicker = _openPicker == key ? null : key);
@@ -264,8 +260,15 @@ class _CatalogFilterScreenState extends State<CatalogFilterScreen> {
                             setState(() {
                               if (_openPicker == 'timeFrom') {
                                 _timeFrom = t;
+                                if (_timeTo != null && _toMinutes(_timeTo!) <= _toMinutes(t)) {
+                                  _timeTo = t.replacing(hour: (t.hour + 1) % 24);
+                                }
                               } else {
-                                _timeTo = t;
+                                if (_timeFrom != null && _toMinutes(t) <= _toMinutes(_timeFrom!)) {
+                                  _timeTo = _timeFrom!.replacing(hour: (_timeFrom!.hour + 1) % 24);
+                                } else {
+                                  _timeTo = t;
+                                }
                               }
                               _openPicker = null;
                             });

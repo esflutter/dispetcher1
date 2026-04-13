@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
-import 'package:go_router/go_router.dart';
-
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/widgets/primary_button.dart';
 import 'package:dispatcher_1/features/orders/widgets/order_alerts.dart';
@@ -26,15 +24,9 @@ class _ReviewScreenState extends State<ReviewScreen> {
   }
 
   Future<void> _submit() async {
-    // Захватываем GoRouter до await, чтобы после закрытия экрана
-    // всё ещё можно было выполнить push в /profile/reviews.
-    final GoRouter router = GoRouter.of(context);
-    final bool openReviews = await showReviewSentDialog(context) ?? false;
+    await showReviewSentDialog(context);
     if (!mounted) return;
     Navigator.of(context).maybePop();
-    if (openReviews) {
-      router.push('/profile/reviews');
-    }
   }
 
   @override

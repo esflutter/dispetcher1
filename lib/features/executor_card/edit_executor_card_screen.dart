@@ -336,6 +336,7 @@ class _EditExecutorCardScreenState extends State<EditExecutorCardScreen> {
                   ExecutorCardData.experience = _experience.text;
                   ExecutorCardData.status = _selectedStatus;
                   ExecutorCardData.about = _about.text;
+                  ExecutorCardScreen.cardCreated = true;
                   Navigator.of(context).pop();
                 },
               ),
@@ -376,12 +377,12 @@ class _HeaderRowState extends State<_HeaderRow> {
               children: [
                 CroppedAvatar(size: 80.r),
                 Positioned(
-                  right: -2.w,
+                  right: -1.w,
                   bottom: 0,
                   child: Image.asset(
                     'assets/icons/ui/edit.webp',
-                    width: 28.r,
-                    height: 28.r,
+                    width: 21.r,
+                    height: 21.r,
                   ),
                 ),
               ],

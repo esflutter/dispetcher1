@@ -128,7 +128,7 @@ Future<bool?> showReviewSentDialog(BuildContext context) {
             ),
             SizedBox(height: 14.h),
             PrimaryButton(
-              label: 'Мои отзывы',
+              label: 'Ок',
               onPressed: () => Navigator.of(ctx).pop(true),
             ),
           ],

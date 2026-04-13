@@ -17,7 +17,7 @@ class PhoneInputScreen extends StatefulWidget {
 
 class _PhoneInputScreenState extends State<PhoneInputScreen> {
   final _maskFormatter = MaskTextInputFormatter(
-    mask: '+7 (###) ###-##-##',
+    mask: '(###) ###-##-##',
     filter: {'#': RegExp(r'[0-9]')},
     type: MaskAutoCompletionType.lazy,
   );
@@ -126,7 +126,14 @@ class _PhoneField extends StatelessWidget {
         decoration: InputDecoration(
           isCollapsed: true,
           border: InputBorder.none,
-          hintText: '+ 7 (900) 000-00-00',
+          prefix: Text(
+            '+7 ',
+            style: AppTextStyles.body.copyWith(
+              fontSize: 16.sp,
+              color: AppColors.textBlack,
+            ),
+          ),
+          hintText: '(900) 000-00-00',
           hintStyle: AppTextStyles.body.copyWith(
             fontSize: 16.sp,
             color: AppColors.textTertiary,

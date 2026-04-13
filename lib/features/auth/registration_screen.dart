@@ -238,10 +238,10 @@ class _PolicyCheckbox extends StatelessWidget {
       onTap: () => onChanged(!value),
       behavior: HitTestBehavior.opaque,
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           Padding(
-            padding: EdgeInsets.zero,
+            padding: EdgeInsets.only(top: 3.h),
             child: Image.asset(
               value ? 'assets/icons/ui/check_ok.png' : 'assets/icons/ui/check.webp',
               width: 24.r,
