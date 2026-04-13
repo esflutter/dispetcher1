@@ -47,19 +47,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
       : const <String>['Экскаватор', 'Автокран', 'Манипулятор', 'Погрузчик', 'Автовышка'];
 
   Future<void> _onRespondTap() async {
-    // 1. Проверка подписки.
-    if (!_hasSubscription) {
-      final bool? subscribed = await Navigator.of(context).push<bool>(
-        MaterialPageRoute<bool>(
-          fullscreenDialog: true,
-          builder: (_) => const SubscriptionPaywall(),
-        ),
-      );
-      if (subscribed != true || !mounted) return;
-      VerificationStatus.hasSubscription = true;
-    }
-
-    // 2. Проверка верификации — в процессе.
+    // 1. Проверка верификации — в процессе.
     if (VerificationStatus.current == VerificationStatus.inProgress) {
       if (!mounted) return;
       await showDialog<void>(
@@ -70,7 +58,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
       return;
     }
 
-    // 3. Верификация не пройдена — предлагаем отправить документы.
+    // 2. Верификация не пройдена — предлагаем отправить документы.
     if (!_verified) {
       if (!mounted) return;
       await showDialog<void>(
@@ -78,9 +66,20 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
         barrierColor: Colors.black.withValues(alpha: 0.35),
         builder: (_) => RespondModalDialog(verified: false),
       );
-      // После закрытия диалога проверяем, начался ли процесс верификации
       if (mounted) setState(() {});
       return;
+    }
+
+    // 3. Проверка подписки.
+    if (!_hasSubscription) {
+      final bool? subscribed = await Navigator.of(context).push<bool>(
+        MaterialPageRoute<bool>(
+          fullscreenDialog: true,
+          builder: (_) => const SubscriptionPaywall(),
+        ),
+      );
+      if (subscribed != true || !mounted) return;
+      VerificationStatus.hasSubscription = true;
     }
 
     // 4. Выбор техники (если несколько).

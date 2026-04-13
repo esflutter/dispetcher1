@@ -50,8 +50,6 @@ class OrderCard extends StatelessWidget {
                   child: Text(
                     equipment.join('   '),
                     style: tagStyle,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
                 SizedBox(width: 8.w),

@@ -12,6 +12,9 @@ class CropResult {
 
   /// Глобальное хранилище последнего результата кропа (до появления бэкенда).
   static CropResult? saved;
+
+  /// Имя пользователя, введённое при регистрации.
+  static String userName = 'Александр Иванов';
 }
 
 class PhotoCropScreen extends StatefulWidget {

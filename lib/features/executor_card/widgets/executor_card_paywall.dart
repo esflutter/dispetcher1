@@ -39,6 +39,7 @@ class _ExecutorCardPaywallState extends State<ExecutorCardPaywall>
   }
 
   void _addCard() {
+    if (_cards.length >= 30) return;
     setState(() {
       final int last4 = 1234 + _cards.length * 1111;
       _cards.add('**** ${last4.toString().padLeft(4, '0').substring(0, 4)}');

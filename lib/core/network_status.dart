@@ -18,7 +18,9 @@ class NetworkStatus extends ChangeNotifier {
 
   static final NetworkStatus instance = NetworkStatus._();
 
+  // TODO: включить проверку сети при подключении бэкенда
   bool _online = true;
+  static const bool _checkEnabled = false;
   StreamSubscription<List<ConnectivityResult>>? _sub;
 
   bool get isOffline => !_online;
@@ -27,6 +29,7 @@ class NetworkStatus extends ChangeNotifier {
   Future<void> recheck() => _recheck();
 
   Future<void> _recheck() async {
+    if (!_checkEnabled) return;
     bool ok = false;
     try {
       final List<InternetAddress> r =

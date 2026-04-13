@@ -41,6 +41,10 @@ class ScheduleScreen extends StatefulWidget {
 class _ScheduleScreenState extends State<ScheduleScreen> {
   late DateTime _selectedDate;
   late DateTime _weekStart;
+  late PageController _pageCtrl;
+
+  /// Начальная неделя (для расчёта индекса страницы).
+  late DateTime _originWeek;
 
   final Map<DateTime, DayState> _dayStates = {};
 
@@ -121,23 +125,46 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь',
   ];
 
+  static const int _initialPage = 5000;
+
   @override
   void initState() {
     super.initState();
     final now = DateTime.now();
     _selectedDate = DateTime(now.year, now.month, now.day);
     _weekStart = _mondayOf(_selectedDate);
+    _originWeek = _weekStart;
+    _pageCtrl = PageController(initialPage: _initialPage);
+  }
+
+  @override
+  void dispose() {
+    _pageCtrl.dispose();
+    super.dispose();
+  }
+
+  DateTime _weekFromPage(int page) =>
+      _originWeek.add(Duration(days: (page - _initialPage) * 7));
+
+  List<DateTime> _weekDaysFor(DateTime monday) =>
+      List.generate(7, (i) => monday.add(Duration(days: i)));
+
+  void _onPageChanged(int page) {
+    final newWeek = _weekFromPage(page);
+    setState(() {
+      _weekStart = newWeek;
+      _selectedDate = newWeek;
+      _acceptingOrders = _stateFor(_selectedDate) != DayState.dayOff;
+    });
   }
 
   DateTime _mondayOf(DateTime d) =>
       d.subtract(Duration(days: d.weekday - 1));
 
-  List<DateTime> get _weekDays =>
-      List.generate(7, (i) => _weekStart.add(Duration(days: i)));
-
   String get _headerLabel {
-    final first = _weekDays.first;
-    final last = _weekDays.last;
+    final days = _weekDaysFor(_weekStart);
+    final first = days.first;
+    final last = days.last;
     if (first.month == last.month) {
       return '${_monthNames[first.month]}, ${first.year}';
     }
@@ -156,17 +183,15 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     return orders.isNotEmpty ? DayState.hasOrders : DayState.noOrders;
   }
 
-  void _prevWeek() => setState(() {
-        _weekStart = _weekStart.subtract(const Duration(days: 7));
-        _selectedDate = _weekStart;
-        _acceptingOrders = _stateFor(_selectedDate) != DayState.dayOff;
-      });
+  void _prevWeek() {
+    _pageCtrl.previousPage(
+        duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
+  }
 
-  void _nextWeek() => setState(() {
-        _weekStart = _weekStart.add(const Duration(days: 7));
-        _selectedDate = _weekStart;
-        _acceptingOrders = _stateFor(_selectedDate) != DayState.dayOff;
-      });
+  void _nextWeek() {
+    _pageCtrl.nextPage(
+        duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
+  }
 
   Future<void> _openDaySettings() async {
     final key = _dateKey(_selectedDate);
@@ -330,48 +355,56 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
               ),
             ),
             SizedBox(height: 6.h),
-            // Одна неделя
-            Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16.w),
-              child: Row(
-                children: _weekDays.map((day) {
-                  final bool selected = _dateKey(day) == _dateKey(_selectedDate);
-                  final DayState s = _stateFor(day);
-                  Color? bg;
-                  Color textColor = AppColors.textPrimary;
-                  if (selected) {
-                    bg = AppColors.primary;
-                    textColor = Colors.white;
-                  } else if (s == DayState.dayOff) {
-                    bg = const Color(0xFFEB4E3D);
-                    textColor = Colors.white;
-                  }
-                  return Expanded(
-                    child: GestureDetector(
-                      onTap: () => setState(() {
-                        _selectedDate = day;
-                        _acceptingOrders = _stateFor(day) != DayState.dayOff;
-                      }),
-                      behavior: HitTestBehavior.opaque,
-                      child: SizedBox(
-                        height: 44.h,
-                        child: Center(
-                          child: Container(
-                            width: 36.r,
-                            height: 36.r,
-                            decoration: BoxDecoration(
-                              color: bg,
-                              shape: BoxShape.circle,
+            // Одна неделя — свайпаемая
+            SizedBox(
+              height: 44.h,
+              child: PageView.builder(
+                controller: _pageCtrl,
+                onPageChanged: _onPageChanged,
+                itemBuilder: (_, page) {
+                  final monday = _weekFromPage(page);
+                  final days = _weekDaysFor(monday);
+                  return Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 16.w),
+                    child: Row(
+                      children: days.map((day) {
+                        final bool selected = _dateKey(day) == _dateKey(_selectedDate);
+                        final DayState s = _stateFor(day);
+                        Color? bg;
+                        Color textColor = AppColors.textPrimary;
+                        if (selected) {
+                          bg = AppColors.primary;
+                          textColor = Colors.white;
+                        } else if (s == DayState.dayOff) {
+                          bg = const Color(0xFFEB4E3D);
+                          textColor = Colors.white;
+                        }
+                        return Expanded(
+                          child: GestureDetector(
+                            onTap: () => setState(() {
+                              _selectedDate = day;
+                              _acceptingOrders = _stateFor(day) != DayState.dayOff;
+                            }),
+                            behavior: HitTestBehavior.opaque,
+                            child: Center(
+                              child: Container(
+                                width: 36.r,
+                                height: 36.r,
+                                decoration: BoxDecoration(
+                                  color: bg,
+                                  shape: BoxShape.circle,
+                                ),
+                                alignment: Alignment.center,
+                                child: Text('${day.day}',
+                                    style: AppTextStyles.bodyL.copyWith(color: textColor)),
+                              ),
                             ),
-                            alignment: Alignment.center,
-                            child: Text('${day.day}',
-                                style: AppTextStyles.bodyL.copyWith(color: textColor)),
                           ),
-                        ),
-                      ),
+                        );
+                      }).toList(),
                     ),
                   );
-                }).toList(),
+                },
               ),
             ),
             SizedBox(height: 12.h),
@@ -565,8 +598,6 @@ class _OrderCard extends StatelessWidget {
         Text(
           order.machinery.join('   '),
           style: tagStyle,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
         ),
         SizedBox(height: 8.h),
         Text(

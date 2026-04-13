@@ -208,7 +208,7 @@ class _ConfirmDialog extends StatelessWidget {
                 ),
               ),
             ),
-            const Spacer(),
+            SizedBox(height: 8.h),
           ],
         ),
       ),

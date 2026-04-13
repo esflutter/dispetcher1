@@ -108,6 +108,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                 onPressed: _isValid
                     ? () {
                         CropResult.saved = _cropResult;
+                        CropResult.userName = _firstNameController.text.trim();
                         context.go('/assistant');
                       }
                     : () {},

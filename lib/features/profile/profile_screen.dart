@@ -6,6 +6,7 @@ import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_spacing.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
 import 'package:dispatcher_1/core/widgets/cropped_avatar.dart';
+import 'package:dispatcher_1/features/auth/photo_crop_screen.dart';
 import 'widgets/verification_badge.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -73,7 +74,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     final status = _status;
-    final fullName = widget.fullName;
+    final fullName = CropResult.userName;
     final rating = widget.rating;
     final reviewsCount = widget.reviewsCount;
     return Scaffold(

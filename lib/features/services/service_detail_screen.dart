@@ -68,19 +68,21 @@ class _ServiceDetailScreenState extends State<ServiceDetailScreen> {
                     children: [
                       Text('₽ / час',
                           style: AppTextStyles.body
-                              .copyWith(color: AppColors.textSecondary)),
+                              .copyWith(color: AppColors.primary)),
                       SizedBox(width: 6.w),
                       Text('${s.pricePerHour} ₽',
-                          style: AppTextStyles.bodyMedium
-                              .copyWith(fontWeight: FontWeight.w700)),
+                          style: AppTextStyles.bodyMedium.copyWith(
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.primary)),
                       SizedBox(width: 24.w),
                       Text('₽ / день',
                           style: AppTextStyles.body
-                              .copyWith(color: AppColors.textSecondary)),
+                              .copyWith(color: AppColors.primary)),
                       SizedBox(width: 6.w),
                       Text('${s.pricePerDay} ₽',
-                          style: AppTextStyles.bodyMedium
-                              .copyWith(fontWeight: FontWeight.w700)),
+                          style: AppTextStyles.bodyMedium.copyWith(
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.primary)),
                     ],
                   ),
                   SizedBox(height: 8.h),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 
 import 'package:dispatcher_1/core/theme/app_colors.dart';
+import 'package:dispatcher_1/core/theme/app_text_styles.dart';
 
 /// Карточка услуги в списке «Мои услуги».
 class ServiceCard extends StatelessWidget {
@@ -27,10 +28,9 @@ class ServiceCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final priceStyle = TextStyle(
-      fontFamily: 'Roboto',
-      fontSize: 16.sp,
-      fontWeight: FontWeight.w600,
+    final labelStyle = AppTextStyles.body.copyWith(color: AppColors.primary);
+    final valueStyle = AppTextStyles.bodyMedium.copyWith(
+      fontWeight: FontWeight.w700,
       color: AppColors.primary,
     );
 
@@ -50,8 +50,6 @@ class ServiceCard extends StatelessWidget {
                 color: AppColors.textTertiary,
                 height: 1.78,
               ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
             ),
             SizedBox(height: 4.h),
             Text(
@@ -80,14 +78,19 @@ class ServiceCard extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
             ),
             SizedBox(height: 10.h),
-            Wrap(
-              spacing: 9.w,
-              runSpacing: 4.h,
+            Row(
               children: [
-                if (_hasHour)
-                  Text('₽ / час   $pricePerHour ₽', style: priceStyle),
-                if (_hasDay)
-                  Text('₽ / день   $pricePerDay ₽', style: priceStyle),
+                if (_hasHour) ...[
+                  Text('₽ / час', style: labelStyle),
+                  SizedBox(width: 6.w),
+                  Text('$pricePerHour ₽', style: valueStyle),
+                ],
+                if (_hasHour && _hasDay) SizedBox(width: 24.w),
+                if (_hasDay) ...[
+                  Text('₽ / день', style: labelStyle),
+                  SizedBox(width: 6.w),
+                  Text('$pricePerDay ₽', style: valueStyle),
+                ],
               ],
             ),
           ],
