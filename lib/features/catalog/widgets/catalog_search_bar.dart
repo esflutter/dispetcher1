@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 
 import 'package:dispatcher_1/core/theme/app_colors.dart';
@@ -44,6 +45,7 @@ class CatalogSearchBar extends StatelessWidget {
                     child: TextField(
                       controller: controller,
                       onChanged: onChanged,
+                      inputFormatters: [LengthLimitingTextInputFormatter(100)],
                       cursorColor: AppColors.primary,
                       style: AppTextStyles.bodyMRegular.copyWith(
                         color: AppColors.textPrimary,

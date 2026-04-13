@@ -2,27 +2,23 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 
 import 'package:dispatcher_1/core/theme/app_colors.dart';
-import 'package:dispatcher_1/core/theme/app_spacing.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
 import 'package:dispatcher_1/core/widgets/primary_button.dart';
 
-/// Центрированный alert-dialog подтверждения удаления услуги.
-Future<bool?> showDeleteServiceSheet(
-  BuildContext context, {
-  required String serviceTitle,
-}) {
+/// Диалог подтверждения удаления услуги.
+Future<bool?> showDeleteServiceDialog(BuildContext context) {
   return showDialog<bool>(
     context: context,
-    barrierDismissible: true,
+    barrierColor: Colors.black.withValues(alpha: 0.35),
     builder: (ctx) => Dialog(
-      backgroundColor: AppColors.surface,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(AppSpacing.radiusL),
-      ),
-      insetPadding: EdgeInsets.symmetric(horizontal: AppSpacing.xl),
-      child: Padding(
-        padding: EdgeInsets.fromLTRB(
-            AppSpacing.md, AppSpacing.sm, AppSpacing.md, AppSpacing.md),
+      insetPadding: EdgeInsets.symmetric(horizontal: 16.w),
+      backgroundColor: Colors.transparent,
+      child: Container(
+        padding: EdgeInsets.fromLTRB(16.w, 14.h, 16.w, 22.h),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(20.r),
+        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -32,26 +28,30 @@ Future<bool?> showDeleteServiceSheet(
               child: GestureDetector(
                 onTap: () => Navigator.of(ctx).pop(false),
                 child: Icon(Icons.close_rounded,
-                    size: 22.r, color: AppColors.textSecondary),
+                    size: 22.r, color: AppColors.textTertiary),
               ),
             ),
+            SizedBox(height: 16.h),
             Text(
               'Вы уверены, что хотите\nудалить услугу?',
-              style: AppTextStyles.h3.copyWith(fontWeight: FontWeight.w700),
+              style: AppTextStyles.titleL.copyWith(fontWeight: FontWeight.w700),
               textAlign: TextAlign.center,
             ),
-            SizedBox(height: AppSpacing.lg),
+            SizedBox(height: 18.h),
             PrimaryButton(
               label: 'Удалить',
               onPressed: () => Navigator.of(ctx).pop(true),
             ),
-            SizedBox(height: AppSpacing.xs),
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
-              child: Text('Вернуться',
-                  style: AppTextStyles.bodyMedium
-                      .copyWith(color: AppColors.textSecondary)),
+            SizedBox(height: 12.h),
+            GestureDetector(
+              onTap: () => Navigator.of(ctx).pop(false),
+              child: Center(
+                child: Text('Вернуться',
+                    style: AppTextStyles.bodyMedium
+                        .copyWith(color: AppColors.textPrimary)),
+              ),
             ),
+            SizedBox(height: 8.h),
           ],
         ),
       ),
@@ -59,21 +59,20 @@ Future<bool?> showDeleteServiceSheet(
   );
 }
 
-/// Центрированный alert-dialog «Ваша услуга размещена!» после
-/// успешной оплаты размещения.
+/// Диалог «Ваша услуга размещена!» после успешной оплаты.
 Future<void> showServicePublishedDialog(BuildContext context) {
   return showDialog<void>(
     context: context,
-    barrierDismissible: true,
+    barrierColor: Colors.black.withValues(alpha: 0.35),
     builder: (ctx) => Dialog(
-      backgroundColor: AppColors.surface,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(AppSpacing.radiusL),
-      ),
-      insetPadding: EdgeInsets.symmetric(horizontal: AppSpacing.xl),
-      child: Padding(
-        padding: EdgeInsets.fromLTRB(
-            AppSpacing.md, AppSpacing.md, AppSpacing.md, AppSpacing.md),
+      insetPadding: EdgeInsets.symmetric(horizontal: 16.w),
+      backgroundColor: Colors.transparent,
+      child: Container(
+        padding: EdgeInsets.fromLTRB(16.r, 14.r, 16.r, 22.r),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(20.r),
+        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -83,27 +82,28 @@ Future<void> showServicePublishedDialog(BuildContext context) {
               child: GestureDetector(
                 onTap: () => Navigator.of(ctx).pop(),
                 child: Icon(Icons.close_rounded,
-                    size: 22.r, color: AppColors.textSecondary),
+                    size: 22.r, color: AppColors.textTertiary),
               ),
             ),
+            SizedBox(height: 22.h),
             Text(
               'Ваша услуга размещена!',
-              style: AppTextStyles.h3.copyWith(fontWeight: FontWeight.w700),
               textAlign: TextAlign.center,
+              style: AppTextStyles.titleL.copyWith(fontWeight: FontWeight.w700),
             ),
-            SizedBox(height: AppSpacing.xs),
+            SizedBox(height: 8.h),
             Text(
-              'Теперь услуга видна другим\n'
-              'пользователям, и заказчики смогут\nсвязаться с вами',
-              style:
-                  AppTextStyles.body.copyWith(color: AppColors.textSecondary),
+              'Теперь услуга видна другим\nпользователям, и заказчики смогут\nсвязаться с вами',
               textAlign: TextAlign.center,
+              style: AppTextStyles.bodyMRegular
+                  .copyWith(color: AppColors.textSecondary),
             ),
-            SizedBox(height: AppSpacing.lg),
+            SizedBox(height: 18.h),
             PrimaryButton(
               label: 'Ок',
               onPressed: () => Navigator.of(ctx).pop(),
             ),
+            SizedBox(height: 12.h),
           ],
         ),
       ),

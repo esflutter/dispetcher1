@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
 
@@ -270,6 +271,7 @@ class _CatalogHeader extends StatelessWidget {
                         child: TextField(
                           controller: controller,
                           onChanged: onChanged,
+                          inputFormatters: [LengthLimitingTextInputFormatter(100)],
                           textInputAction: TextInputAction.search,
                           cursorColor: AppColors.primary,
                           style: AppTextStyles.bodyMRegular.copyWith(

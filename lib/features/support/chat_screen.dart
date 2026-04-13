@@ -161,7 +161,7 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   void _handleAttach() {
-    if (_pendingImages.length >= 10) return;
+    if (_pendingImages.length >= 8) return;
     setState(() {
       // Добавляем заглушки изображений по очереди
       final next = _demoImages[_pendingImages.length % _demoImages.length];

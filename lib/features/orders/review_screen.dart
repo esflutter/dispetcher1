@@ -137,9 +137,9 @@ class _ReviewScreenState extends State<ReviewScreen> {
                       // null — поле растёт вниз по мере добавления строк.
                       maxLines: null,
                       minLines: 1,
-                      maxLength: 500,
+                      maxLength: 1000,
                       inputFormatters: <TextInputFormatter>[
-                        LengthLimitingTextInputFormatter(500),
+                        LengthLimitingTextInputFormatter(1000),
                       ],
                       style: TextStyle(
                         fontFamily: 'Roboto',

@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 
 import 'package:dispatcher_1/core/theme/app_colors.dart';
@@ -153,6 +154,7 @@ class _TextInputBar extends StatelessWidget {
                     controller: controller,
                     minLines: 1,
                     maxLines: 1,
+                    inputFormatters: [LengthLimitingTextInputFormatter(1000)],
                     textInputAction: TextInputAction.send,
                     onSubmitted: (_) => onSubmit(),
                     textAlignVertical: TextAlignVertical.center,
@@ -397,7 +399,7 @@ class _PendingImagesRow extends StatelessWidget {
                   child: GestureDetector(
                     onTap: onRemove == null ? null : () => onRemove!(i),
                     child: Image.asset(
-                      'assets/icons/support/close_image.webp',
+                      'assets/icons/ui/close_photo.webp',
                       width: 24.r,
                       height: 24.r,
                     ),

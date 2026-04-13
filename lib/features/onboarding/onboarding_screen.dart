@@ -207,30 +207,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             ),
           ),
 
-          // 3. Временная кнопка для быстрого перехода в каталог.
-          Positioned(
-            top: MediaQuery.of(context).padding.top + 8.h,
-            right: 12.w,
-            child: GestureDetector(
-              onTap: () => context.go('/shell'),
-              child: Container(
-                padding:
-                    EdgeInsets.symmetric(horizontal: 12.w, vertical: 6.h),
-                decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.55),
-                  borderRadius: BorderRadius.circular(100.r),
-                ),
-                child: Text(
-                  'В каталог →',
-                  style: AppTextStyles.body.copyWith(
-                    color: Colors.white,
-                    fontSize: 12.sp,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ),
-            ),
-          ),
         ],
       ),
     );

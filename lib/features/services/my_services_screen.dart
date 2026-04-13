@@ -3,120 +3,168 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:dispatcher_1/core/theme/app_colors.dart';
-import 'package:dispatcher_1/core/theme/app_spacing.dart';
-import 'package:dispatcher_1/core/theme/app_text_styles.dart';
 import 'package:dispatcher_1/core/widgets/dark_sub_app_bar.dart';
 import 'package:dispatcher_1/core/widgets/primary_button.dart';
 import 'package:dispatcher_1/features/catalog/widgets/catalog_search_bar.dart';
 
 import 'widgets/service_card.dart';
 
-/// Экран «Мои услуги» — список услуг исполнителя или пустое состояние.
-class MyServicesScreen extends StatelessWidget {
-  const MyServicesScreen({super.key, this.empty = true});
+/// Статические данные моковых услуг (для доступа из других экранов).
+class ServiceData {
+  ServiceData._();
 
-  final bool empty;
+  static final List<ServiceMock> services = [];
 
-  static const List<_ServiceMock> _mock = [
-    _ServiceMock(
+  static const List<ServiceMock> presets = [
+    ServiceMock(
       id: '1',
-      title: 'Экскаватор для копки траншеи',
-      category: 'Экскаватор',
-      pricePerHour: 'от 1 000 ₽/час',
+      title: 'Экскаватор для земляных работ',
+      categories: ['Земляные работы', 'Погрузочно-разгрузочные работы'],
+      machinery: ['Экскаватор'],
+      pricePerHour: '1 000',
+      pricePerDay: '14 000',
+      minOrder: '4',
+      description:
+          'Экскаватор для земляных работ. Копка траншей, разработка котлованов, выравнивание участка. '
+          'Работаю аккуратно, соблюдаю сроки. Возможен выезд в ближайшие районы.',
     ),
-    _ServiceMock(
+    ServiceMock(
       id: '2',
       title: 'Самосвал для вывоза грунта',
-      category: 'Самосвал',
-      pricePerHour: 'от 3 000 ₽/час',
+      categories: ['Земляные работы', 'Перевозка материалов'],
+      machinery: ['Самосвал'],
+      pricePerHour: '3 000',
+      pricePerDay: '7 000',
+      minOrder: '2',
+      description:
+          'Вывоз грунта, мусора и сыпучих материалов. '
+          'Работаю быстро, без задержек. Возможен выезд в ближайшие районы.',
     ),
-    _ServiceMock(
+    ServiceMock(
       id: '3',
       title: 'Работы на высоте',
-      category: 'Автовышка',
-      pricePerHour: 'от 5 000 ₽/час',
+      categories: ['Высотные работы', 'Строительные работы'],
+      machinery: ['Автовышка', 'Автокран'],
+      pricePerHour: '5 000',
+      pricePerDay: '15 000',
+      minOrder: '3',
+      description:
+          'Работы на высоте: монтаж, обслуживание, обрезка деревьев. '
+          'Техника исправна, работаю аккуратно.',
     ),
   ];
+}
+
+class ServiceMock {
+  const ServiceMock({
+    required this.id,
+    required this.title,
+    required this.categories,
+    required this.machinery,
+    required this.pricePerHour,
+    required this.pricePerDay,
+    required this.minOrder,
+    required this.description,
+    this.photos = const [],
+    this.address,
+    this.radiusIndex = -1,
+  });
+  final String id;
+  final String title;
+  final List<String> categories;
+  final List<String> machinery;
+  final String pricePerHour;
+  final String pricePerDay;
+  final String minOrder;
+  final String description;
+  final List<String> photos;
+  final String? address;
+  final int radiusIndex;
+}
+
+/// Экран «Мои услуги» — список услуг исполнителя или пустое состояние.
+class MyServicesScreen extends StatefulWidget {
+  const MyServicesScreen({super.key});
+
+  @override
+  State<MyServicesScreen> createState() => _MyServicesScreenState();
+}
+
+class _MyServicesScreenState extends State<MyServicesScreen> {
+  bool get _isEmpty => ServiceData.services.isEmpty;
 
   @override
   Widget build(BuildContext context) {
-    final isEmpty = empty;
-
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: DarkSubAppBar(
-        title: 'Мои услуги',
-        actions: <Widget>[
-          if (!isEmpty)
-            Padding(
-              padding: EdgeInsets.only(right: 8.w),
-              child: IconButton(
-                icon: Icon(Icons.add_rounded, color: Colors.white, size: 26.r),
-                onPressed: () => context.push('/services/create'),
-              ),
-            ),
-        ],
-      ),
+      appBar: const DarkSubAppBar(title: 'Мои услуги'),
       floatingActionButton: Padding(
-        padding: EdgeInsets.only(bottom: isEmpty ? 88.h : 24.h),
+        padding: EdgeInsets.only(bottom: 88.h),
         child: AiAssistantFab(onTap: () => context.push('/assistant/chat')),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       body: SafeArea(
-        child: isEmpty ? const _EmptyState() : _ServicesList(items: _mock),
-      ),
-      bottomNavigationBar: isEmpty
-          ? SafeArea(
-              top: false,
-              child: Padding(
-                padding: EdgeInsets.fromLTRB(AppSpacing.screenH, 0,
-                    AppSpacing.screenH, AppSpacing.md),
-                child: PrimaryButton(
-                  label: 'Создать услугу',
-                  onPressed: () => context.push('/services/create'),
-                ),
+        child: Column(
+          children: [
+            Expanded(
+              child: _isEmpty
+                  ? const _EmptyState()
+                  : _ServicesList(
+                      items: ServiceData.services,
+                      onRefresh: () => setState(() {}),
+                    ),
+            ),
+            Container(
+              decoration: BoxDecoration(
+                color: AppColors.background,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.06),
+                    offset: const Offset(0, -1),
+                    blurRadius: 8,
+                  ),
+                ],
               ),
-            )
-          : null,
+              padding: EdgeInsets.fromLTRB(16.w, 12.h, 16.w, 16.h),
+              child: PrimaryButton(
+                label: 'Создать услугу',
+                onPressed: () async {
+                  await context.push('/services/create');
+                  if (mounted) setState(() {});
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
 
-class _ServiceMock {
-  const _ServiceMock({
-    required this.id,
-    required this.title,
-    required this.category,
-    required this.pricePerHour,
-  });
-  final String id;
-  final String title;
-  final String category;
-  final String pricePerHour;
-}
-
 class _ServicesList extends StatelessWidget {
-  const _ServicesList({required this.items});
-  final List<_ServiceMock> items;
+  const _ServicesList({required this.items, required this.onRefresh});
+  final List<ServiceMock> items;
+  final VoidCallback onRefresh;
 
   @override
   Widget build(BuildContext context) {
     return ListView.separated(
-      padding: EdgeInsets.fromLTRB(
-        AppSpacing.md,
-        AppSpacing.md,
-        AppSpacing.md,
-        AppSpacing.xxl,
-      ),
+      padding: EdgeInsets.symmetric(vertical: 4.h),
       itemCount: items.length,
-      separatorBuilder: (_, _) => SizedBox(height: AppSpacing.sm),
+      separatorBuilder: (_, _) =>
+          Divider(height: 1, thickness: 1, color: AppColors.primary.withValues(alpha: 0.3)),
       itemBuilder: (context, index) {
         final item = items[index];
         return ServiceCard(
           title: item.title,
-          category: item.category,
+          machinery: item.machinery,
+          description: item.description,
           pricePerHour: item.pricePerHour,
-          onTap: () => context.push('/services/${item.id}'),
+          pricePerDay: item.pricePerDay,
+          onTap: () async {
+            await context.push('/services/${item.id}');
+            onRefresh();
+          },
         );
       },
     );
@@ -128,23 +176,33 @@ class _EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.symmetric(horizontal: AppSpacing.xl),
-      child: Center(
+    return Center(
+      child: Padding(
+        padding: EdgeInsets.symmetric(horizontal: 32.w),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
           children: [
             Text(
               'Здесь появятся ваши услуги',
-              style:
-                  AppTextStyles.h3.copyWith(fontWeight: FontWeight.w700),
+              style: TextStyle(
+                fontFamily: 'Roboto',
+                fontSize: 20.sp,
+                fontWeight: FontWeight.w600,
+                height: 1.3,
+                color: AppColors.textPrimary,
+              ),
               textAlign: TextAlign.center,
             ),
-            SizedBox(height: AppSpacing.xs),
+            SizedBox(height: 8.h),
             Text(
               'Создайте услугу\nи начните получать заказы',
-              style: AppTextStyles.body
-                  .copyWith(color: AppColors.textSecondary),
+              style: TextStyle(
+                fontFamily: 'Roboto',
+                fontSize: 16.sp,
+                fontWeight: FontWeight.w400,
+                height: 1.3,
+                color: AppColors.textSecondary,
+              ),
               textAlign: TextAlign.center,
             ),
           ],

@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
-import 'package:go_router/go_router.dart';
-
 import 'package:dispatcher_1/core/theme/app_colors.dart';
-import 'package:dispatcher_1/core/theme/app_spacing.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
 import 'package:dispatcher_1/core/widgets/dark_sub_app_bar.dart';
 import 'package:dispatcher_1/core/widgets/primary_button.dart';
-import 'package:dispatcher_1/features/catalog/widgets/catalog_search_bar.dart';
+import 'package:dispatcher_1/features/catalog/catalog_filter_screen.dart';
+import 'package:dispatcher_1/features/services/my_services_screen.dart';
 
 import 'widgets/service_alerts.dart';
+import 'widgets/service_paywall.dart';
 
 /// Экран «Создание / редактирование услуги».
 /// При передаче [serviceId] работает в режиме редактирования.
@@ -23,26 +23,32 @@ class CreateServiceScreen extends StatefulWidget {
 }
 
 class _CreateServiceScreenState extends State<CreateServiceScreen> {
-  final _title = TextEditingController();
-  final _desc = TextEditingController();
-  final _priceHour = TextEditingController();
-  final _priceDay = TextEditingController();
-  final _minHours = TextEditingController();
-  final _aiPrompt = TextEditingController();
+  final _titleCtrl = TextEditingController();
+  final _descCtrl = TextEditingController();
+  final _priceHourCtrl = TextEditingController();
+  final _priceDayCtrl = TextEditingController();
+  final _minHoursCtrl = TextEditingController();
 
-  bool _aiMode = false;
-  int _radiusIndex = 0;
+  int _radiusIndex = -1;
+  String? _address;
+  final List<String> _photos = [];
 
-  final Set<String> _selCat = {
-    'Земляные работы',
-    'Погрузочно-разгрузочные работы',
-  };
-  final Set<String> _selMach = {'Экскаватор', 'Погрузчик'};
+  static const _demoPhotos = [
+    'assets/images/profile/photo_1.webp',
+    'assets/images/profile/photo_2.webp',
+    'assets/images/profile/photo_3.webp',
+    'assets/images/profile/photo_4.webp',
+    'assets/images/profile/photo_5.webp',
+    'assets/images/profile/photo_6.webp',
+  ];
+
+  final Set<String> _selCat = {};
+  final Set<String> _selMach = {};
 
   static const _radiusOptions = [
     'В радиусе 10 км',
     'В радиусе 20 км',
-    'В радиусе 30 км',
+    'В радиусе 50 км',
   ];
   static const _categories = [
     'Земляные работы',
@@ -57,46 +63,133 @@ class _CreateServiceScreenState extends State<CreateServiceScreen> {
   ];
   static const _machinery = [
     'Экскаватор-погрузчик',
+    'Экскаватор',
     'Погрузчик',
     'Миниэкскаватор',
-    'Минипогрузчик',
     'Буроям',
     'Самогруз',
     'Автокран',
-    'Самосвалы (до 5тн, 15, 25)',
     'Бетононасос',
     'Эвакуатор',
     'Автовышка',
     'Манипулятор',
+    'Минипогрузчик',
+    'Самосвал',
     'Минитрактор',
-    'Экскаватор',
-    'Инертные материалы',
   ];
 
   bool get _isEdit => widget.serviceId != null;
 
+  ServiceMock? _editingService;
+
   @override
   void initState() {
     super.initState();
+    _titleCtrl.addListener(_onFieldChanged);
+    _descCtrl.addListener(_onFieldChanged);
+    _priceHourCtrl.addListener(_onFieldChanged);
+    _priceDayCtrl.addListener(_onFieldChanged);
+    _minHoursCtrl.addListener(_onFieldChanged);
     if (_isEdit) {
-      _title.text = 'Разработка котлована под фундамент';
-      _desc.text =
-          'Экскаватор для земляных работ. Копка траншей, разработка котлованов.';
-      _priceHour.text = '1000';
-      _priceDay.text = '14000';
-      _minHours.text = '4';
+      try {
+        _editingService = ServiceData.services
+            .firstWhere((s) => s.id == widget.serviceId);
+      } catch (_) {}
+      if (_editingService != null) {
+        final s = _editingService!;
+        _titleCtrl.text = s.title;
+        _descCtrl.text = s.description;
+        _priceHourCtrl.text = s.pricePerHour;
+        _priceDayCtrl.text = s.pricePerDay;
+        _minHoursCtrl.text = s.minOrder;
+        _selCat.addAll(s.categories);
+        _selMach.addAll(s.machinery);
+        _photos.addAll(s.photos);
+        _address = s.address;
+        _radiusIndex = s.radiusIndex;
+      }
     }
+  }
+
+  void _onFieldChanged() => setState(() {});
+
+  void _addPhoto() {
+    if (_photos.length >= 8) return;
+    setState(() {
+      final next = _demoPhotos[_photos.length % _demoPhotos.length];
+      _photos.add(next);
+    });
   }
 
   @override
   void dispose() {
-    _title.dispose();
-    _desc.dispose();
-    _priceHour.dispose();
-    _priceDay.dispose();
-    _minHours.dispose();
-    _aiPrompt.dispose();
+    _titleCtrl.removeListener(_onFieldChanged);
+    _descCtrl.removeListener(_onFieldChanged);
+    _priceHourCtrl.removeListener(_onFieldChanged);
+    _priceDayCtrl.removeListener(_onFieldChanged);
+    _minHoursCtrl.removeListener(_onFieldChanged);
+    _titleCtrl.dispose();
+    _descCtrl.dispose();
+    _priceHourCtrl.dispose();
+    _priceDayCtrl.dispose();
+    _minHoursCtrl.dispose();
     super.dispose();
+  }
+
+  void _save() {
+    final id = _isEdit
+        ? widget.serviceId!
+        : DateTime.now().millisecondsSinceEpoch.toString();
+
+    final service = ServiceMock(
+      id: id,
+      title: _titleCtrl.text.isEmpty ? 'Новая услуга' : _titleCtrl.text,
+      categories: _selCat.toList(),
+      machinery: _selMach.toList(),
+      pricePerHour: _priceHourCtrl.text.isEmpty ? '0' : _priceHourCtrl.text,
+      pricePerDay: _priceDayCtrl.text.isEmpty ? '0' : _priceDayCtrl.text,
+      minOrder: _minHoursCtrl.text.isEmpty ? '1' : _minHoursCtrl.text,
+      description: _descCtrl.text,
+      photos: List<String>.from(_photos),
+      address: _address,
+      radiusIndex: _radiusIndex,
+    );
+
+    if (_isEdit) {
+      final idx = ServiceData.services.indexWhere((s) => s.id == id);
+      if (idx >= 0) ServiceData.services[idx] = service;
+    } else {
+      ServiceData.services.add(service);
+    }
+  }
+
+  Future<void> _onCreateTap() async {
+    // Открываем paywall оплаты размещения
+    final bool? paid = await Navigator.of(context).push<bool>(
+      MaterialPageRoute<bool>(
+        fullscreenDialog: true,
+        builder: (_) => const ServicePaywall(),
+      ),
+    );
+    if (paid != true || !mounted) return;
+
+    _save();
+    if (!mounted) return;
+    await showServicePublishedDialog(context);
+    if (!mounted) return;
+    Navigator.of(context).pop();
+  }
+
+  Future<void> _openAddressSheet() async {
+    final result = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => const AddressBottomSheet(),
+    );
+    if (result != null && mounted) {
+      setState(() => _address = result);
+    }
   }
 
   @override
@@ -106,14 +199,7 @@ class _CreateServiceScreenState extends State<CreateServiceScreen> {
       appBar: _isEdit
           ? const DarkSubAppBar(title: 'Редактирование услуги')
           : _CreateAppBar(onClose: () => Navigator.of(context).maybePop()),
-      floatingActionButton: Padding(
-        padding: EdgeInsets.only(bottom: 88.h),
-        child: AiAssistantFab(onTap: () => context.push('/assistant/chat')),
-      ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
-      body: SafeArea(
-        child: _aiMode && !_isEdit ? _buildAiMode() : _buildManualMode(),
-      ),
+      body: _buildManualMode(),
     );
   }
 
@@ -122,13 +208,12 @@ class _CreateServiceScreenState extends State<CreateServiceScreen> {
       children: [
         Expanded(
           child: SingleChildScrollView(
-            padding: EdgeInsets.fromLTRB(AppSpacing.screenH, AppSpacing.md,
-                AppSpacing.screenH, AppSpacing.md),
+            padding: EdgeInsets.fromLTRB(16.w, 16.h, 16.w, 16.h),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _SectionTitle('Категория услуг'),
-                SizedBox(height: AppSpacing.xs),
+                SizedBox(height: 8.h),
                 _ChipWrap(
                   items: _categories,
                   selected: _selCat,
@@ -136,123 +221,186 @@ class _CreateServiceScreenState extends State<CreateServiceScreen> {
                     _selCat.contains(v) ? _selCat.remove(v) : _selCat.add(v);
                   }),
                 ),
-                SizedBox(height: AppSpacing.md),
+                SizedBox(height: 16.h),
                 _SectionTitle('Спецтехника'),
-                SizedBox(height: AppSpacing.xs),
+                SizedBox(height: 8.h),
                 _ChipWrap(
                   items: _machinery,
                   selected: _selMach,
                   onToggle: (v) => setState(() {
-                    _selMach.contains(v) ? _selMach.remove(v) : _selMach.add(v);
+                    _selMach.contains(v)
+                        ? _selMach.remove(v)
+                        : _selMach.add(v);
                   }),
                 ),
-                SizedBox(height: AppSpacing.md),
+                SizedBox(height: 16.h),
                 _SectionTitle('Название услуги'),
-                SizedBox(height: AppSpacing.xs),
+                SizedBox(height: 8.h),
                 _TintField(
-                  controller: _title,
+                  controller: _titleCtrl,
                   hint: 'Например: Экскаватор для земляных работ',
+                  maxLength: 25,
                 ),
-                SizedBox(height: AppSpacing.md),
+                SizedBox(height: 16.h),
                 _SectionTitle('Описание услуги'),
-                SizedBox(height: AppSpacing.xs),
+                SizedBox(height: 8.h),
                 _TintField(
-                  controller: _desc,
+                  controller: _descCtrl,
                   hint: 'Опишите, какие работы вы\nвыполняете и условия работы',
-                  maxLines: 4,
+                  minLines: 2,
+                  maxLines: null,
+                  maxLength: 500,
                 ),
-                SizedBox(height: AppSpacing.md),
+                SizedBox(height: 16.h),
                 _SectionTitle('Фото'),
-                SizedBox(height: 2.h),
+                SizedBox(height: 4.h),
                 Text(
-                  'По желанию добавьте к услуге фото, до 8 шт.',
-                  style: AppTextStyles.caption
-                      .copyWith(color: AppColors.textSecondary),
+                  'По желанию добавьте изображения к услуге, до 8 шт',
+                  style: TextStyle(
+                    fontFamily: 'Roboto',
+                    fontSize: 14.sp,
+                    fontWeight: FontWeight.w400,
+                    height: 1.3,
+                    color: AppColors.textSecondary,
+                  ),
                 ),
-                SizedBox(height: AppSpacing.xs),
-                _PhotosPicker(),
-                SizedBox(height: AppSpacing.md),
+                SizedBox(height: 8.h),
+                if (_photos.isNotEmpty) ...[
+                  _PhotosGrid(
+                    photos: _photos,
+                    onRemove: (i) => setState(() => _photos.removeAt(i)),
+                  ),
+                  SizedBox(height: 8.h),
+                ],
+                _AddPhotosButton(onTap: _addPhoto),
+                SizedBox(height: 16.h),
                 _SectionTitle('Стоимость'),
-                SizedBox(height: AppSpacing.xs),
+                SizedBox(height: 8.h),
                 Row(
                   children: [
                     Expanded(
                       child: _TintField(
-                        controller: _priceHour,
+                        controller: _priceHourCtrl,
                         hint: '₽ / час',
+                        suffix: ' ₽ / час',
                         keyboardType: TextInputType.number,
+                        maxLength: 15,
                       ),
                     ),
-                    SizedBox(width: AppSpacing.sm),
+                    SizedBox(width: 12.w),
                     Expanded(
                       child: _TintField(
-                        controller: _priceDay,
+                        controller: _priceDayCtrl,
                         hint: '₽ / день',
+                        suffix: ' ₽ / день',
                         keyboardType: TextInputType.number,
+                        maxLength: 15,
                       ),
                     ),
                   ],
                 ),
-                SizedBox(height: AppSpacing.md),
+                SizedBox(height: 16.h),
                 _SectionTitle('Минимальный заказ'),
-                SizedBox(height: AppSpacing.xs),
-                _TintField(
-                  controller: _minHours,
-                  hint: 'ч',
-                  keyboardType: TextInputType.number,
+                SizedBox(height: 8.h),
+                SizedBox(
+                  width: (MediaQuery.of(context).size.width - 16.w * 2 - 12.w) / 2,
+                  child: _TintField(
+                    controller: _minHoursCtrl,
+                    hint: 'от 4 часов',
+                    prefix: 'от ',
+                    suffix: ' часов',
+                    keyboardType: TextInputType.number,
+                    maxLength: 15,
+                  ),
                 ),
-                SizedBox(height: 4.h),
-                Text(
-                  'Укажите минимальное количество часов для заказа',
-                  style: AppTextStyles.caption
-                      .copyWith(color: AppColors.textSecondary),
-                ),
-                SizedBox(height: AppSpacing.md),
+                SizedBox(height: 16.h),
                 _SectionTitle('Местоположение'),
-                SizedBox(height: AppSpacing.xs),
-                _TintField(
-                  controller: TextEditingController(text: 'Москва'),
-                  hint: 'Москва',
+                SizedBox(height: 8.h),
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: _openAddressSheet,
+                  child: Container(
+                    width: double.infinity,
+                    padding: EdgeInsets.symmetric(
+                        horizontal: 16.w, vertical: 14.h),
+                    decoration: BoxDecoration(
+                      color: AppColors.fieldFill,
+                      borderRadius: BorderRadius.circular(12.r),
+                    ),
+                    child: Text(
+                      _address ?? 'Введите адрес',
+                      style: AppTextStyles.body.copyWith(
+                        color: _address != null
+                            ? AppColors.textPrimary
+                            : AppColors.textTertiary,
+                      ),
+                    ),
+                  ),
                 ),
-                SizedBox(height: AppSpacing.sm),
+                SizedBox(height: 12.h),
                 for (int i = 0; i < _radiusOptions.length; i++) ...[
                   _RadiusOption(
                     label: _radiusOptions[i],
                     selected: _radiusIndex == i,
                     onTap: () => setState(() => _radiusIndex = i),
                   ),
-                  if (i != _radiusOptions.length - 1) SizedBox(height: 4.h),
+                  if (i != _radiusOptions.length - 1) SizedBox(height: 8.h),
                 ],
-                SizedBox(height: AppSpacing.lg),
+                SizedBox(height: 24.h),
               ],
             ),
           ),
         ),
-        Padding(
-          padding: EdgeInsets.fromLTRB(AppSpacing.screenH, 0,
-              AppSpacing.screenH, AppSpacing.md),
+        Container(
+          decoration: BoxDecoration(
+            color: AppColors.background,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.08),
+                blurRadius: 8,
+                offset: const Offset(0, -2),
+              ),
+            ],
+          ),
+          padding: EdgeInsets.fromLTRB(
+            16.w,
+            12.h,
+            16.w,
+            16.h + MediaQuery.of(context).padding.bottom,
+          ),
           child: _isEdit ? _editButtons() : _createButtons(),
         ),
       ],
     );
   }
 
+  bool get _canCreate =>
+      _selCat.isNotEmpty &&
+      _selMach.isNotEmpty &&
+      _titleCtrl.text.trim().isNotEmpty &&
+      _descCtrl.text.trim().isNotEmpty &&
+      (_priceHourCtrl.text.trim().isNotEmpty ||
+          _priceDayCtrl.text.trim().isNotEmpty) &&
+      _minHoursCtrl.text.trim().isNotEmpty &&
+      _address != null &&
+      _radiusIndex >= 0;
+
   Widget _createButtons() {
     return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
         PrimaryButton(
           label: 'Создать',
-          onPressed: () => context.push('/subscription/tariffs'),
+          enabled: _canCreate,
+          onPressed: _canCreate ? _onCreateTap : null,
         ),
-        SizedBox(height: AppSpacing.xs),
-        SizedBox(
-          width: double.infinity,
-          height: 54.h,
-          child: TextButton(
-            onPressed: () => setState(() => _aiMode = true),
-            child: Text('Заполнить автоматически',
-                style: AppTextStyles.button
-                    .copyWith(color: AppColors.primary)),
+        SizedBox(height: 8.h),
+        SecondaryButton(
+          label: 'Заполнить автоматически',
+          onPressed: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => const _AiCreateServiceScreen(),
+            ),
           ),
         ),
       ],
@@ -261,32 +409,40 @@ class _CreateServiceScreenState extends State<CreateServiceScreen> {
 
   Widget _editButtons() {
     return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
         PrimaryButton(
           label: 'Сохранить',
           onPressed: () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Сохранено'),
-                duration: Duration(seconds: 2),
-              ),
-            );
-            Navigator.of(context).maybePop();
+            _save();
+            Navigator.of(context).pop();
           },
         ),
-        SizedBox(height: AppSpacing.xs),
+        SizedBox(height: 8.h),
         SizedBox(
           width: double.infinity,
-          height: 54.h,
-          child: TextButton(
+          height: 48.h,
+          child: OutlinedButton(
             onPressed: () async {
-              final ok = await showDeleteServiceSheet(context,
-                  serviceTitle: _title.text);
+              final ok = await showDeleteServiceDialog(context);
               if (!mounted) return;
               if (ok == true) {
-                Navigator.of(context).maybePop();
+                ServiceData.services
+                    .removeWhere((s) => s.id == widget.serviceId);
+                if (mounted) {
+                  // Возвращаемся на список услуг (pop редактирование + просмотр)
+                  Navigator.of(context).pop();
+                  Navigator.of(context).pop();
+                }
               }
             },
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppColors.error,
+              side: const BorderSide(color: AppColors.error, width: 1.5),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16.r),
+              ),
+            ),
             child: Text('Удалить услугу',
                 style: AppTextStyles.button.copyWith(color: AppColors.error)),
           ),
@@ -295,35 +451,83 @@ class _CreateServiceScreenState extends State<CreateServiceScreen> {
     );
   }
 
-  Widget _buildAiMode() {
-    return Column(
-      children: [
-        Padding(
-          padding: EdgeInsets.fromLTRB(
-              AppSpacing.screenH, AppSpacing.md, AppSpacing.screenH, 0),
-          child: Container(
-            padding: EdgeInsets.all(AppSpacing.md),
-            decoration: BoxDecoration(
-              color: AppColors.primaryTint,
-              borderRadius: BorderRadius.circular(AppSpacing.radiusM),
-            ),
-            child: Text(
-              'Опишите услугу — текстом или голосом, я заполню всё за вас',
-              style: AppTextStyles.body,
-            ),
+}
+
+/// Экран автоматического создания услуги через ИИ-ассистента.
+class _AiCreateServiceScreen extends StatefulWidget {
+  const _AiCreateServiceScreen();
+
+  @override
+  State<_AiCreateServiceScreen> createState() => _AiCreateServiceScreenState();
+}
+
+class _AiCreateServiceScreenState extends State<_AiCreateServiceScreen> {
+  final _ctrl = TextEditingController();
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      appBar: AppBar(
+        backgroundColor: AppColors.navBarDark,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        centerTitle: true,
+        toolbarHeight: 48.h,
+        automaticallyImplyLeading: false,
+        title: Padding(
+          padding: EdgeInsets.only(top: 2.h),
+          child: Text(
+            'Создание услуги',
+            style: AppTextStyles.titleS.copyWith(color: Colors.white),
           ),
         ),
-        const Spacer(),
-        _AiInputBar(
-          controller: _aiPrompt,
-          onSend: () {
-            setState(() => _aiMode = false);
-          },
-        ),
-      ],
+        actions: [
+          Padding(
+            padding: EdgeInsets.only(right: 8.w, top: 2.h),
+            child: IconButton(
+              padding: EdgeInsets.zero,
+              icon: Icon(Icons.close_rounded, size: 24.r, color: Colors.white),
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+          ),
+        ],
+      ),
+      body: Column(
+        children: [
+          Padding(
+            padding: EdgeInsets.fromLTRB(16.w, 16.h, 16.w, 0),
+            child: Container(
+              width: double.infinity,
+              padding: EdgeInsets.all(16.w),
+              decoration: BoxDecoration(
+                color: AppColors.primaryTint,
+                borderRadius: BorderRadius.circular(12.r),
+              ),
+              child: Text(
+                'Опишите услугу — текстом или голосом, я заполню всё за вас',
+                style: AppTextStyles.body,
+              ),
+            ),
+          ),
+          const Spacer(),
+          _AiInputBar(
+            controller: _ctrl,
+            onSend: () => Navigator.of(context).pop(),
+          ),
+        ],
+      ),
     );
   }
 }
+
+// ── Вспомогательные виджеты ──
 
 class _SectionTitle extends StatelessWidget {
   const _SectionTitle(this.title);
@@ -333,7 +537,13 @@ class _SectionTitle extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       title,
-      style: AppTextStyles.bodyMedium.copyWith(fontWeight: FontWeight.w700),
+      style: TextStyle(
+        fontFamily: 'Roboto',
+        fontSize: 20.sp,
+        fontWeight: FontWeight.w700,
+        height: 1.3,
+        color: AppColors.textPrimary,
+      ),
     );
   }
 }
@@ -342,38 +552,113 @@ class _TintField extends StatelessWidget {
   const _TintField({
     required this.controller,
     required this.hint,
+    this.minLines,
     this.maxLines = 1,
     this.keyboardType,
+    this.maxLength,
+    this.suffix,
+    this.prefix,
   });
   final TextEditingController controller;
   final String hint;
-  final int maxLines;
+  final int? minLines;
+  final int? maxLines;
   final TextInputType? keyboardType;
+  final int? maxLength;
+  final String? suffix;
+  final String? prefix;
 
   @override
   Widget build(BuildContext context) {
+    final bool hasAffixDef = suffix != null || prefix != null;
+
+    if (hasAffixDef) {
+      final bool hasText = controller.text.isNotEmpty;
+      // Измеряем ширину prefix чтобы сдвинуть курсор
+      double prefixWidth = 0;
+      if (hasText && prefix != null) {
+        final tp = TextPainter(
+          text: TextSpan(text: prefix, style: AppTextStyles.body),
+          textDirection: TextDirection.ltr,
+        )..layout();
+        prefixWidth = tp.width;
+      }
+      return Stack(
+        children: [
+          TextField(
+            controller: controller,
+            keyboardType: keyboardType,
+            inputFormatters: maxLength != null
+                ? [LengthLimitingTextInputFormatter(maxLength)]
+                : null,
+            style: hasText
+                ? AppTextStyles.body.copyWith(color: Colors.transparent)
+                : AppTextStyles.body,
+            decoration: InputDecoration(
+              hintText: hasText ? null : hint,
+              hintStyle: AppTextStyles.body.copyWith(color: AppColors.textTertiary),
+              filled: true,
+              fillColor: AppColors.fieldFill,
+              contentPadding: EdgeInsets.fromLTRB(
+                16.w + prefixWidth, 12.h, 16.w, 12.h,
+              ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12.r),
+                borderSide: BorderSide.none,
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12.r),
+                borderSide: BorderSide.none,
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12.r),
+                borderSide: const BorderSide(color: AppColors.primary),
+              ),
+            ),
+          ),
+          if (hasText)
+            Positioned.fill(
+              child: IgnorePointer(
+                child: Container(
+                  padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    '${prefix ?? ''}${controller.text}${suffix ?? ''}',
+                    style: AppTextStyles.body,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      );
+    }
+
     return TextField(
       controller: controller,
+      minLines: minLines,
       maxLines: maxLines,
       keyboardType: keyboardType,
+      inputFormatters: maxLength != null
+          ? [LengthLimitingTextInputFormatter(maxLength)]
+          : null,
       style: AppTextStyles.body,
       decoration: InputDecoration(
         hintText: hint,
         hintStyle: AppTextStyles.body.copyWith(color: AppColors.textTertiary),
         filled: true,
         fillColor: AppColors.fieldFill,
-        contentPadding: EdgeInsets.symmetric(
-            horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+        contentPadding:
+            EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppSpacing.radiusM),
+          borderRadius: BorderRadius.circular(12.r),
           borderSide: BorderSide.none,
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppSpacing.radiusM),
+          borderRadius: BorderRadius.circular(12.r),
           borderSide: BorderSide.none,
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppSpacing.radiusM),
+          borderRadius: BorderRadius.circular(12.r),
           borderSide: const BorderSide(color: AppColors.primary),
         ),
       ),
@@ -403,20 +688,24 @@ class _ChipWrap extends StatelessWidget {
           child: Container(
             padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 6.h),
             decoration: BoxDecoration(
-              color: on ? AppColors.primary : AppColors.surfaceVariant,
-              borderRadius: BorderRadius.circular(AppSpacing.radiusPill),
+              color: on ? AppColors.primary : AppColors.surface,
+              border: Border.all(color: AppColors.primary, width: 1),
+              borderRadius: BorderRadius.circular(100.r),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(label,
-                    style: AppTextStyles.chip.copyWith(
+                    style: TextStyle(
+                      fontFamily: 'Roboto',
                       fontSize: 13.sp,
+                      fontWeight: FontWeight.w400,
+                      height: 1.3,
                       color: on ? Colors.white : AppColors.textPrimary,
                     )),
                 if (on) ...[
                   SizedBox(width: 6.w),
-                  Icon(Icons.close_rounded, size: 12.r, color: Colors.white),
+                  Icon(Icons.close_rounded, size: 14.r, color: Colors.white),
                 ],
               ],
             ),
@@ -440,60 +729,124 @@ class _RadiusOption extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return InkWell(
       onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: Row(
-        children: [
-          Icon(
-            selected ? Icons.radio_button_checked : Icons.radio_button_unchecked,
-            size: 22.r,
-            color: selected ? AppColors.primary : AppColors.textTertiary,
-          ),
-          SizedBox(width: AppSpacing.xs),
-          Text(label, style: AppTextStyles.body),
-        ],
+      child: Padding(
+        padding: EdgeInsets.symmetric(vertical: 8.h),
+        child: Row(
+          children: [
+            Container(
+              width: 20.r,
+              height: 20.r,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: selected ? AppColors.primary : AppColors.border,
+                  width: 1.5,
+                ),
+              ),
+              child: selected
+                  ? Center(
+                      child: Container(
+                        width: 10.r,
+                        height: 10.r,
+                        decoration: const BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                    )
+                  : null,
+            ),
+            SizedBox(width: 12.w),
+            Text(label, style: AppTextStyles.body),
+          ],
+        ),
       ),
     );
   }
 }
 
-class _PhotosPicker extends StatelessWidget {
+class _PhotosGrid extends StatelessWidget {
+  const _PhotosGrid({required this.photos, required this.onRemove});
+  final List<String> photos;
+  final ValueChanged<int> onRemove;
+
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 80.r,
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        children: [
-          Container(
-            width: 80.r,
-            height: 80.r,
-            decoration: BoxDecoration(
-              color: AppColors.primaryTint,
-              borderRadius: BorderRadius.circular(AppSpacing.radiusM),
-              border: Border.all(color: AppColors.primary, width: 1.5),
-            ),
-            alignment: Alignment.center,
-            child: Icon(Icons.add_photo_alternate_outlined,
-                color: AppColors.primary, size: 28.r),
-          ),
-          SizedBox(width: AppSpacing.xs),
-          for (int i = 0; i < 3; i++) ...[
-            Container(
-              width: 80.r,
-              height: 80.r,
-              decoration: BoxDecoration(
-                color: AppColors.surfaceVariant,
-                borderRadius: BorderRadius.circular(AppSpacing.radiusM),
+    return Wrap(
+      spacing: 8.w,
+      runSpacing: 8.h,
+      children: List.generate(photos.length, (i) {
+        return SizedBox(
+          width: 72.r,
+          height: 72.r,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(10.r),
+                child: Image.asset(
+                  photos[i],
+                  width: 72.r,
+                  height: 72.r,
+                  fit: BoxFit.cover,
+                ),
               ),
-              alignment: Alignment.center,
-              child: Icon(Icons.image_outlined,
-                  size: 28.r, color: AppColors.textTertiary),
+              Positioned(
+                top: 4.w,
+                right: 4.w,
+                child: GestureDetector(
+                  onTap: () => onRemove(i),
+                  child: Image.asset(
+                    'assets/icons/ui/close_photo.webp',
+                    width: 24.r,
+                    height: 24.r,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      }),
+    );
+  }
+}
+
+class _AddPhotosButton extends StatelessWidget {
+  const _AddPhotosButton({required this.onTap});
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: double.infinity,
+        height: 48.h,
+        decoration: BoxDecoration(
+          color: AppColors.primary,
+          borderRadius: BorderRadius.circular(16.r),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 24.r,
+              height: 24.r,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.3),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(Icons.add, size: 16.r, color: Colors.white),
             ),
-            if (i < 2) SizedBox(width: AppSpacing.xs),
+            SizedBox(width: 8.w),
+            Text(
+              'Добавить изображения',
+              style: AppTextStyles.button.copyWith(color: Colors.white),
+            ),
           ],
-        ],
+        ),
       ),
     );
   }
@@ -507,10 +860,16 @@ class _AiInputBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: EdgeInsets.fromLTRB(
-          AppSpacing.sm, AppSpacing.sm, AppSpacing.sm, AppSpacing.sm),
-      decoration: const BoxDecoration(
-        color: AppColors.navBarDark,
+      padding: EdgeInsets.fromLTRB(12.w, 12.h, 12.w, 12.h),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.08),
+            blurRadius: 8,
+            offset: const Offset(0, -2),
+          ),
+        ],
       ),
       child: SafeArea(
         top: false,
@@ -521,26 +880,27 @@ class _AiInputBar extends StatelessWidget {
               height: 44.r,
               decoration: BoxDecoration(
                 color: AppColors.primary,
-                borderRadius: BorderRadius.circular(AppSpacing.radiusM),
+                borderRadius: BorderRadius.circular(12.r),
               ),
               alignment: Alignment.center,
-              child: Icon(Icons.image_outlined,
-                  color: Colors.white, size: 22.r),
+              child:
+                  Icon(Icons.image_outlined, color: Colors.white, size: 22.r),
             ),
-            SizedBox(width: AppSpacing.xs),
+            SizedBox(width: 8.w),
             Expanded(
               child: Container(
                 height: 44.r,
-                padding: EdgeInsets.symmetric(horizontal: AppSpacing.md),
+                padding: EdgeInsets.symmetric(horizontal: 16.w),
                 decoration: BoxDecoration(
-                  color: AppColors.surface,
-                  borderRadius: BorderRadius.circular(AppSpacing.radiusPill),
+                  color: AppColors.surfaceVariant,
+                  borderRadius: BorderRadius.circular(100.r),
                 ),
                 child: Row(
                   children: [
                     Expanded(
                       child: TextField(
                         controller: controller,
+                        inputFormatters: [LengthLimitingTextInputFormatter(1000)],
                         decoration: InputDecoration(
                           hintText: 'Написать...',
                           hintStyle: AppTextStyles.body
@@ -558,7 +918,7 @@ class _AiInputBar extends StatelessWidget {
                 ),
               ),
             ),
-            SizedBox(width: AppSpacing.xs),
+            SizedBox(width: 8.w),
             GestureDetector(
               onTap: onSend,
               child: Container(
@@ -566,7 +926,7 @@ class _AiInputBar extends StatelessWidget {
                 height: 44.r,
                 decoration: BoxDecoration(
                   color: AppColors.primary,
-                  borderRadius: BorderRadius.circular(AppSpacing.radiusM),
+                  borderRadius: BorderRadius.circular(12.r),
                 ),
                 alignment: Alignment.center,
                 child: Icon(Icons.arrow_forward_rounded,
@@ -580,8 +940,7 @@ class _AiInputBar extends StatelessWidget {
   }
 }
 
-/// AppBar режима создания услуги: тёмный фон, крестик вместо стрелки
-/// назад, по высоте совпадает с `DarkSubAppBar`.
+/// AppBar режима создания услуги: тёмный фон, крестик вместо стрелки назад.
 class _CreateAppBar extends StatelessWidget implements PreferredSizeWidget {
   const _CreateAppBar({required this.onClose});
 

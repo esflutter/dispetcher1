@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 
@@ -1188,6 +1189,7 @@ class AddressBottomSheetState extends State<AddressBottomSheet> {
                         child: TextField(
                           controller: _ctrl,
                           autofocus: true,
+                          inputFormatters: [LengthLimitingTextInputFormatter(100)],
                           onChanged: (String v) =>
                               setState(() => _query = v),
                           style: AppTextStyles.bodyMRegular.copyWith(

@@ -2,91 +2,100 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 
 import 'package:dispatcher_1/core/theme/app_colors.dart';
-import 'package:dispatcher_1/core/theme/app_spacing.dart';
-import 'package:dispatcher_1/core/theme/app_text_styles.dart';
 
 /// Карточка услуги в списке «Мои услуги».
 class ServiceCard extends StatelessWidget {
   const ServiceCard({
     super.key,
     required this.title,
-    required this.category,
+    required this.machinery,
+    required this.description,
     required this.pricePerHour,
-    this.imageAsset,
+    required this.pricePerDay,
     this.onTap,
   });
 
   final String title;
-  final String category;
+  final List<String> machinery;
+  final String description;
   final String pricePerHour;
-  final String? imageAsset;
+  final String pricePerDay;
   final VoidCallback? onTap;
+
+  bool get _hasHour => pricePerHour.isNotEmpty && pricePerHour != '0';
+  bool get _hasDay => pricePerDay.isNotEmpty && pricePerDay != '0';
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: AppColors.surface,
-      borderRadius: BorderRadius.circular(AppSpacing.radiusL),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(AppSpacing.radiusL),
-        child: Container(
-          padding: EdgeInsets.all(AppSpacing.sm),
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(AppSpacing.radiusL),
-            border: Border.all(color: AppColors.divider),
-          ),
-          child: Row(
-            children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(AppSpacing.radiusM),
-                child: Container(
-                  width: 72.r,
-                  height: 72.r,
-                  color: AppColors.surfaceVariant,
-                  alignment: Alignment.center,
-                  child: Icon(
-                    Icons.photo_outlined,
-                    size: 28.r,
-                    color: AppColors.textTertiary,
-                  ),
-                ),
-              ),
-              SizedBox(width: AppSpacing.sm),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: AppTextStyles.titleS,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    SizedBox(height: AppSpacing.xxs),
-                    Text(
-                      category,
-                      style: AppTextStyles.caption,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    SizedBox(height: AppSpacing.xs),
-                    Text(
-                      pricePerHour,
-                      style: AppTextStyles.bodyMedium
-                          .copyWith(color: AppColors.primary),
-                    ),
-                  ],
-                ),
-              ),
-              Icon(
-                Icons.chevron_right,
-                size: 24.r,
+    final priceStyle = TextStyle(
+      fontFamily: 'Roboto',
+      fontSize: 16.sp,
+      fontWeight: FontWeight.w600,
+      color: AppColors.primary,
+    );
+
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(16.w, 12.h, 16.w, 12.h),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              machinery.join('   '),
+              style: TextStyle(
+                fontFamily: 'Roboto',
+                fontSize: 12.sp,
+                fontWeight: FontWeight.w400,
                 color: AppColors.textTertiary,
+                height: 1.78,
               ),
-            ],
-          ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            SizedBox(height: 4.h),
+            Text(
+              title,
+              style: TextStyle(
+                fontFamily: 'Roboto',
+                fontSize: 16.sp,
+                fontWeight: FontWeight.w500,
+                color: AppColors.textPrimary,
+                height: 1.3,
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+            SizedBox(height: 6.h),
+            Text(
+              description,
+              style: TextStyle(
+                fontFamily: 'Roboto',
+                fontSize: 14.sp,
+                fontWeight: FontWeight.w400,
+                color: AppColors.textSecondary,
+                height: 1.4,
+              ),
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+            ),
+            SizedBox(height: 10.h),
+            Row(
+              children: [
+                if (_hasHour) ...[
+                  Text('₽ / час', style: priceStyle),
+                  SizedBox(width: 9.w),
+                  Text('$pricePerHour ₽', style: priceStyle),
+                ],
+                if (_hasHour && _hasDay) SizedBox(width: 36.w),
+                if (_hasDay) ...[
+                  Text('₽ / день', style: priceStyle),
+                  SizedBox(width: 9.w),
+                  Text('$pricePerDay ₽', style: priceStyle),
+                ],
+              ],
+            ),
+          ],
         ),
       ),
     );
