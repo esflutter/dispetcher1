@@ -8,7 +8,6 @@ import 'package:dispatcher_1/core/widgets/primary_button.dart';
 import 'package:dispatcher_1/features/catalog/customer_card_screen.dart';
 import 'package:dispatcher_1/features/catalog/widgets/catalog_search_bar.dart';
 import 'package:dispatcher_1/features/catalog/widgets/respond_bottom_sheet.dart';
-import 'package:dispatcher_1/features/catalog/widgets/subscription_paywall.dart';
 import 'package:dispatcher_1/features/profile/widgets/verification_badge.dart';
 
 /// Карточка исполнителя (детали). По Figma — заголовок исполнителя сверху,
@@ -39,7 +38,6 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
   ];
 
   bool get _verified => VerificationStatus.current.isVerified;
-  bool get _hasSubscription => VerificationStatus.hasSubscription;
 
   // Моковый список техники из заказа.
   List<String> get _orderEquipment => widget.multipleEquipment
@@ -70,19 +68,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
       return;
     }
 
-    // 3. Проверка подписки.
-    if (!_hasSubscription) {
-      final bool? subscribed = await Navigator.of(context).push<bool>(
-        MaterialPageRoute<bool>(
-          fullscreenDialog: true,
-          builder: (_) => const SubscriptionPaywall(),
-        ),
-      );
-      if (subscribed != true || !mounted) return;
-      VerificationStatus.hasSubscription = true;
-    }
-
-    // 4. Выбор техники (если несколько).
+    // 3. Выбор техники (если несколько).
     final List<String> eq = _orderEquipment;
     if (eq.length > 1) {
       final List<String>? picked = await showModalBottomSheet<List<String>>(
@@ -324,7 +310,7 @@ class _CustomerHeader extends StatelessWidget {
                           height: 1.3,
                           color: AppColors.textPrimary,
                         )),
-                    SizedBox(width: 12.w),
+                    SizedBox(width: 16.w),
                     Text('15 отзывов',
                         style: TextStyle(
                           fontFamily: 'Roboto',

@@ -23,18 +23,13 @@ import '../features/profile/edit_profile_screen.dart';
 import '../features/profile/profile_screen.dart';
 import '../features/profile/reviews_screen.dart';
 import '../features/shell/main_shell.dart';
-import '../features/subscription/add_card_screen.dart';
-import '../features/subscription/payment_result_screen.dart';
-import '../features/subscription/payment_screen.dart';
-import '../features/subscription/subscription_screen.dart';
-import '../features/subscription/tariffs_screen.dart';
 import '../features/support/chat_screen.dart';
 import '../features/support/support_home_screen.dart';
 
 /// Главный роутер приложения «Диспетчер №1».
 /// Иерархия:
 ///   /splash → /onboarding → /auth/* → /shell (MainShell с табами)
-///   Внутренние страницы (executor-card, services, schedule, subscription, profile/edit и т.п.)
+///   Внутренние страницы (executor-card, services, schedule, profile/edit и т.п.)
 ///   открываются поверх shell обычным push.
 final GoRouter appRouter = GoRouter(
   initialLocation: '/splash',
@@ -106,16 +101,6 @@ final GoRouter appRouter = GoRouter(
     // Карточка заказчика
     GoRoute(path: '/executor-card', builder: (_, _) => const ExecutorCardScreen()),
     GoRoute(path: '/executor-card/edit', builder: (_, _) => const EditExecutorCardScreen()),
-
-    // Подписка
-    GoRoute(path: '/subscription', builder: (_, _) => const SubscriptionScreen()),
-    GoRoute(path: '/subscription/tariffs', builder: (_, _) => const TariffsScreen()),
-    GoRoute(path: '/subscription/card', builder: (_, _) => const AddCardScreen()),
-    GoRoute(path: '/subscription/payment', builder: (_, _) => const PaymentScreen()),
-    GoRoute(
-      path: '/subscription/payment/result',
-      builder: (_, _) => const PaymentResultScreen(),
-    ),
 
     // Поддержка
     GoRoute(path: '/support', builder: (_, _) => const SupportHomeScreen()),

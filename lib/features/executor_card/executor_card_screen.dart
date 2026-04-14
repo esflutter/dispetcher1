@@ -12,7 +12,6 @@ import 'package:dispatcher_1/core/widgets/cropped_avatar.dart';
 import 'package:dispatcher_1/features/profile/widgets/verification_badge.dart';
 
 import 'widgets/executor_card_alerts.dart';
-import 'widgets/executor_card_paywall.dart';
 
 enum ExecutorCardStatus { empty, inReview, rejected, verified, blocked }
 
@@ -29,7 +28,7 @@ class _ExecutorCardScreenState extends State<ExecutorCardScreen> {
   static bool _alertShown = false;
 
   bool get _filled => VerificationStatus.current == VerificationStatus.blocked ||
-      (VerificationStatus.current.isVerified && VerificationStatus.hasSubscription && ExecutorCardScreen.cardCreated);
+      (VerificationStatus.current.isVerified && ExecutorCardScreen.cardCreated);
 
   ExecutorCardStatus get _status {
     switch (VerificationStatus.current) {
@@ -67,20 +66,8 @@ class _ExecutorCardScreenState extends State<ExecutorCardScreen> {
     }
 
     if (VerificationStatus.current.isVerified) {
-      if (!VerificationStatus.hasSubscription) {
-        final bool? paid = await Navigator.of(context).push<bool>(
-          MaterialPageRoute<bool>(
-            fullscreenDialog: true,
-            builder: (_) => const ExecutorCardPaywall(),
-          ),
-        );
-        if (paid != true || !mounted) return;
-        VerificationStatus.hasSubscription = true;
-      }
-      if (mounted) {
-        await context.push('/executor-card/edit');
-        if (mounted) setState(() {});
-      }
+      await context.push('/executor-card/edit');
+      if (mounted) setState(() {});
       return;
     }
 
@@ -257,7 +244,7 @@ class _HeaderRow extends StatelessWidget {
                       width: 20.r, height: 20.r),
                   SizedBox(width: 4.w),
                   Text('4,5', style: AppTextStyles.body),
-                  SizedBox(width: 8.w),
+                  SizedBox(width: 16.w),
                   GestureDetector(
                     onTap: () => context.push('/profile/reviews'),
                     child: Text(

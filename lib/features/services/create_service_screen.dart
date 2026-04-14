@@ -10,7 +10,6 @@ import 'package:dispatcher_1/features/support/chat_screen.dart';
 import 'package:dispatcher_1/features/services/my_services_screen.dart';
 
 import 'widgets/service_alerts.dart';
-import 'widgets/service_paywall.dart';
 
 /// Экран «Создание / редактирование услуги».
 /// При передаче [serviceId] работает в режиме редактирования.
@@ -165,15 +164,6 @@ class _CreateServiceScreenState extends State<CreateServiceScreen> {
   }
 
   Future<void> _onCreateTap() async {
-    // Открываем paywall оплаты размещения
-    final bool? paid = await Navigator.of(context).push<bool>(
-      MaterialPageRoute<bool>(
-        fullscreenDialog: true,
-        builder: (_) => const ServicePaywall(),
-      ),
-    );
-    if (paid != true || !mounted) return;
-
     _save();
     if (!mounted) return;
     await showServicePublishedDialog(context);

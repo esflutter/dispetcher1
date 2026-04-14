@@ -59,7 +59,7 @@ Future<bool?> showDeleteServiceDialog(BuildContext context) {
   );
 }
 
-/// Диалог «Ваша услуга размещена!» после успешной оплаты.
+/// Диалог «Ваша услуга размещена!» после подтверждения публикации.
 Future<void> showServicePublishedDialog(BuildContext context) {
   return showDialog<void>(
     context: context,

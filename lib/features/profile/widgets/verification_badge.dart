@@ -22,9 +22,6 @@ enum VerificationStatus {
   /// Подписка на изменения статуса верификации.
   static ValueNotifier<VerificationStatus> get notifier => _notifier;
 
-  /// Глобальный флаг активной подписки (до появления бэкенда).
-  static bool hasSubscription = false;
-
   bool get isVerified => this == VerificationStatus.verified;
 }
 
