@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
-import 'package:dispatcher_1/features/profile/widgets/verification_badge.dart';
 import 'package:dispatcher_1/features/support/widgets/chat_bubble.dart';
 import 'package:dispatcher_1/features/support/widgets/chat_input_bar.dart';
 
@@ -43,34 +42,12 @@ class _ChatScreenState extends State<ChatScreen> {
     'assets/images/onboarding/onb_3.webp',
   ];
 
-  bool _awaitingDocuments = false;
-
   @override
   void initState() {
     super.initState();
     final initial = widget.initialMessage;
     if (initial != null && initial.trim().isNotEmpty) {
-      if (initial.trim() == 'verify_documents') {
-        _awaitingDocuments = true;
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          setState(() {
-            _messages.add(ChatMessage(
-              id: _nextId(),
-              text: 'Отправьте, пожалуйста, фото документов, чтобы мы могли '
-                  'подтвердить ваш профиль:\n\n'
-                  '• ФИО или название организации\n'
-                  '• Паспорт (первая страница)\n'
-                  '• Фото техники\n'
-                  '• Документы на технику\n'
-                  '• Удостоверение на право управления техникой\n'
-                  '• Водительское удостоверение\n\n'
-                  'Можно отправить всё одним сообщением или по отдельности.',
-              fromUser: false,
-            ));
-            _scrollToBottom();
-          });
-        });
-      } else if (initial.trim() == 'create_service') {
+      if (initial.trim() == 'create_service') {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           setState(() {
             _messages.add(ChatMessage(
@@ -116,9 +93,6 @@ class _ChatScreenState extends State<ChatScreen> {
 
     setState(() {
       if (hasImages) {
-        if (_awaitingDocuments) {
-          VerificationStatus.current = VerificationStatus.inProgress;
-        }
         _messages.add(
           ChatMessage(
             id: _nextId(),
@@ -142,18 +116,7 @@ class _ChatScreenState extends State<ChatScreen> {
     Future<void>.delayed(const Duration(milliseconds: 800), () {
       if (!mounted) return;
       setState(() {
-        if (_awaitingDocuments && hasImages) {
-          _awaitingDocuments = false;
-          _messages.add(
-            ChatMessage(
-              id: _nextId(),
-              text: 'Документы отправлены 👍\n'
-                  'Результат проверки появится в профиле.\n'
-                  'Мы также пришлём уведомление.',
-              fromUser: false,
-            ),
-          );
-        } else if (text.toLowerCase().contains('экскават')) {
+        if (text.toLowerCase().contains('экскават')) {
           _messages.add(
             ChatMessage(
               id: _nextId(),

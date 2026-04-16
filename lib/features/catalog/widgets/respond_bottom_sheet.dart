@@ -1,19 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 
-import 'package:go_router/go_router.dart';
-
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
 import 'package:dispatcher_1/core/widgets/primary_button.dart';
 
-/// Модальное окно предложения заказа исполнителю. Два состояния:
-///   verified == false → «Подтвердите свои данные»
-///   verified == true  → «Ваше предложение отправлено!»
+/// Модальное окно «Ваше предложение отправлено».
 class RespondModalDialog extends StatelessWidget {
-  const RespondModalDialog({super.key, required this.verified});
-
-  final bool verified;
+  const RespondModalDialog({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -26,100 +20,41 @@ class RespondModalDialog extends StatelessWidget {
           color: AppColors.surface,
           borderRadius: BorderRadius.circular(20.r),
         ),
-        child: verified ? _verifiedBody(context) : _unverifiedBody(context),
-      ),
-    );
-  }
-
-  Widget _verifiedBody(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: <Widget>[
-        Align(
-          alignment: Alignment.centerRight,
-          child: GestureDetector(
-            onTap: () => Navigator.of(context).pop(),
-            child: Icon(Icons.close_rounded,
-                size: 22.r, color: AppColors.textTertiary),
-          ),
-        ),
-        SizedBox(height: 24.h),
-        Text(
-          'Ваш отклик отправлен!',
-          textAlign: TextAlign.center,
-          style: AppTextStyles.titleL.copyWith(fontWeight: FontWeight.w700),
-        ),
-        SizedBox(height: 10.h),
-        Text(
-          'Исполнитель рассмотрит вашу заявку на заказ. Если он согласен — '
-          'заказ появится в разделе Мои заказы.',
-          textAlign: TextAlign.center,
-          style: AppTextStyles.bodyMRegular
-              .copyWith(color: AppColors.textSecondary),
-        ),
-        SizedBox(height: 20.h),
-        PrimaryButton(
-          label: 'Ок',
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-        SizedBox(height: 16.h),
-      ],
-    );
-  }
-
-  Widget _unverifiedBody(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: <Widget>[
-        SizedBox(height: 24.h),
-        Center(
-          child: Image.asset(
-            'assets/images/catalog/user_edit.webp',
-            width: 96.r,
-            height: 96.r,
-            fit: BoxFit.contain,
-          ),
-        ),
-        SizedBox(height: 24.h),
-        Text(
-          'Подтвердите свои данные',
-          textAlign: TextAlign.center,
-          style: AppTextStyles.titleL,
-        ),
-        SizedBox(height: 10.h),
-        Text(
-          'Чтобы предлагать заказы исполнителям, нужно отправить документы на проверку. '
-          'Это займёт пару минут.',
-          textAlign: TextAlign.center,
-          style: AppTextStyles.body
-              .copyWith(color: AppColors.textSecondary),
-        ),
-        SizedBox(height: 18.h),
-        PrimaryButton(
-          label: 'Отправить документы',
-          onPressed: () {
-            Navigator.of(context).pop();
-            GoRouter.of(context).push('/assistant/chat', extra: <String, String>{
-              'initial': 'verify_documents',
-            });
-          },
-        ),
-        SizedBox(height: 18.h),
-        GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: () => Navigator.of(context).pop(),
-          child: Center(
-            child: Text(
-              'Может быть, позже',
-              style: AppTextStyles.bodyMedium
-                  .copyWith(color: AppColors.textPrimary),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            Align(
+              alignment: Alignment.centerRight,
+              child: GestureDetector(
+                onTap: () => Navigator.of(context).pop(),
+                child: Icon(Icons.close_rounded,
+                    size: 22.r, color: AppColors.textTertiary),
+              ),
             ),
-          ),
+            SizedBox(height: 24.h),
+            Text(
+              'Ваш отклик отправлен!',
+              textAlign: TextAlign.center,
+              style: AppTextStyles.titleL.copyWith(fontWeight: FontWeight.w700),
+            ),
+            SizedBox(height: 10.h),
+            Text(
+              'Исполнитель рассмотрит вашу заявку на заказ. Если он согласен — '
+              'заказ появится в разделе Мои заказы.',
+              textAlign: TextAlign.center,
+              style: AppTextStyles.bodyMRegular
+                  .copyWith(color: AppColors.textSecondary),
+            ),
+            SizedBox(height: 20.h),
+            PrimaryButton(
+              label: 'Ок',
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+            SizedBox(height: 16.h),
+          ],
         ),
-        SizedBox(height: 14.h),
-      ],
+      ),
     );
   }
 }

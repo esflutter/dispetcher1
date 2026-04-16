@@ -4,22 +4,13 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_spacing.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
-import 'package:dispatcher_1/features/catalog/widgets/respond_bottom_sheet.dart';
 
-Future<void> showCreateExecutorCardAlert(BuildContext context) {
-  return showDialog<void>(
-    context: context,
-    barrierColor: Colors.black.withValues(alpha: 0.35),
-    builder: (_) => const RespondModalDialog(verified: false),
-  );
-}
-
-/// Bottom-sheet алерт подтверждения удаления карточки исполнителя.
+/// Bottom-sheet алерт подтверждения удаления карточки заказчика.
 Future<bool?> showDeleteExecutorCardAlert(BuildContext context) {
   return showDialog<bool>(
     context: context,
     barrierDismissible: true,
-    builder: (ctx) => Dialog(
+    builder: (BuildContext ctx) => Dialog(
       backgroundColor: AppColors.surface,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppSpacing.radiusL),
@@ -30,7 +21,7 @@ Future<bool?> showDeleteExecutorCardAlert(BuildContext context) {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
+          children: <Widget>[
             SizedBox(height: AppSpacing.sm),
             Text(
               'Вы уверены, что хотите\nудалить карточку?',

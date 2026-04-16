@@ -6,6 +6,7 @@ import 'package:dispatcher_1/core/widgets/primary_button.dart';
 import 'package:dispatcher_1/features/orders/order_detail_screen.dart';
 import 'package:dispatcher_1/features/orders/widgets/my_order_card.dart';
 import 'package:dispatcher_1/features/orders/widgets/order_status_pill.dart';
+import 'package:dispatcher_1/features/profile/account_block.dart';
 
 /// Экран «Мои заказы» — три вкладки «На рассмотрении / Принятые / Архив».
 /// Когда всех списков пусто — показываем заглушку «Здесь появятся ваши заказы».
@@ -151,16 +152,55 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
   bool get _isEmpty =>
       _newOrders.isEmpty && _accepted.isEmpty && _rejected.isEmpty;
 
+  bool get _blocked => AccountBlock.isBlocked;
+
   @override
   void initState() {
     super.initState();
     _tab = TabController(length: 3, vsync: this);
+    AccountBlock.notifier.addListener(_onBlockChanged);
+    // Если профиль уже заблокирован к моменту открытия экрана — сразу
+    // убираем активные заказы в архив, чтобы состояние было согласованным.
+    if (AccountBlock.isBlocked) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _archiveActiveOrdersOnBlock();
+      });
+    }
   }
 
   @override
   void dispose() {
+    AccountBlock.notifier.removeListener(_onBlockChanged);
     _tab.dispose();
     super.dispose();
+  }
+
+  void _onBlockChanged() {
+    if (!mounted) return;
+    if (AccountBlock.isBlocked) {
+      _archiveActiveOrdersOnBlock();
+    } else {
+      setState(() {});
+    }
+  }
+
+  /// Переносит все активные заказы заказчика («Ожидает» + «В работе»,
+  /// кроме уже завершённых) в «Архив» со статусом «Заказ был снят
+  /// с публикации». Уже архивные заказы остаются на месте.
+  void _archiveActiveOrdersOnBlock() {
+    setState(() {
+      final List<_OrderMock> removed = <_OrderMock>[];
+      for (final _OrderMock o in _newOrders) {
+        removed.add(o.copyWith(status: MyOrderStatus.rejectedRemoved));
+      }
+      for (final _OrderMock o in _accepted) {
+        if (o.status == MyOrderStatus.completed) continue;
+        removed.add(o.copyWith(status: MyOrderStatus.rejectedRemoved));
+      }
+      _newOrders.clear();
+      _accepted.removeWhere((_OrderMock o) => o.status != MyOrderStatus.completed);
+      _rejected.insertAll(0, removed);
+    });
   }
 
   @override
@@ -186,7 +226,10 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
         ),
       ),
       body: _isEmpty
-          ? _EmptyOrders(onGoToCatalog: widget.onGoToCatalog)
+          ? _EmptyOrders(
+              onGoToCatalog: _blocked ? null : widget.onGoToCatalog,
+              blocked: _blocked,
+            )
           : _buildWithTabs(),
     );
   }
@@ -221,7 +264,10 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
 
   Widget _buildList(List<_OrderMock> items) {
     if (items.isEmpty) {
-      return _EmptyOrders(onGoToCatalog: widget.onGoToCatalog);
+      return _EmptyOrders(
+        onGoToCatalog: _blocked ? null : widget.onGoToCatalog,
+        blocked: _blocked,
+      );
     }
     return MediaQuery.removePadding(
       context: context,
@@ -448,9 +494,10 @@ class _OrdersSegmented extends StatelessWidget {
 }
 
 class _EmptyOrders extends StatelessWidget {
-  const _EmptyOrders({this.onGoToCatalog});
+  const _EmptyOrders({this.onGoToCatalog, this.blocked = false});
 
   final VoidCallback? onGoToCatalog;
+  final bool blocked;
 
   @override
   Widget build(BuildContext context) {
@@ -489,7 +536,8 @@ class _EmptyOrders extends StatelessWidget {
           SizedBox(height: 26.h),
           PrimaryButton(
             label: 'Создать заказ',
-            onPressed: onGoToCatalog,
+            enabled: !blocked,
+            onPressed: blocked ? null : onGoToCatalog,
           ),
         ],
       ),

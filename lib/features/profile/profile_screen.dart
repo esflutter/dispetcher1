@@ -7,22 +7,17 @@ import 'package:dispatcher_1/core/theme/app_spacing.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
 import 'package:dispatcher_1/core/widgets/cropped_avatar.dart';
 import 'package:dispatcher_1/features/auth/photo_crop_screen.dart';
-import 'widgets/verification_badge.dart';
+import 'account_block.dart';
+import 'widgets/blocked_pill.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({
     super.key,
-    this.status = VerificationStatus.notVerified,
     this.fullName = 'Александр Иванов',
-    this.rating = 4.5,
-    this.reviewsCount = 10,
     this.photoUrl,
   });
 
-  final VerificationStatus status;
   final String fullName;
-  final double rating;
-  final int reviewsCount;
   final String? photoUrl;
 
   @override
@@ -30,40 +25,22 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  VerificationStatus get _status => VerificationStatus.current;
-  set _status(VerificationStatus v) => VerificationStatus.current = v;
-
-  bool get _isBlocked => _status == VerificationStatus.blocked;
-
   @override
   void initState() {
     super.initState();
-    VerificationStatus.notifier.addListener(_refresh);
+    AccountBlock.notifier.addListener(_refresh);
+    ReviewsData.revision.addListener(_refresh);
   }
 
   @override
   void dispose() {
-    VerificationStatus.notifier.removeListener(_refresh);
+    AccountBlock.notifier.removeListener(_refresh);
+    ReviewsData.revision.removeListener(_refresh);
     super.dispose();
   }
 
   void _refresh() {
     if (mounted) setState(() {});
-  }
-
-  // TODO: убрать перед релизом — временное переключение статуса для тестирования
-  void _cycleStatus() {
-    const order = [
-      VerificationStatus.notVerified,
-      VerificationStatus.inProgress,
-      VerificationStatus.verified,
-      VerificationStatus.rejected,
-      VerificationStatus.blocked,
-    ];
-    final next = (order.indexOf(_status) + 1) % order.length;
-    setState(() {
-      VerificationStatus.current = order[next];
-    });
   }
 
   Future<void> _openEdit() async {
@@ -73,10 +50,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final status = _status;
-    final fullName = CropResult.userName;
-    final rating = widget.rating;
-    final reviewsCount = widget.reviewsCount;
+    final String fullName = CropResult.userName;
+    final double rating = ReviewsData.aggregate;
+    final int reviewsCount = ReviewsData.count;
+    final bool isBlocked = AccountBlock.isBlocked;
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
@@ -111,7 +88,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         padding: EdgeInsets.symmetric(horizontal: AppSpacing.screenH),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
+          children: <Widget>[
             SizedBox(height: AppSpacing.md),
             _Header(
               fullName: fullName,
@@ -120,30 +97,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
               photoUrl: widget.photoUrl,
               onReviewsTap: () => context.push('/profile/reviews'),
             ),
-            SizedBox(height: 16.h),
-            GestureDetector(
-              onTap: _cycleStatus,
-              child: FullWidthVerificationPill(status: status),
-            ),
-            if (status == VerificationStatus.notVerified) ...[
-              SizedBox(height: 8.h),
-              _PrimaryActionButton(
-                label: 'Пройти верификацию',
-                onPressed: () async {
-                  await context.push('/assistant/chat', extra: <String, Object?>{'initial': 'verify_documents'});
-                  if (mounted) setState(() => _status = VerificationStatus.current);
-                },
-              ),
-            ] else if (status == VerificationStatus.rejected) ...[
-              SizedBox(height: 8.h),
-              _PrimaryActionButton(
-                label: 'Пройти ещё раз',
-                onPressed: () async {
-                  await context.push('/assistant/chat', extra: <String, Object?>{'initial': 'verify_documents'});
-                  if (mounted) setState(() => _status = VerificationStatus.current);
-                },
-              ),
-            ] else if (_isBlocked) ...[
+            if (isBlocked) ...<Widget>[
+              SizedBox(height: 16.h),
+              const BlockedPill(),
               SizedBox(height: 8.h),
               Text(
                 'Ваш рейтинг ниже 2 звёзд, поэтому доступ\nвременно ограничен на 30 дней',
@@ -154,8 +110,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
                 textAlign: TextAlign.left,
               ),
-            ],
-            SizedBox(height: _isBlocked ? 16.h : (status == VerificationStatus.notVerified || status == VerificationStatus.rejected) ? 20.h : 16.h),
+              SizedBox(height: 16.h),
+            ] else
+              SizedBox(height: 20.h),
             _ProfileMenuItem(
               label: 'Моя карточка заказчика',
               onTap: () => context.push('/executor-card'),
@@ -187,6 +144,9 @@ class _Header extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final String ratingText = reviewsCount == 0
+        ? '0,0'
+        : rating.toStringAsFixed(1).replaceAll('.', ',');
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: <Widget>[
@@ -207,8 +167,7 @@ class _Header extends StatelessWidget {
                     Image.asset('assets/images/catalog/star.webp',
                         width: 20.r, height: 20.r),
                     SizedBox(width: 4.w),
-                    Text(rating.toStringAsFixed(1).replaceAll('.', ','),
-                        style: AppTextStyles.body),
+                    Text(ratingText, style: AppTextStyles.body),
                     SizedBox(width: 16.w),
                     Text(
                       '$reviewsCount отзывов',
@@ -275,7 +234,7 @@ class _SupportFooter extends StatelessWidget {
             )),
         SizedBox(height: 8.h),
         Row(
-          children: [
+          children: <Widget>[
             Image.asset('assets/icons/profile/telegram.webp',
                 width: 40.r, height: 40.r),
             SizedBox(width: 12.w),
@@ -284,34 +243,6 @@ class _SupportFooter extends StatelessWidget {
           ],
         ),
       ],
-    );
-  }
-}
-
-class _PrimaryActionButton extends StatelessWidget {
-  const _PrimaryActionButton({required this.label, required this.onPressed});
-
-  final String label;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: double.infinity,
-      height: 40.h,
-      child: ElevatedButton(
-        onPressed: onPressed,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: AppColors.primary,
-          foregroundColor: Colors.white,
-          elevation: 0,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10.r),
-          ),
-        ),
-        child: Text(label,
-            style: AppTextStyles.button.copyWith(color: Colors.white)),
-      ),
     );
   }
 }
@@ -342,7 +273,7 @@ Future<bool?> _showProfileAlert(
 }) {
   return showDialog<bool>(
     context: context,
-    builder: (ctx) => Dialog(
+    builder: (BuildContext ctx) => Dialog(
       backgroundColor: const Color(0xFFDFDFDF),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14.r),
@@ -351,7 +282,7 @@ Future<bool?> _showProfileAlert(
         width: 270.w,
         child: Column(
           mainAxisSize: MainAxisSize.min,
-          children: [
+          children: <Widget>[
             Padding(
               padding: EdgeInsets.fromLTRB(20.w, 20.h, 20.w, 20.h),
               child: Text(
@@ -366,7 +297,7 @@ Future<bool?> _showProfileAlert(
             SizedBox(
               height: 44.h,
               child: Row(
-                children: [
+                children: <Widget>[
                   Expanded(
                     child: InkWell(
                       onTap: () => Navigator.of(ctx).pop(false),
@@ -385,7 +316,9 @@ Future<bool?> _showProfileAlert(
                       child: Center(
                         child: Text(actionLabel,
                             style: AppTextStyles.bodyMRegular.copyWith(
-                              color: isDestructive ? AppColors.error : const Color(0xFF007AFF),
+                              color: isDestructive
+                                  ? AppColors.error
+                                  : const Color(0xFF007AFF),
                             )),
                       ),
                     ),

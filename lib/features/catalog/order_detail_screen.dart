@@ -8,7 +8,7 @@ import 'package:dispatcher_1/core/widgets/primary_button.dart';
 import 'package:dispatcher_1/features/catalog/customer_card_screen.dart';
 import 'package:dispatcher_1/features/catalog/widgets/catalog_search_bar.dart';
 import 'package:dispatcher_1/features/catalog/widgets/respond_bottom_sheet.dart';
-import 'package:dispatcher_1/features/profile/widgets/verification_badge.dart';
+import 'package:dispatcher_1/features/profile/account_block.dart';
 
 /// Карточка исполнителя (детали). По Figma — заголовок исполнителя сверху,
 /// далее «техника → местоположение → категории → описание → стоимость».
@@ -37,7 +37,21 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
     'Автовышка',
   ];
 
-  bool get _verified => VerificationStatus.current.isVerified;
+  @override
+  void initState() {
+    super.initState();
+    AccountBlock.notifier.addListener(_onBlockChange);
+  }
+
+  @override
+  void dispose() {
+    AccountBlock.notifier.removeListener(_onBlockChange);
+    super.dispose();
+  }
+
+  void _onBlockChange() {
+    if (mounted) setState(() {});
+  }
 
   // Моковый список техники из заказа.
   List<String> get _orderEquipment => widget.multipleEquipment
@@ -45,30 +59,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
       : const <String>['Экскаватор', 'Автокран', 'Манипулятор', 'Погрузчик', 'Автовышка'];
 
   Future<void> _onRespondTap() async {
-    // 1. Проверка верификации — в процессе.
-    if (VerificationStatus.current == VerificationStatus.inProgress) {
-      if (!mounted) return;
-      await showDialog<void>(
-        context: context,
-        barrierColor: Colors.black.withValues(alpha: 0.35),
-        builder: (_) => _InProgressDialog(),
-      );
-      return;
-    }
-
-    // 2. Верификация не пройдена — предлагаем отправить документы.
-    if (!_verified) {
-      if (!mounted) return;
-      await showDialog<void>(
-        context: context,
-        barrierColor: Colors.black.withValues(alpha: 0.35),
-        builder: (_) => RespondModalDialog(verified: false),
-      );
-      if (mounted) setState(() {});
-      return;
-    }
-
-    // 3. Выбор техники (если несколько).
+    // Выбор техники (если несколько).
     final List<String> eq = _orderEquipment;
     if (eq.length > 1) {
       final List<String>? picked = await showModalBottomSheet<List<String>>(
@@ -82,12 +73,11 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
       }
     }
 
-    // 5. Отклик отправлен.
     if (!mounted) return;
     await showDialog<void>(
       context: context,
       barrierColor: Colors.black.withValues(alpha: 0.35),
-      builder: (_) => RespondModalDialog(verified: true),
+      builder: (_) => const RespondModalDialog(),
     );
   }
 
@@ -259,7 +249,8 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                 16.h + MediaQuery.of(context).padding.bottom),
             child: PrimaryButton(
               label: 'Предложить заказ',
-              onPressed: _onRespondTap,
+              enabled: !AccountBlock.isBlocked,
+              onPressed: AccountBlock.isBlocked ? null : _onRespondTap,
             ),
           ),
         ],
@@ -567,52 +558,3 @@ class _CheckRow extends StatelessWidget {
   }
 }
 
-class _InProgressDialog extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Dialog(
-      insetPadding: EdgeInsets.symmetric(horizontal: 16.w),
-      backgroundColor: Colors.transparent,
-      child: Container(
-        padding: EdgeInsets.fromLTRB(16.r, 14.r, 16.r, 22.r),
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.circular(20.r),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Align(
-              alignment: Alignment.centerRight,
-              child: GestureDetector(
-                onTap: () => Navigator.of(context).pop(),
-                child: Icon(Icons.close_rounded,
-                    size: 22.r, color: AppColors.textTertiary),
-              ),
-            ),
-            SizedBox(height: 20.h),
-            Text(
-              'Ваши документы ещё\nна проверке',
-              textAlign: TextAlign.center,
-              style: AppTextStyles.titleL.copyWith(fontWeight: FontWeight.w700),
-            ),
-            SizedBox(height: 8.h),
-            Text(
-              'Вы получите уведомление, когда проверка завершится',
-              textAlign: TextAlign.center,
-              style: AppTextStyles.bodyMRegular
-                  .copyWith(color: AppColors.textSecondary),
-            ),
-            SizedBox(height: 18.h),
-            PrimaryButton(
-              label: 'Ок',
-              onPressed: () => Navigator.of(context).pop(),
-            ),
-            SizedBox(height: 12.h),
-          ],
-        ),
-      ),
-    );
-  }
-}

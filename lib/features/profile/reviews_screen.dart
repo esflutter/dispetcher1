@@ -5,6 +5,8 @@ import 'package:dispatcher_1/core/theme/app_spacing.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
 import 'package:dispatcher_1/core/widgets/dark_sub_app_bar.dart';
 
+import 'account_block.dart';
+
 class Review {
   const Review({
     required this.author,
@@ -20,48 +22,106 @@ class Review {
   final int avatarIndex;
 }
 
-class ReviewsScreen extends StatelessWidget {
-  const ReviewsScreen({super.key, this.empty = false});
-
-  final bool empty;
+class ReviewsScreen extends StatefulWidget {
+  const ReviewsScreen({super.key});
 
   static const String _t1 = 'Заказчик ответственный и адекватный. Задачу описал чётко, на месте всё совпало с тем, что обсуждали по телефону. Доступ на объект организовал заранее, вопросы решал оперативно. Расчёт произвёл сразу после завершения работ, без задержек и торга. Общение вежливое, всегда на связи. С удовольствием поработаю снова.';
   static const String _t2 = 'Отличный заказчик! Всё чётко: задача понятная, оплата сразу после работы. Никаких задержек и лишних вопросов. Рекомендую!';
   static const String _t3 = 'Заказчик нормальный, но объём работ на месте оказался больше, чем обсуждали изначально. Пришлось отдельно согласовывать доплату и сроки. В итоге обо всём договорились, расчёт получил полностью. Хотелось бы заранее более точного описания задачи, тогда вопросов бы не возникло.';
   static const String _t4 = 'Очень приятный в общении заказчик. Встретил на объекте, всё показал, помог с подъездом для техники. Работать было комфортно.';
   static const String _t5 = 'Адекватный заказчик, без лишней суеты. Объяснил задачу, не вмешивался в процесс, оплатил вовремя. Готов сотрудничать ещё.';
+  static const String _t1Bad = 'Очень неприятный опыт. Задача на месте оказалась совсем не той, о которой договаривались. По оплате тоже были вопросы, расчёт пришлось вытаскивать.';
 
-  static const List<Review> _mock = [
-    Review(author: 'Илья Иванов', date: '29/03/2024', rating: 4, text: _t1, avatarIndex: 1),
-    Review(author: 'Илья Иванов', date: '29/03/2024', rating: 5, text: _t2, avatarIndex: 2),
-    Review(author: 'Илья Иванов', date: '29/03/2024', rating: 4, text: _t1, avatarIndex: 3),
-    Review(author: 'Анна Петрова', date: '15/02/2024', rating: 5, text: _t4, avatarIndex: 4),
-    Review(author: 'Сергей Козлов', date: '10/02/2024', rating: 3, text: _t3, avatarIndex: 5),
-    Review(author: 'Мария Смирнова', date: '28/01/2024', rating: 5, text: _t2, avatarIndex: 6),
-    Review(author: 'Дмитрий Волков', date: '15/01/2024', rating: 4, text: _t5, avatarIndex: 1),
-    Review(author: 'Елена Новикова', date: '10/01/2024', rating: 5, text: _t4, avatarIndex: 2),
-    Review(author: 'Артём Соколов', date: '25/12/2023', rating: 4, text: _t1, avatarIndex: 3),
-    Review(author: 'Ольга Морозова', date: '20/12/2023', rating: 5, text: _t5, avatarIndex: 4),
+  static const List<Review> _initialMock = <Review>[
+    Review(author: 'Илья Иванов', date: '29/03/2024', rating: 5, text: _t1, avatarIndex: 1),
+    Review(author: 'Анна Петрова', date: '15/02/2024', rating: 5, text: _t4, avatarIndex: 2),
+    Review(author: 'Сергей Козлов', date: '10/02/2024', rating: 5, text: _t2, avatarIndex: 3),
+    Review(author: 'Мария Смирнова', date: '28/01/2024', rating: 5, text: _t2, avatarIndex: 4),
+    Review(author: 'Дмитрий Волков', date: '15/01/2024', rating: 5, text: _t5, avatarIndex: 5),
+    Review(author: 'Елена Новикова', date: '10/01/2024', rating: 5, text: _t4, avatarIndex: 6),
+    Review(author: 'Артём Соколов', date: '25/12/2023', rating: 4, text: _t1, avatarIndex: 1),
+    Review(author: 'Ольга Морозова', date: '20/12/2023', rating: 4, text: _t5, avatarIndex: 2),
+    Review(author: 'Павел Фёдоров', date: '10/12/2023', rating: 4, text: _t5, avatarIndex: 3),
+    Review(author: 'Ирина Лебедева', date: '05/12/2023', rating: 3, text: _t3, avatarIndex: 4),
   ];
+
+  /// Список отзывов, синхронизированный с `ReviewsData`. Сортировка:
+  /// сверху самые свежие (симулированные через `receive` идут первыми,
+  /// более поздние — ближе к верху), ниже — дефолтные (они уже
+  /// упорядочены от новых к старым).
+  static List<Review> _buildReviews() {
+    final List<Review> shown = <Review>[];
+    final List<ReviewRecord> all = ReviewsData.all;
+
+    // Симулированные отзывы — лежат в конце `all`. Самый последний
+    // вызов `receive` имеет максимальный индекс; отображаем сверху.
+    for (int i = all.length - 1; i >= _initialMock.length; i--) {
+      final int r = all[i].rating;
+      shown.add(Review(
+        author: 'Новый пользователь',
+        date: 'Сегодня',
+        rating: r,
+        text: r == 1 ? _t1Bad : _t2,
+        avatarIndex: (i % 6) + 1,
+      ));
+    }
+
+    // Дефолтные — _initialMock уже идёт от самых новых к самым старым.
+    final int initialShown =
+        all.length < _initialMock.length ? all.length : _initialMock.length;
+    for (int i = 0; i < initialShown; i++) {
+      shown.add(_initialMock[i]);
+    }
+    return shown;
+  }
+
+  @override
+  State<ReviewsScreen> createState() => _ReviewsScreenState();
+}
+
+class _ReviewsScreenState extends State<ReviewsScreen> {
+  @override
+  void initState() {
+    super.initState();
+    ReviewsData.revision.addListener(_refresh);
+  }
+
+  @override
+  void dispose() {
+    ReviewsData.revision.removeListener(_refresh);
+    super.dispose();
+  }
+
+  void _refresh() {
+    if (mounted) setState(() {});
+  }
 
   @override
   Widget build(BuildContext context) {
+    final List<Review> reviews = ReviewsScreen._buildReviews();
+    final int count = ReviewsData.count;
+    final double avg = ReviewsData.aggregate;
+    final String ratingText = count == 0
+        ? '0,0'
+        : avg.toStringAsFixed(1).replaceAll('.', ',');
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: const DarkSubAppBar(title: 'Отзывы'),
       body: SafeArea(
-        child: empty
-          ? const _Empty()
-          : ListView.separated(
-              padding: EdgeInsets.fromLTRB(
-                  AppSpacing.screenH, 28.h, AppSpacing.screenH, AppSpacing.md),
-              itemCount: _mock.length + 1,
-              separatorBuilder: (_, _) => SizedBox(height: 18.h),
-              itemBuilder: (context, i) {
-                if (i == 0) return const _RatingHeader(rating: '4,5', count: 10);
-                return _ReviewCard(review: _mock[i - 1]);
-              },
-            ),
+        child: reviews.isEmpty
+            ? const _Empty()
+            : ListView.separated(
+                padding: EdgeInsets.fromLTRB(
+                    AppSpacing.screenH, 28.h, AppSpacing.screenH, AppSpacing.md),
+                itemCount: reviews.length + 1,
+                separatorBuilder: (_, _) => SizedBox(height: 18.h),
+                itemBuilder: (BuildContext context, int i) {
+                  if (i == 0) {
+                    return _RatingHeader(rating: ratingText, count: count);
+                  }
+                  return _ReviewCard(review: reviews[i - 1]);
+                },
+              ),
       ),
     );
   }
@@ -77,17 +137,18 @@ class _Empty extends StatelessWidget {
       child: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
-          children: [
-          Image.asset(
-            'assets/icons/profile/star_empty.webp',
-            width: 128.r,
-            height: 128.r,
-            errorBuilder: (_, _, _) => Icon(Icons.star_rounded,
-                size: 128.r, color: AppColors.primary),
-          ),
-          SizedBox(height: 8.h),
-          Text('Пока нет отзывов',
-              style: AppTextStyles.bodyMRegular.copyWith(color: AppColors.textPrimary)),
+          children: <Widget>[
+            Image.asset(
+              'assets/icons/profile/star_empty.webp',
+              width: 128.r,
+              height: 128.r,
+              errorBuilder: (_, _, _) => Icon(Icons.star_rounded,
+                  size: 128.r, color: AppColors.primary),
+            ),
+            SizedBox(height: 8.h),
+            Text('Пока нет отзывов',
+                style: AppTextStyles.bodyMRegular
+                    .copyWith(color: AppColors.textPrimary)),
           ],
         ),
       ),
@@ -104,10 +165,11 @@ class _RatingHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
+      children: <Widget>[
         Row(
-          children: [
-            Image.asset('assets/icons/profile/star_result.webp', width: 32.r, height: 32.r),
+          children: <Widget>[
+            Image.asset('assets/icons/profile/star_result.webp',
+                width: 32.r, height: 32.r),
             SizedBox(width: AppSpacing.xs),
             Text(rating,
                 style: TextStyle(
@@ -120,7 +182,8 @@ class _RatingHeader extends StatelessWidget {
         ),
         SizedBox(height: 8.h),
         Text('$count отзывов',
-            style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textTertiary)),
+            style: AppTextStyles.bodyMedium
+                .copyWith(color: AppColors.textTertiary)),
       ],
     );
   }
@@ -130,7 +193,7 @@ class _ReviewCard extends StatelessWidget {
   const _ReviewCard({required this.review});
   final Review review;
 
-  static const List<String> _avatars = [
+  static const List<String> _avatars = <String>[
     'assets/images/profile/photo_1.webp',
     'assets/images/profile/photo_2.webp',
     'assets/images/profile/photo_3.webp',
@@ -141,12 +204,12 @@ class _ReviewCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final avatarPath = _avatars[(review.avatarIndex - 1) % _avatars.length];
+    final String avatarPath = _avatars[(review.avatarIndex - 1) % _avatars.length];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
+      children: <Widget>[
         Row(
-          children: [
+          children: <Widget>[
             ClipOval(
               child: Image.asset(avatarPath,
                   width: 72.r, height: 72.r, fit: BoxFit.cover),
@@ -155,17 +218,15 @@ class _ReviewCard extends StatelessWidget {
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
+                children: <Widget>[
                   Row(
-                    children: [
-                      Text(review.author,
-                          style: AppTextStyles.bodyMMedium),
+                    children: <Widget>[
+                      Text(review.author, style: AppTextStyles.bodyMMedium),
                       SizedBox(width: 8.w),
                       Image.asset('assets/images/catalog/star.webp',
                           width: 20.r, height: 20.r),
                       SizedBox(width: 3.w),
-                      Text('${review.rating}',
-                          style: AppTextStyles.body),
+                      Text('${review.rating}', style: AppTextStyles.body),
                     ],
                   ),
                   SizedBox(height: 2.h),
@@ -198,23 +259,23 @@ class _ExpandableTextState extends State<_ExpandableText> {
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
-      builder: (context, constraints) {
-        final span = TextSpan(text: widget.text, style: AppTextStyles.body);
-        final tp = TextPainter(
+      builder: (BuildContext context, BoxConstraints constraints) {
+        final TextSpan span = TextSpan(text: widget.text, style: AppTextStyles.body);
+        final TextPainter tp = TextPainter(
           text: span,
           maxLines: 5,
           textDirection: TextDirection.ltr,
         )..layout(maxWidth: constraints.maxWidth);
-        final overflows = tp.didExceedMaxLines;
+        final bool overflows = tp.didExceedMaxLines;
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+          children: <Widget>[
             Text(widget.text,
                 maxLines: _expanded ? null : 5,
                 overflow: _expanded ? null : TextOverflow.ellipsis,
                 style: AppTextStyles.body),
-            if (overflows || _expanded) ...[
+            if (overflows || _expanded) ...<Widget>[
               SizedBox(height: 6.h),
               GestureDetector(
                 onTap: () => setState(() => _expanded = !_expanded),
