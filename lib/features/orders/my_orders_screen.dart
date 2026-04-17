@@ -40,7 +40,7 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
     ),
     _OrderMock(
       id: 'n2',
-      status: MyOrderStatus.waiting,
+      status: MyOrderStatus.waitingChoose,
       title: 'Земляные работы',
       equipment: const <String>['Автокран', 'Экскаватор'],
       rentDate: '15 июня · 09:00–18:00',
@@ -49,7 +49,7 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
     ),
     _OrderMock(
       id: 'n3',
-      status: MyOrderStatus.waiting,
+      status: MyOrderStatus.waitingChoose,
       title: 'Разработка котлована под фундамент',
       equipment: const <String>[
         'Экскаватор',
@@ -273,7 +273,7 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
       context: context,
       removeTop: true,
       child: ListView.builder(
-        padding: EdgeInsets.only(bottom: 24.h),
+        padding: EdgeInsets.zero,
         itemCount: items.length,
         itemBuilder: (BuildContext context, int i) {
           final _OrderMock o = items[i];
@@ -352,6 +352,7 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
   MyOrderDetailState _detailStateForCard(MyOrderStatus s) {
     switch (s) {
       case MyOrderStatus.waiting:
+      case MyOrderStatus.waitingChoose:
         return MyOrderDetailState.waitingConfirm;
       case MyOrderStatus.accepted:
         return MyOrderDetailState.confirmed;

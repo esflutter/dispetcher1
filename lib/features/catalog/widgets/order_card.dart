@@ -4,38 +4,51 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
 
-/// Карточка исполнителя в ленте каталога. По Figma — без рамки, разделение
-/// нижней линией, сверху строка тэгов техники + доп. инфо,
-/// ниже жирный заголовок и две строки «Техника:» / «Местоположение:».
+/// Карточка исполнителя в ленте каталога. Слева круглый аватар, справа —
+/// имя со звездой и рейтингом, строка «Опыт работы» + статус (Юр. лицо
+/// и т.п.), далее секции «Спецтехника» и «Категории услуг».
 class OrderCard extends StatelessWidget {
   const OrderCard({
     super.key,
-    required this.title,
-    required this.address,
-    required this.rentDate,
-    required this.publishedAgo,
+    required this.name,
+    required this.rating,
+    required this.experience,
+    required this.legalStatus,
     required this.equipment,
-    this.price,
+    required this.categories,
+    this.highlightEquipment = const <String>{},
+    this.highlightCategories = const <String>{},
+    this.avatarAsset,
     this.onTap,
   });
 
-  final String title;
-  final String address;
-  final String rentDate;
-  final String publishedAgo;
+  final String name;
+  final double rating;
+  final String experience;
+  final String legalStatus;
   final List<String> equipment;
-  final String? price;
+  final List<String> categories;
+  final Set<String> highlightEquipment;
+  final Set<String> highlightCategories;
+  final String? avatarAsset;
   final VoidCallback? onTap;
+
+  List<TextSpan> _buildSpans(List<String> items, Set<String> highlight) {
+    final List<TextSpan> spans = <TextSpan>[];
+    for (int i = 0; i < items.length; i++) {
+      if (i > 0) spans.add(const TextSpan(text: '   '));
+      spans.add(TextSpan(
+        text: items[i],
+        style: highlight.contains(items[i])
+            ? const TextStyle(color: AppColors.primary)
+            : null,
+      ));
+    }
+    return spans;
+  }
 
   @override
   Widget build(BuildContext context) {
-    final TextStyle tagStyle = TextStyle(
-      fontFamily: 'Roboto',
-      fontSize: 12.sp,
-      fontWeight: FontWeight.w400,
-      color: AppColors.textTertiary,
-      height: 1.78,
-    );
     return InkWell(
       onTap: onTap,
       child: Padding(
@@ -44,81 +57,139 @@ class OrderCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
             Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: <Widget>[
-                Expanded(
-                  child: Text(
-                    equipment.join('   '),
-                    style: tagStyle,
+                ClipOval(
+                  child: Image.asset(
+                    avatarAsset ?? 'assets/images/catalog/avatar_placeholder.webp',
+                    width: 48.r,
+                    height: 48.r,
+                    fit: BoxFit.cover,
                   ),
                 ),
-                SizedBox(width: 8.w),
-                Text(publishedAgo, style: tagStyle),
+                SizedBox(width: 12.w),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      Row(
+                        children: <Widget>[
+                          Flexible(
+                            child: Text(
+                              name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontFamily: 'Roboto',
+                                fontSize: 16.sp,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.textPrimary,
+                                height: 1.25,
+                              ),
+                            ),
+                          ),
+                          SizedBox(width: 8.w),
+                          Image.asset(
+                            'assets/images/catalog/star.webp',
+                            width: 18.r,
+                            height: 18.r,
+                          ),
+                          SizedBox(width: 4.w),
+                          Text(
+                            rating.toStringAsFixed(1).replaceAll('.', ','),
+                            style: TextStyle(
+                              fontFamily: 'Roboto',
+                              fontSize: 16.sp,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.textPrimary,
+                              height: 1.25,
+                            ),
+                          ),
+                        ],
+                      ),
+                      SizedBox(height: 4.h),
+                      Row(
+                        children: <Widget>[
+                          Expanded(
+                            child: Text(
+                              'Опыт работы  $experience',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontFamily: 'Roboto',
+                                fontSize: 14.sp,
+                                fontWeight: FontWeight.w400,
+                                color: AppColors.textPrimary,
+                                height: 1.3,
+                              ),
+                            ),
+                          ),
+                          SizedBox(width: 8.w),
+                          Text(
+                            legalStatus,
+                            style: TextStyle(
+                              fontFamily: 'Roboto',
+                              fontSize: 14.sp,
+                              fontWeight: FontWeight.w400,
+                              color: AppColors.textTertiary,
+                              height: 1.3,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
               ],
             ),
-            SizedBox(height: 8.h),
+            SizedBox(height: 12.h),
             Text(
-              title,
-              style: AppTextStyles.titleS.copyWith(
+              'Спецтехника',
+              style: AppTextStyles.body.copyWith(
                 fontWeight: FontWeight.w700,
                 color: AppColors.textPrimary,
               ),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
             ),
-            SizedBox(height: 8.h),
-            _LabelLine(label: 'Техника:', value: rentDate),
-            SizedBox(height: 5.h),
-            _LabelLine(label: 'Местоположение:', value: address),
-            if (price != null && price!.isNotEmpty) ...<Widget>[
-              SizedBox(height: 10.h),
-              Text(
-                price!,
-                style: TextStyle(
-                  fontFamily: 'Roboto',
-                  fontSize: 15.sp,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.primary,
-                ),
+            SizedBox(height: 4.h),
+            Text.rich(
+              TextSpan(
+                children: _buildSpans(equipment, highlightEquipment),
               ),
-            ],
+              style: TextStyle(
+                fontFamily: 'Roboto',
+                fontSize: 14.sp,
+                fontWeight: FontWeight.w400,
+                color: AppColors.textPrimary,
+                height: 1.78,
+              ),
+            ),
+            SizedBox(height: 10.h),
+            Text(
+              'Категории услуг',
+              style: AppTextStyles.body.copyWith(
+                fontWeight: FontWeight.w700,
+                color: AppColors.textPrimary,
+              ),
+            ),
+            SizedBox(height: 4.h),
+            Text.rich(
+              TextSpan(
+                children: _buildSpans(categories, highlightCategories),
+              ),
+              textHeightBehavior: const TextHeightBehavior(
+                applyHeightToLastDescent: false,
+              ),
+              style: TextStyle(
+                fontFamily: 'Roboto',
+                fontSize: 14.sp,
+                fontWeight: FontWeight.w400,
+                color: AppColors.textPrimary,
+                height: 1.78,
+              ),
+            ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _LabelLine extends StatelessWidget {
-  const _LabelLine({required this.label, required this.value});
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return RichText(
-      maxLines: 2,
-      overflow: TextOverflow.ellipsis,
-      text: TextSpan(
-        style: TextStyle(
-          fontFamily: 'Roboto',
-          fontSize: 12.sp,
-          color: AppColors.textPrimary,
-          height: 1.4,
-        ),
-        children: <TextSpan>[
-          TextSpan(
-            text: '$label ',
-            style: const TextStyle(fontWeight: FontWeight.w600),
-          ),
-          TextSpan(
-            text: value,
-            style: TextStyle(
-              fontWeight: FontWeight.w400,
-              color: AppColors.textSecondary,
-            ),
-          ),
-        ],
       ),
     );
   }

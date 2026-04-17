@@ -5,6 +5,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
+import 'package:dispatcher_1/core/utils/thousand_separator_formatter.dart';
 import 'package:dispatcher_1/core/widgets/primary_button.dart';
 import 'package:dispatcher_1/features/catalog/widgets/catalog_search_bar.dart';
 
@@ -54,6 +55,10 @@ class _CatalogFilterScreenState extends State<CatalogFilterScreen> {
   final Set<String> _selectedCategories = <String>{};
   final Set<String> _selectedEquipment = <String>{};
 
+  final TextEditingController _priceHourCtrl = TextEditingController();
+  final TextEditingController _priceDayCtrl = TextEditingController();
+  bool _sortByPriceAsc = false;
+
   bool _exactDate = false;
   bool _wholeDay = false;
   DateTime? _dateFrom;
@@ -62,6 +67,57 @@ class _CatalogFilterScreenState extends State<CatalogFilterScreen> {
   TimeOfDay? _timeTo;
   int? _radiusKm; // 10/20/50
   String? _address;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedCategories.addAll(AppliedFilter.categories);
+    _selectedEquipment.addAll(AppliedFilter.equipment);
+    _priceHourCtrl.text = AppliedFilter.priceHour ?? '';
+    _priceDayCtrl.text = AppliedFilter.priceDay ?? '';
+    _sortByPriceAsc = AppliedFilter.sortByPriceAsc;
+    _dateFrom = AppliedFilter.dateFrom;
+    _dateTo = AppliedFilter.dateTo;
+    _exactDate = AppliedFilter.exactDate;
+    _timeFrom = AppliedFilter.timeFrom;
+    _timeTo = AppliedFilter.timeTo;
+    _wholeDay = AppliedFilter.wholeDay;
+    _radiusKm = AppliedFilter.radiusKm;
+    _address = AppliedFilter.address;
+  }
+
+  @override
+  void dispose() {
+    _priceHourCtrl.dispose();
+    _priceDayCtrl.dispose();
+    super.dispose();
+  }
+
+  void _applyFilter() {
+    AppliedFilter.categories
+      ..clear()
+      ..addAll(_selectedCategories);
+    AppliedFilter.equipment
+      ..clear()
+      ..addAll(_selectedEquipment);
+    AppliedFilter.priceHour = _priceHourCtrl.text.trim().isEmpty
+        ? null
+        : _priceHourCtrl.text.trim();
+    AppliedFilter.priceDay = _priceDayCtrl.text.trim().isEmpty
+        ? null
+        : _priceDayCtrl.text.trim();
+    AppliedFilter.sortByPriceAsc = _sortByPriceAsc;
+    AppliedFilter.dateFrom = _dateFrom;
+    AppliedFilter.dateTo = _dateTo;
+    AppliedFilter.exactDate = _exactDate;
+    AppliedFilter.timeFrom = _timeFrom;
+    AppliedFilter.timeTo = _timeTo;
+    AppliedFilter.wholeDay = _wholeDay;
+    AppliedFilter.radiusKm = _radiusKm;
+    AppliedFilter.address = _address;
+    AppliedFilter.revision.value = AppliedFilter.revision.value + 1;
+    Navigator.of(context).pop(true);
+  }
 
   /// Какой инлайн-пикер сейчас открыт: null / 'dateFrom' / 'dateTo' /
   /// 'timeFrom' / 'timeTo'. Одновременно виден только один.
@@ -72,8 +128,6 @@ class _CatalogFilterScreenState extends State<CatalogFilterScreen> {
 
   String _formatTime(TimeOfDay t) =>
       '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
-
-  int _toMinutes(TimeOfDay t) => t.hour * 60 + t.minute;
 
   void _togglePicker(String key) {
     setState(() => _openPicker = _openPicker == key ? null : key);
@@ -135,6 +189,22 @@ class _CatalogFilterScreenState extends State<CatalogFilterScreen> {
                             _selectedEquipment.remove(v);
                           }
                         }),
+                      ),
+                      SizedBox(height: 24.h),
+                      _SectionTitle('Стоимость'),
+                      SizedBox(height: 12.h),
+                      Row(
+                        children: <Widget>[
+                          Expanded(child: _PriceField(controller: _priceHourCtrl, hint: '₽ / час')),
+                          SizedBox(width: 12.w),
+                          Expanded(child: _PriceField(controller: _priceDayCtrl, hint: '₽ / день')),
+                        ],
+                      ),
+                      SizedBox(height: 12.h),
+                      _SortAscCheckbox(
+                        value: _sortByPriceAsc,
+                        onChanged: (bool v) =>
+                            setState(() => _sortByPriceAsc = v),
                       ),
                       SizedBox(height: 24.h),
                       _SectionTitle('Дата аренды'),
@@ -260,15 +330,8 @@ class _CatalogFilterScreenState extends State<CatalogFilterScreen> {
                             setState(() {
                               if (_openPicker == 'timeFrom') {
                                 _timeFrom = t;
-                                if (_timeTo != null && _toMinutes(_timeTo!) <= _toMinutes(t)) {
-                                  _timeTo = t.replacing(hour: (t.hour + 1) % 24);
-                                }
                               } else {
-                                if (_timeFrom != null && _toMinutes(t) <= _toMinutes(_timeFrom!)) {
-                                  _timeTo = _timeFrom!.replacing(hour: (_timeFrom!.hour + 1) % 24);
-                                } else {
-                                  _timeTo = t;
-                                }
+                                _timeTo = t;
                               }
                               _openPicker = null;
                             });
@@ -336,7 +399,6 @@ class _CatalogFilterScreenState extends State<CatalogFilterScreen> {
                           selected: _radiusKm == km,
                           onTap: () => setState(() => _radiusKm = km),
                         ),
-                      SizedBox(height: 24.h),
                     ],
                   ),
                 ),
@@ -361,7 +423,7 @@ class _CatalogFilterScreenState extends State<CatalogFilterScreen> {
                 16.h + MediaQuery.of(context).padding.bottom),
             child: PrimaryButton(
               label: 'Применить',
-              onPressed: () => Navigator.of(context).pop(),
+              onPressed: _applyFilter,
             ),
           ),
         ],
@@ -1187,7 +1249,7 @@ class AddressBottomSheetState extends State<AddressBottomSheet> {
                         height: 20.r,
                         fit: BoxFit.contain,
                       ),
-                      SizedBox(width: 8.w),
+                      SizedBox(width: 12.w),
                       Expanded(
                         child: TextField(
                           controller: _ctrl,
@@ -1283,4 +1345,172 @@ class MockAddress {
   const MockAddress(this.title, this.subtitle);
   final String title;
   final String? subtitle;
+}
+
+/// Глобальное состояние применённого фильтра каталога. Лента исполнителей
+/// слушает `revision` и пересчитывает выдачу при изменении.
+class AppliedFilter {
+  AppliedFilter._();
+
+  static final Set<String> categories = <String>{};
+  static final Set<String> equipment = <String>{};
+  static String? priceHour;
+  static String? priceDay;
+  static bool sortByPriceAsc = false;
+  static DateTime? dateFrom;
+  static DateTime? dateTo;
+  static bool exactDate = false;
+  static TimeOfDay? timeFrom;
+  static TimeOfDay? timeTo;
+  static bool wholeDay = false;
+  static int? radiusKm;
+  static String? address;
+
+  static final ValueNotifier<int> revision = ValueNotifier<int>(0);
+
+  static void clear() {
+    categories.clear();
+    equipment.clear();
+    priceHour = null;
+    priceDay = null;
+    sortByPriceAsc = false;
+    dateFrom = null;
+    dateTo = null;
+    exactDate = false;
+    timeFrom = null;
+    timeTo = null;
+    wholeDay = false;
+    radiusKm = null;
+    address = null;
+    revision.value = revision.value + 1;
+  }
+}
+
+/// Поле стоимости с суффиксом «₽ / час» / «₽ / день», который
+/// дорисовывается рядом с числом при вводе. Пустое — виден только
+/// hint-суффикс. Поведение — такое же, как в `_TintField` экрана
+/// создания услуги.
+class _PriceField extends StatefulWidget {
+  const _PriceField({required this.controller, required this.hint});
+  final TextEditingController controller;
+
+  /// Полный суффикс вида «₽ / час» или «₽ / день».
+  final String hint;
+
+  @override
+  State<_PriceField> createState() => _PriceFieldState();
+}
+
+class _PriceFieldState extends State<_PriceField> {
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.addListener(_onChange);
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_onChange);
+    super.dispose();
+  }
+
+  void _onChange() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bool hasText = widget.controller.text.isNotEmpty;
+    return Stack(
+      children: <Widget>[
+        TextField(
+          controller: widget.controller,
+          keyboardType: TextInputType.number,
+          inputFormatters: <TextInputFormatter>[
+            ThousandSeparatorFormatter(maxDigits: 9),
+          ],
+          style: hasText
+              ? AppTextStyles.body.copyWith(color: Colors.transparent)
+              : AppTextStyles.body,
+          decoration: InputDecoration(
+            hintText: hasText ? null : widget.hint,
+            hintStyle: AppTextStyles.body
+                .copyWith(color: AppColors.textTertiary),
+            filled: true,
+            fillColor: AppColors.fieldFill,
+            contentPadding:
+                EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12.r),
+              borderSide: BorderSide.none,
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12.r),
+              borderSide: BorderSide.none,
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12.r),
+              borderSide: const BorderSide(color: AppColors.primary),
+            ),
+          ),
+        ),
+        if (hasText)
+          Positioned.fill(
+            child: IgnorePointer(
+              child: Container(
+                padding: EdgeInsets.symmetric(
+                    horizontal: 16.w, vertical: 12.h),
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  '${widget.controller.text} ${widget.hint}',
+                  style: AppTextStyles.body,
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _SortAscCheckbox extends StatelessWidget {
+  const _SortAscCheckbox({required this.value, required this.onChanged});
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: () => onChanged(!value),
+      child: Padding(
+        padding: EdgeInsets.symmetric(vertical: 6.h),
+        child: Row(
+          children: <Widget>[
+            Container(
+              width: 22.r,
+              height: 22.r,
+              decoration: BoxDecoration(
+                color: value ? AppColors.primary : AppColors.surface,
+                border: Border.all(
+                  color: value ? AppColors.primary : AppColors.border,
+                  width: 1.5,
+                ),
+                borderRadius: BorderRadius.circular(4.r),
+              ),
+              child: value
+                  ? Icon(Icons.check, size: 16.r, color: Colors.white)
+                  : null,
+            ),
+            SizedBox(width: 12.w),
+            Expanded(
+              child: Text(
+                'Сортировать по возрастанию цены',
+                style: AppTextStyles.body,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }

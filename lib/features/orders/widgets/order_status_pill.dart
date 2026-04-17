@@ -6,6 +6,9 @@ enum MyOrderStatus {
   /// Заказ на рассмотрении — ждём откликов от исполнителей.
   waiting,
 
+  /// Пришли отклики — заказчик должен выбрать исполнителя.
+  waitingChoose,
+
   /// Исполнитель выбран — можно связаться.
   accepted,
 
@@ -27,6 +30,8 @@ extension MyOrderStatusX on MyOrderStatus {
     switch (this) {
       case MyOrderStatus.waiting:
         return 'Ждёт подтверждения от исполнителя';
+      case MyOrderStatus.waitingChoose:
+        return 'Выберите исполнителя';
       case MyOrderStatus.accepted:
         return 'Свяжитесь с исполнителем';
       case MyOrderStatus.completed:
@@ -44,6 +49,7 @@ extension MyOrderStatusX on MyOrderStatus {
     switch (this) {
       case MyOrderStatus.waiting:
         return const Color(0xFFE6F8EF);
+      case MyOrderStatus.waitingChoose:
       case MyOrderStatus.accepted:
         // #1DAEDE @ 10%
         return const Color(0x1A1DAEDE);
@@ -60,6 +66,7 @@ extension MyOrderStatusX on MyOrderStatus {
     switch (this) {
       case MyOrderStatus.waiting:
         return const Color(0xFF1FAE5C);
+      case MyOrderStatus.waitingChoose:
       case MyOrderStatus.accepted:
         return const Color(0xFF1DAEDE);
       case MyOrderStatus.completed:

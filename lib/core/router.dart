@@ -10,8 +10,6 @@ import '../features/catalog/customer_card_screen.dart';
 import '../features/catalog/no_internet_screen.dart';
 import '../features/catalog/order_detail_screen.dart' as catalog_detail;
 import '../features/catalog/order_feed_screen.dart';
-import '../features/catalog/order_on_map_screen.dart';
-import '../features/catalog/orders_map_screen.dart';
 import '../features/executor_card/edit_executor_card_screen.dart';
 import '../features/executor_card/executor_card_screen.dart';
 import '../features/onboarding/onboarding_screen.dart';
@@ -65,16 +63,6 @@ final GoRouter appRouter = GoRouter(
       path: '/catalog/customer/:id',
       builder: (_, state) => CustomerCardScreen(
         customerId: state.pathParameters['id'] ?? '',
-      ),
-    ),
-    GoRoute(
-      path: '/catalog/orders-map',
-      builder: (_, _) => const OrdersMapFullScreen(),
-    ),
-    GoRoute(
-      path: '/catalog/order/:id/map',
-      builder: (_, state) => OrderOnMapScreen(
-        orderId: state.pathParameters['id'] ?? '',
       ),
     ),
     GoRoute(path: '/catalog/no-internet', builder: (_, _) => const NoInternetScreen()),

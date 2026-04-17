@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_spacing.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
+import 'package:dispatcher_1/features/catalog/catalog_filter_screen.dart';
 import 'package:dispatcher_1/features/catalog/order_detail_screen.dart';
 import 'package:dispatcher_1/features/catalog/order_feed_screen.dart';
 import 'package:dispatcher_1/features/catalog/widgets/category_card.dart';
@@ -51,47 +52,56 @@ class _CatalogCategoriesScreenState extends State<CatalogCategoriesScreen> {
   static const List<_SearchableOrder> _allOrders = <_SearchableOrder>[
     _SearchableOrder(
       id: '1',
-      title: 'Иванов Александр',
-      address: 'Московская область, Москва',
-      rentDate: 'Экскаватор JCB 3CX',
-      publishedAgo: 'Опыт: 5 лет',
-      equipment: <String>['Экскаватор'],
-    ),
-    _SearchableOrder(
-      id: '2',
-      title: 'Петров Сергей',
-      address: 'Московская область, Подольск',
-      rentDate: 'Автокран Liebherr LTM',
-      publishedAgo: 'Опыт: 8 лет',
-      equipment: <String>['Автокран', 'Экскаватор'],
-    ),
-    _SearchableOrder(
-      id: '3',
-      title: 'Сидоров Дмитрий',
-      address: 'Московская область, Химки',
-      rentDate: 'Экскаватор-погрузчик CAT',
-      publishedAgo: 'Опыт: 3 года',
-      equipment: <String>[
-        'Экскаватор',
-        'Автокран',
-        'Манипулятор',
+      name: 'Александр Иванов',
+      rating: 4.5,
+      experience: '8 лет',
+      legalStatus: 'Юр. лицо',
+      equipment: <String>['Экскаватор', 'Автокран', 'Эвакуатор', 'Автовышка'],
+      categories: <String>[
+        'Строительные работы',
+        'Дорожные работы',
+        'Буровые работы',
+        'Высотные работы',
       ],
     ),
     _SearchableOrder(
+      id: '2',
+      name: 'Сергей Петров',
+      rating: 4.8,
+      experience: '10 лет',
+      legalStatus: 'ИП',
+      equipment: <String>['Автокран', 'Экскаватор'],
+      categories: <String>[
+        'Строительные работы',
+        'Погрузочно-разгрузочные работы',
+      ],
+    ),
+    _SearchableOrder(
+      id: '3',
+      name: 'Дмитрий Сидоров',
+      rating: 4.2,
+      experience: '3 года',
+      legalStatus: 'Самозанятый',
+      equipment: <String>['Экскаватор', 'Автокран', 'Манипулятор'],
+      categories: <String>['Земляные работы', 'Строительные работы'],
+    ),
+    _SearchableOrder(
       id: '4',
-      title: 'Козлов Андрей',
-      address: 'Московская область, Люберцы',
-      rentDate: 'Самосвал КАМАЗ',
-      publishedAgo: 'Опыт: 10 лет',
+      name: 'Андрей Козлов',
+      rating: 4.9,
+      experience: '12 лет',
+      legalStatus: 'Юр. лицо',
       equipment: <String>['Самосвал', 'Погрузчик'],
+      categories: <String>['Перевозка материалов', 'Земляные работы'],
     ),
     _SearchableOrder(
       id: '5',
-      title: 'Морозов Виктор',
-      address: 'Московская область, Одинцово',
-      rentDate: 'Автовышка 22 м',
-      publishedAgo: 'Опыт: 6 лет',
+      name: 'Виктор Морозов',
+      rating: 4.6,
+      experience: '6 лет',
+      legalStatus: 'Физ. лицо',
       equipment: <String>['Автовышка'],
+      categories: <String>['Высотные работы'],
     ),
   ];
 
@@ -108,10 +118,12 @@ class _CatalogCategoriesScreenState extends State<CatalogCategoriesScreen> {
     final String q = _query.trim().toLowerCase();
     if (q.isEmpty) return const <_SearchableOrder>[];
     return _allOrders.where((_SearchableOrder o) {
-      if (o.title.toLowerCase().contains(q)) return true;
-      if (o.address.toLowerCase().contains(q)) return true;
+      if (o.name.toLowerCase().contains(q)) return true;
       for (final String e in o.equipment) {
         if (e.toLowerCase().contains(q)) return true;
+      }
+      for (final String c in o.categories) {
+        if (c.toLowerCase().contains(q)) return true;
       }
       return false;
     }).toList();
@@ -157,6 +169,14 @@ class _CatalogCategoriesScreenState extends State<CatalogCategoriesScreen> {
             imageAsset: c.asset,
             imageTight: c.tight,
             onTap: () {
+              // Выбор категории = быстрый фильтр: заменяем список техники
+              // на одну выбранную и инкрементим ревизию, чтобы лента
+              // перерисовалась с учётом фильтра.
+              AppliedFilter.equipment
+                ..clear()
+                ..add(c.title);
+              AppliedFilter.revision.value =
+                  AppliedFilter.revision.value + 1;
               Navigator.of(context).push(
                 MaterialPageRoute<void>(
                   builder: (_) => OrderFeedScreen(
@@ -185,7 +205,7 @@ class _CatalogCategoriesScreenState extends State<CatalogCategoriesScreen> {
       );
     }
     return ListView.separated(
-      padding: EdgeInsets.only(bottom: 24.h),
+      padding: EdgeInsets.zero,
       itemCount: results.length,
       separatorBuilder: (_, _) => Divider(
         height: 1,
@@ -195,11 +215,12 @@ class _CatalogCategoriesScreenState extends State<CatalogCategoriesScreen> {
       itemBuilder: (BuildContext context, int i) {
         final _SearchableOrder o = results[i];
         return OrderCard(
-          title: o.title,
-          address: o.address,
-          rentDate: o.rentDate,
-          publishedAgo: o.publishedAgo,
+          name: o.name,
+          rating: o.rating,
+          experience: o.experience,
+          legalStatus: o.legalStatus,
           equipment: o.equipment,
+          categories: o.categories,
           onTap: () => Navigator.of(context).push(
             MaterialPageRoute<void>(
               builder: (_) => OrderDetailScreen(
@@ -234,20 +255,9 @@ class _CatalogHeader extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: <Widget>[
-              Text(
-                'Поиск исполнителя',
-                style: AppTextStyles.h1.copyWith(color: AppColors.surface),
-              ),
-              GestureDetector(
-                onTap: () => context.push('/catalog/orders-map'),
-                behavior: HitTestBehavior.opaque,
-                child: Icon(Icons.map_outlined,
-                    color: AppColors.primary, size: 24.r),
-              ),
-            ],
+          Text(
+            'Поиск исполнителя',
+            style: AppTextStyles.h1.copyWith(color: AppColors.surface),
           ),
           SizedBox(height: 18.h),
           Row(
@@ -304,16 +314,25 @@ class _CatalogHeader extends StatelessWidget {
               ),
               SizedBox(width: 8.w),
               GestureDetector(
-                onTap: () => context.push('/catalog/filter'),
-                child: Container(
-                  width: 44.r,
-                  height: 44.r,
-                  decoration: BoxDecoration(
-                    color: AppColors.primary,
-                    borderRadius: BorderRadius.circular(AppSpacing.radiusM),
-                  ),
-                  child: Icon(Icons.tune,
-                      color: AppColors.surface, size: 20.r),
+                onTap: () async {
+                  final bool? applied =
+                      await context.push<bool>('/catalog/filter');
+                  if (applied == true && context.mounted) {
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => const OrderFeedScreen(
+                          categoryId: 'all',
+                          categoryTitle: 'Список исполнителей',
+                        ),
+                      ),
+                    );
+                  }
+                },
+                child: Image.asset(
+                  'assets/icons/ui/filter.webp',
+                  width: 44.h,
+                  height: 44.h,
+                  fit: BoxFit.contain,
                 ),
               ),
             ],
@@ -335,16 +354,18 @@ class _Category {
 class _SearchableOrder {
   const _SearchableOrder({
     required this.id,
-    required this.title,
-    required this.address,
-    required this.rentDate,
-    required this.publishedAgo,
+    required this.name,
+    required this.rating,
+    required this.experience,
+    required this.legalStatus,
     required this.equipment,
+    required this.categories,
   });
   final String id;
-  final String title;
-  final String address;
-  final String rentDate;
-  final String publishedAgo;
+  final String name;
+  final double rating;
+  final String experience;
+  final String legalStatus;
   final List<String> equipment;
+  final List<String> categories;
 }

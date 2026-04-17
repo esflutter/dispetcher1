@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
+import 'package:dispatcher_1/core/utils/thousand_separator_formatter.dart';
 import 'package:dispatcher_1/core/widgets/dark_sub_app_bar.dart';
 import 'package:dispatcher_1/core/widgets/primary_button.dart';
 import 'package:dispatcher_1/features/catalog/catalog_filter_screen.dart';
@@ -10,6 +11,18 @@ import 'package:dispatcher_1/features/support/chat_screen.dart';
 import 'package:dispatcher_1/features/services/my_services_screen.dart';
 
 import 'widgets/service_alerts.dart';
+
+/// Склонение «час» после предлога «от» (род. падеж).
+/// 1 → «часа», 2/3/4/… → «часов», 11–14 → «часов».
+/// Пустая строка — «часов» (дефолт для hint).
+String hoursWord(String text) {
+  final int? n = int.tryParse(text);
+  if (n == null) return 'часов';
+  final int mod100 = n % 100;
+  if (mod100 >= 11 && mod100 <= 14) return 'часов';
+  if (n % 10 == 1) return 'часа';
+  return 'часов';
+}
 
 /// Экран «Создание / редактирование услуги».
 /// При передаче [serviceId] работает в режиме редактирования.
@@ -275,7 +288,8 @@ class _CreateServiceScreenState extends State<CreateServiceScreen> {
                         hint: '₽ / час',
                         suffix: ' ₽ / час',
                         keyboardType: TextInputType.number,
-                        maxLength: 15,
+                        maxLength: 9,
+                        thousandSeparator: true,
                       ),
                     ),
                     SizedBox(width: 12.w),
@@ -285,7 +299,8 @@ class _CreateServiceScreenState extends State<CreateServiceScreen> {
                         hint: '₽ / день',
                         suffix: ' ₽ / день',
                         keyboardType: TextInputType.number,
-                        maxLength: 15,
+                        maxLength: 9,
+                        thousandSeparator: true,
                       ),
                     ),
                   ],
@@ -299,9 +314,10 @@ class _CreateServiceScreenState extends State<CreateServiceScreen> {
                     controller: _minHoursCtrl,
                     hint: 'от 4 часов',
                     prefix: 'от ',
-                    suffix: ' часов',
+                    suffix: ' ${hoursWord(_minHoursCtrl.text)}',
                     keyboardType: TextInputType.number,
-                    maxLength: 15,
+                    maxLength: 3,
+                    digitsOnly: true,
                   ),
                 ),
                 SizedBox(height: 16.h),
@@ -551,6 +567,8 @@ class _TintField extends StatelessWidget {
     this.maxLength,
     this.suffix,
     this.prefix,
+    this.thousandSeparator = false,
+    this.digitsOnly = false,
   });
   final TextEditingController controller;
   final String hint;
@@ -560,6 +578,20 @@ class _TintField extends StatelessWidget {
   final int? maxLength;
   final String? suffix;
   final String? prefix;
+  final bool thousandSeparator;
+  final bool digitsOnly;
+
+  List<TextInputFormatter>? _buildFormatters() {
+    if (thousandSeparator) {
+      return <TextInputFormatter>[
+        ThousandSeparatorFormatter(maxDigits: maxLength ?? 9),
+      ];
+    }
+    final List<TextInputFormatter> fs = <TextInputFormatter>[];
+    if (digitsOnly) fs.add(FilteringTextInputFormatter.digitsOnly);
+    if (maxLength != null) fs.add(LengthLimitingTextInputFormatter(maxLength));
+    return fs.isEmpty ? null : fs;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -581,9 +613,7 @@ class _TintField extends StatelessWidget {
           TextField(
             controller: controller,
             keyboardType: keyboardType,
-            inputFormatters: maxLength != null
-                ? [LengthLimitingTextInputFormatter(maxLength)]
-                : null,
+            inputFormatters: _buildFormatters(),
             style: hasText
                 ? AppTextStyles.body.copyWith(color: Colors.transparent)
                 : AppTextStyles.body,
