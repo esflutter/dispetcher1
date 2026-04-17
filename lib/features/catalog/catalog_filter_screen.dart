@@ -244,7 +244,7 @@ class _CatalogFilterScreenState extends State<CatalogFilterScreen> {
                       if (_openPicker == 'dateFrom' ||
                           _openPicker == 'dateTo') ...<Widget>[
                         SizedBox(height: 8.h),
-                        _InlineCalendar(
+                        InlineCalendar(
                           selected: _openPicker == 'dateFrom'
                               ? _dateFrom
                               : (_dateTo ?? _dateFrom),
@@ -655,8 +655,9 @@ class _RadioRow extends StatelessWidget {
 }
 
 /// Инлайн-календарь, встроенный в скролл фильтра.
-class _InlineCalendar extends StatefulWidget {
-  const _InlineCalendar({
+class InlineCalendar extends StatefulWidget {
+  const InlineCalendar({
+    super.key,
     required this.selected,
     required this.onChanged,
     required this.onCancel,
@@ -670,10 +671,10 @@ class _InlineCalendar extends StatefulWidget {
   final DateTime? minDate;
 
   @override
-  State<_InlineCalendar> createState() => _InlineCalendarState();
+  State<InlineCalendar> createState() => InlineCalendarState();
 }
 
-class _InlineCalendarState extends State<_InlineCalendar> {
+class InlineCalendarState extends State<InlineCalendar> {
   late DateTime _picked;
   late DateTime _displayedMonth;
   late DateTime _firstDate;

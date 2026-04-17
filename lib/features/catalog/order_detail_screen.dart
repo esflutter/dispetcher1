@@ -10,6 +10,7 @@ import 'package:dispatcher_1/core/widgets/primary_button.dart';
 import 'package:dispatcher_1/features/catalog/catalog_service_detail_screen.dart';
 import 'package:dispatcher_1/features/catalog/select_order_for_executor_screen.dart';
 import 'package:dispatcher_1/features/catalog/widgets/catalog_search_bar.dart';
+import 'package:dispatcher_1/features/orders/create_order_screen.dart';
 import 'package:dispatcher_1/features/profile/account_block.dart';
 
 /// Карточка исполнителя (детали). По Figma — заголовок исполнителя сверху,
@@ -70,7 +71,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
         context: context,
         barrierColor: Colors.black.withValues(alpha: 0.35),
         builder: (_) => NoOrderDialog(
-          onCreateOrder: () => Navigator.of(context).maybePop(),
+          onCreateOrder: () => DailyOrderLimit.openCreateOrAlert(context),
         ),
       );
       return;
@@ -164,7 +165,14 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
         children: <Widget>[
           Expanded(
             child: SingleChildScrollView(
-              padding: EdgeInsets.fromLTRB(16.w, 16.h, 16.w, 0),
+              padding: EdgeInsets.fromLTRB(
+                16.w,
+                16.h,
+                16.w,
+                _alreadyOffered
+                    ? 16.h + MediaQuery.of(context).padding.bottom
+                    : 0,
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[

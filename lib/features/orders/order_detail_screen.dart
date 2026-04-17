@@ -55,6 +55,7 @@ class MyOrderDetailScreen extends StatefulWidget {
       'Планировка участка — 2 × 12 × 15 м',
     ],
     this.rejectedStatus = MyOrderStatus.rejectedOther,
+    this.waitingStatus = MyOrderStatus.waiting,
     this.onDecline,
     this.onRefuse,
     this.onConfirm,
@@ -76,6 +77,11 @@ class MyOrderDetailScreen extends StatefulWidget {
 
   /// Какой именно красный статус показывать в state == rejected.
   final MyOrderStatus rejectedStatus;
+
+  /// Какой именно «ожидающий» статус показывать в state == waitingConfirm.
+  /// `waiting` — «Ждёт подтверждения», `waitingChoose` — «Выберите
+  /// исполнителя». Другие значения используются только для rejected/*.
+  final MyOrderStatus waitingStatus;
 
   /// Колбэк «Отклонить заказ» (исполнитель не подтвердил) — обычно
   /// здесь parent перемещает заказ из «Новые» в «Не принятые» со
@@ -115,8 +121,9 @@ class _MyOrderDetailScreenState extends State<MyOrderDetailScreen> {
   MyOrderStatus get _pillStatus {
     switch (_state) {
       case MyOrderDetailState.waitingConfirm:
-        // «Новые»: зелёная пилюля «Ждёт подтверждения».
-        return MyOrderStatus.waiting;
+        // «Ожидает»: пилюля «Ждёт подтверждения» либо «Выберите
+        // исполнителя» — в зависимости от исходного статуса карточки.
+        return widget.waitingStatus;
       case MyOrderDetailState.confirmed:
         // «Принятые»: бирюзовая пилюля «Свяжитесь с заказчиком».
         return MyOrderStatus.accepted;

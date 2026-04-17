@@ -3,7 +3,11 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/widgets/primary_button.dart';
+import 'package:dispatcher_1/features/orders/create_order_screen.dart';
 import 'package:dispatcher_1/features/orders/order_detail_screen.dart';
+import 'package:dispatcher_1/features/orders/orders_store.dart';
+import 'package:dispatcher_1/features/orders/preview_order_screen.dart';
+import 'package:dispatcher_1/features/orders/review_screen.dart';
 import 'package:dispatcher_1/features/orders/widgets/my_order_card.dart';
 import 'package:dispatcher_1/features/orders/widgets/order_status_pill.dart';
 import 'package:dispatcher_1/features/profile/account_block.dart';
@@ -28,8 +32,8 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
   late final TabController _tab;
 
   // Моковые данные. На рассмотрении: заказ ожидает отклика исполнителей.
-  final List<_OrderMock> _newOrders = <_OrderMock>[
-    _OrderMock(
+  final List<OrderMock> _newOrders = <OrderMock>[
+    OrderMock(
       id: 'n1',
       status: MyOrderStatus.waiting,
       title: 'Нужен экскаватор для копки траншеи',
@@ -38,7 +42,7 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
       address: 'Московская область, Москва, Улица1, д 144',
       publishedAgo: '2 часа назад',
     ),
-    _OrderMock(
+    OrderMock(
       id: 'n2',
       status: MyOrderStatus.waitingChoose,
       title: 'Земляные работы',
@@ -47,7 +51,7 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
       address: 'Московская область, Москва, Улица1, д 144',
       publishedAgo: 'Сегодня в 11:30',
     ),
-    _OrderMock(
+    OrderMock(
       id: 'n3',
       status: MyOrderStatus.waitingChoose,
       title: 'Разработка котлована под фундамент',
@@ -65,8 +69,8 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
   ];
 
   // Принятые: «Свяжитесь с исполнителем» + один «Завершён».
-  final List<_OrderMock> _accepted = <_OrderMock>[
-    _OrderMock(
+  final List<OrderMock> _accepted = <OrderMock>[
+    OrderMock(
       id: 'a1',
       status: MyOrderStatus.accepted,
       title: 'Нужен экскаватор для копки траншеи',
@@ -77,7 +81,7 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
       customerName: 'Иванов Александр',
       customerPhone: '+7 999 123-45-67',
     ),
-    _OrderMock(
+    OrderMock(
       id: 'a2',
       status: MyOrderStatus.accepted,
       title: 'Разработка котлована под фундамент',
@@ -94,7 +98,7 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
       customerName: 'Петров Сергей',
       customerPhone: '+7 999 765-43-21',
     ),
-    _OrderMock(
+    OrderMock(
       id: 'a3',
       status: MyOrderStatus.completed,
       title: 'Нужен экскаватор для копки траншеи',
@@ -107,8 +111,8 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
     ),
   ];
 
-  final List<_OrderMock> _rejected = <_OrderMock>[
-    _OrderMock(
+  final List<OrderMock> _rejected = <OrderMock>[
+    OrderMock(
       id: 'r1',
       status: MyOrderStatus.rejectedOther,
       title: 'Земляные работы',
@@ -117,7 +121,7 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
       address: 'Московская область, Москва, Улица1, д 144',
       publishedAgo: '2 часа назад',
     ),
-    _OrderMock(
+    OrderMock(
       id: 'r2',
       status: MyOrderStatus.rejectedDeclined,
       title: 'Разработка котлована под фундамент',
@@ -132,7 +136,7 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
       address: 'Московская область, Москва, Улица1, д 144',
       publishedAgo: 'Вчера в 14:30',
     ),
-    _OrderMock(
+    OrderMock(
       id: 'r3',
       status: MyOrderStatus.rejectedRemoved,
       title: 'Разработка котлована под фундамент',
@@ -154,11 +158,16 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
 
   bool get _blocked => AccountBlock.isBlocked;
 
+  int _lastStoreRevision = 0;
+
   @override
   void initState() {
     super.initState();
     _tab = TabController(length: 3, vsync: this);
     AccountBlock.notifier.addListener(_onBlockChanged);
+    _lastStoreRevision = CreatedOrdersStore.revision.value;
+    _newOrders.insertAll(0, CreatedOrdersStore.items);
+    CreatedOrdersStore.revision.addListener(_onStoreChanged);
     // Если профиль уже заблокирован к моменту открытия экрана — сразу
     // убираем активные заказы в архив, чтобы состояние было согласованным.
     if (AccountBlock.isBlocked) {
@@ -171,8 +180,24 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
   @override
   void dispose() {
     AccountBlock.notifier.removeListener(_onBlockChanged);
+    CreatedOrdersStore.revision.removeListener(_onStoreChanged);
     _tab.dispose();
     super.dispose();
+  }
+
+  /// Забирает из стора только «новые» (ещё не добавленные по id) заказы
+  /// и кладёт их в начало списка «Ожидает».
+  void _onStoreChanged() {
+    if (!mounted) return;
+    if (CreatedOrdersStore.revision.value == _lastStoreRevision) return;
+    _lastStoreRevision = CreatedOrdersStore.revision.value;
+    final Set<String> existing =
+        _newOrders.map((OrderMock o) => o.id).toSet();
+    final List<OrderMock> fresh = CreatedOrdersStore.items
+        .where((OrderMock o) => !existing.contains(o.id))
+        .toList();
+    if (fresh.isEmpty) return;
+    setState(() => _newOrders.insertAll(0, fresh));
   }
 
   void _onBlockChanged() {
@@ -189,16 +214,16 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
   /// с публикации». Уже архивные заказы остаются на месте.
   void _archiveActiveOrdersOnBlock() {
     setState(() {
-      final List<_OrderMock> removed = <_OrderMock>[];
-      for (final _OrderMock o in _newOrders) {
+      final List<OrderMock> removed = <OrderMock>[];
+      for (final OrderMock o in _newOrders) {
         removed.add(o.copyWith(status: MyOrderStatus.rejectedRemoved));
       }
-      for (final _OrderMock o in _accepted) {
+      for (final OrderMock o in _accepted) {
         if (o.status == MyOrderStatus.completed) continue;
         removed.add(o.copyWith(status: MyOrderStatus.rejectedRemoved));
       }
       _newOrders.clear();
-      _accepted.removeWhere((_OrderMock o) => o.status != MyOrderStatus.completed);
+      _accepted.removeWhere((OrderMock o) => o.status != MyOrderStatus.completed);
       _rejected.insertAll(0, removed);
     });
   }
@@ -224,6 +249,16 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
             height: 1.2,
           ),
         ),
+        actions: <Widget>[
+          IconButton(
+            onPressed: _blocked
+                ? null
+                : () => DailyOrderLimit.openCreateOrAlert(context),
+            icon: Icon(Icons.add, size: 32.r, color: Colors.white),
+            tooltip: 'Создать заказ',
+          ),
+          SizedBox(width: 8.w),
+        ],
       ),
       body: _isEmpty
           ? _EmptyOrders(
@@ -262,7 +297,7 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
     );
   }
 
-  Widget _buildList(List<_OrderMock> items) {
+  Widget _buildList(List<OrderMock> items) {
     if (items.isEmpty) {
       return _EmptyOrders(
         onGoToCatalog: _blocked ? null : widget.onGoToCatalog,
@@ -276,7 +311,7 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
         padding: EdgeInsets.zero,
         itemCount: items.length,
         itemBuilder: (BuildContext context, int i) {
-          final _OrderMock o = items[i];
+          final OrderMock o = items[i];
           return Column(
             children: <Widget>[
               MyOrderCard(
@@ -288,27 +323,8 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
                 publishedAgo: o.publishedAgo,
                 customerName: o.customerName,
                 customerPhone: o.customerPhone,
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (_) => MyOrderDetailScreen(
-                      title: o.title,
-                      equipment: o.equipment,
-                      rentDate: o.rentDate,
-                      address: o.address,
-                      publishedAgo: o.publishedAgo,
-                      customerName: o.customerName ?? 'Александр Иванов',
-                      customerPhone: o.customerPhone ?? '+7 999 123-45-67',
-                      state: _detailStateForCard(o.status),
-                      rejectedStatus: o.status,
-                      onDecline: () =>
-                          _moveToRejected(o, MyOrderStatus.rejectedDeclined),
-                      onRefuse: () =>
-                          _moveToRejected(o, MyOrderStatus.rejectedDeclined),
-                      onConfirm: () => _moveToAccepted(o),
-                      isBlocked: widget.isBlocked,
-                    ),
-                  ),
-                ),
+                price: o.price ?? '80 000 – 100 000 ₽',
+                onTap: () => _openOrderDetail(context, o),
                 onContact: () =>
                     ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
@@ -329,9 +345,97 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
     );
   }
 
+  /// Открывает подробности заказа. Для заказов, созданных заказчиком
+  /// из формы, показывается превью в стиле опубликованной карточки
+  /// со статусной пилюлей и действиями, подходящими текущему статусу.
+  /// Для моковых заказов сохраняется старый экран с логикой
+  /// подтверждения/отказа.
+  void _openOrderDetail(BuildContext context, OrderMock o) {
+    final bool isUserCreated = o.number != null;
+    if (isUserCreated) {
+      final OrderDraft draft = OrderDraft(
+        number: o.number!,
+        title: o.title,
+        description: o.description,
+        budget: o.price ?? '',
+        rentDate: o.rentDate,
+        address: o.address,
+        machinery: o.equipment,
+        categories: o.categories,
+        works: o.works,
+        photos: o.photos,
+      );
+      Navigator.of(context).push<void>(
+        MaterialPageRoute<void>(
+          builder: (BuildContext ctx) => CreateOrderPreviewScreen(
+            draft: draft,
+            status: o.status,
+            onPickAnother: () {
+              ScaffoldMessenger.of(ctx).showSnackBar(
+                const SnackBar(
+                  content: Text('Выбор другого исполнителя — скоро'),
+                  duration: Duration(seconds: 2),
+                ),
+              );
+            },
+            onMoveToArchive: () {
+              _moveToRejected(o, MyOrderStatus.rejectedRemoved);
+              Navigator.of(ctx).maybePop();
+            },
+            onLeaveReview: () => Navigator.of(ctx).push<void>(
+              MaterialPageRoute<void>(
+                builder: (_) => const ReviewScreen(),
+              ),
+            ),
+            onRepublish: () {
+              setState(() {
+                _rejected.remove(o);
+                _newOrders.insert(
+                  0,
+                  o.copyWith(status: MyOrderStatus.waiting),
+                );
+              });
+              Navigator.of(ctx).maybePop();
+            },
+            onEditRemoved: () {
+              ScaffoldMessenger.of(ctx).showSnackBar(
+                const SnackBar(
+                  content: Text('Редактирование заказа — скоро'),
+                  duration: Duration(seconds: 2),
+                ),
+              );
+            },
+          ),
+        ),
+      );
+      return;
+    }
+    Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => MyOrderDetailScreen(
+          title: o.title,
+          equipment: o.equipment,
+          rentDate: o.rentDate,
+          address: o.address,
+          publishedAgo: o.publishedAgo,
+          customerName: o.customerName ?? 'Александр Иванов',
+          customerPhone: o.customerPhone ?? '+7 999 123-45-67',
+          state: _detailStateForCard(o.status),
+          rejectedStatus: o.status,
+          waitingStatus: o.status,
+          onDecline: () =>
+              _moveToRejected(o, MyOrderStatus.rejectedDeclined),
+          onRefuse: () => _moveToRejected(o, MyOrderStatus.rejectedDeclined),
+          onConfirm: () => _moveToAccepted(o),
+          isBlocked: widget.isBlocked,
+        ),
+      ),
+    );
+  }
+
   /// Перемещает заказ из «Новые/Принятые» в «Не принятые» с заданным
   /// красным статусом. Используется при отклонении и при отказе.
-  void _moveToRejected(_OrderMock o, MyOrderStatus newStatus) {
+  void _moveToRejected(OrderMock o, MyOrderStatus newStatus) {
     setState(() {
       _newOrders.remove(o);
       _accepted.remove(o);
@@ -342,7 +446,7 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
   /// Перемещает заказ из «Новые» в «Принятые» со статусом
   /// `accepted` («Свяжитесь с заказчиком»). Используется при
   /// подтверждении заказа исполнителем.
-  void _moveToAccepted(_OrderMock o) {
+  void _moveToAccepted(OrderMock o) {
     setState(() {
       _newOrders.remove(o);
       _accepted.insert(0, o.copyWith(status: MyOrderStatus.accepted));
@@ -364,54 +468,6 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
         return MyOrderDetailState.rejected;
     }
   }
-}
-
-class _OrderMock {
-  const _OrderMock({
-    required this.id,
-    required this.status,
-    required this.title,
-    required this.equipment,
-    required this.rentDate,
-    required this.address,
-    required this.publishedAgo,
-    this.customerName,
-    this.customerPhone,
-  });
-
-  final String id;
-  final MyOrderStatus status;
-  final String title;
-  final List<String> equipment;
-  final String rentDate;
-  final String address;
-  final String publishedAgo;
-  final String? customerName;
-  final String? customerPhone;
-
-  _OrderMock copyWith({MyOrderStatus? status}) {
-    return _OrderMock(
-      id: id,
-      status: status ?? this.status,
-      title: title,
-      equipment: equipment,
-      rentDate: rentDate,
-      address: address,
-      publishedAgo: publishedAgo,
-      customerName: customerName,
-      customerPhone: customerPhone,
-    );
-  }
-
-  // Сравниваем заказы по id — это нужно, чтобы List.remove корректно
-  // находил «тот же» заказ после copyWith (после смены статуса заказ
-  // лежит в списке как новая копия с тем же id).
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) || (other is _OrderMock && other.id == id);
-
-  @override
-  int get hashCode => id.hashCode;
 }
 
 /// Pill-сегмент «Новые / Принятые / Не принятые». Оранжевая обводка,
@@ -538,7 +594,9 @@ class _EmptyOrders extends StatelessWidget {
           PrimaryButton(
             label: 'Создать заказ',
             enabled: !blocked,
-            onPressed: blocked ? null : onGoToCatalog,
+            onPressed: blocked
+                ? null
+                : () => DailyOrderLimit.openCreateOrAlert(context),
           ),
         ],
       ),

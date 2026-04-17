@@ -58,6 +58,17 @@ class _ChatScreenState extends State<ChatScreen> {
             _scrollToBottom();
           });
         });
+      } else if (initial.trim() == 'create_order') {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          setState(() {
+            _messages.add(ChatMessage(
+              id: _nextId(),
+              text: 'Опишите заказ — текстом или голосом, я заполню всё за вас',
+              fromUser: false,
+            ));
+            _scrollToBottom();
+          });
+        });
       } else {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           _handleSend(initial.trim());
