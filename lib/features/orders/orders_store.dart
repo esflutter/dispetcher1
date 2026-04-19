@@ -92,6 +92,7 @@ class OrderMock {
     String? customerName,
     String? customerPhone,
     String? customerEmail,
+    bool clearContacts = false,
   }) {
     return OrderMock(
       id: id,
@@ -103,9 +104,16 @@ class OrderMock {
       publishedAgo: publishedAgo,
       publishedAt: publishedAt,
       price: price,
-      customerName: customerName ?? this.customerName,
-      customerPhone: customerPhone ?? this.customerPhone,
-      customerEmail: customerEmail ?? this.customerEmail,
+      // [clearContacts] принудительно обнуляет контактные поля,
+      // независимо от того, что передали в customerName/phone/email.
+      // Нужен, когда заказ возвращается в «Откликов пока нет» — чтобы
+      // данные ранее предложенного исполнителя не тянулись за заказом.
+      customerName:
+          clearContacts ? null : (customerName ?? this.customerName),
+      customerPhone:
+          clearContacts ? null : (customerPhone ?? this.customerPhone),
+      customerEmail:
+          clearContacts ? null : (customerEmail ?? this.customerEmail),
       number: number,
       description: description,
       categories: categories,
@@ -209,6 +217,10 @@ class MyOrdersStore {
       address: 'Московская область, Москва, Улица1, д 144',
       publishedAgo: '2 часа назад',
       publishedAt: _hoursAgo(2),
+      description:
+          'Нужно проложить траншею под кабель связи на частном участке. '
+          'Глубина примерно 0,8 м, длина около 30 м. Грунт суглинок, '
+          'без корней. Подъезд свободный.',
     ),
     OrderMock(
       id: 'n2',
@@ -220,6 +232,10 @@ class MyOrdersStore {
       publishedAgo: 'Сегодня в 11:30',
       publishedAt: _today(11, 30),
       respondersCount: 3,
+      description:
+          'Требуется разработать площадку под стройку складского ангара. '
+          'Снятие растительного слоя и планировка, нужна помощь автокрана '
+          'для разгрузки ЖБИ-плит.',
     ),
     OrderMock(
       id: 'n3',
@@ -237,6 +253,10 @@ class MyOrdersStore {
       publishedAgo: 'Сегодня в 11:30',
       publishedAt: _today(11, 30),
       respondersCount: 1,
+      description:
+          'Котлован под ленточный фундамент дома 10×12 м, глубина 1,5 м. '
+          'Вывоз грунта на площадку в 5 км. Рядом трасса, подъезд '
+          'технике свободный.',
     ),
     OrderMock(
       id: 'n4',
@@ -248,6 +268,9 @@ class MyOrdersStore {
       publishedAgo: 'Вчера в 09:00',
       publishedAt: _yesterday(9, 0),
       respondersCount: 2,
+      description:
+          'Снос старого кирпичного гаража 6×4 м с последующим вывозом '
+          'строительного мусора. Электричество отключено, газа нет.',
     ),
     OrderMock(
       id: 'n5',
@@ -258,6 +281,10 @@ class MyOrdersStore {
       address: 'Московская область, Химки, ул. Строителей, 5',
       publishedAgo: 'Сегодня в 08:15',
       publishedAt: _today(8, 15),
+      description:
+          'Нужно пробурить 4 скважины диаметром 300 мм под винтовые сваи, '
+          'глубина до 2 м. Грунт — глина с небольшими вкраплениями '
+          'щебня.',
     ),
     OrderMock(
       id: 'n6',
@@ -268,6 +295,9 @@ class MyOrdersStore {
       address: 'Московская область, Балашиха, ул. Заречная, 12',
       publishedAgo: 'Сегодня в 07:40',
       publishedAt: _today(7, 40),
+      description:
+          'Установка бетонного забора по периметру участка — 80 погонных '
+          'метров, 20 секций. Нужна помощь манипулятора для монтажа плит.',
     ),
   ];
 
@@ -285,6 +315,9 @@ class MyOrdersStore {
       customerName: 'Иванов Александр',
       customerPhone: '+7 999 123-45-67',
       customerEmail: 'ivanov.a@example.ru',
+      description:
+          'Копка траншеи под водопровод длиной 25 м, глубина 1,2 м. '
+          'Грунт — суглинок, без камней. Въезд техники со стороны улицы.',
     ),
     OrderMock(
       id: 'a2',
@@ -304,6 +337,9 @@ class MyOrdersStore {
       customerName: 'Петров Сергей',
       customerPhone: '+7 999 765-43-21',
       customerEmail: 'petrov.s@example.ru',
+      description:
+          'Подготовка котлована 8×10 м под ленточный фундамент. Дополнительно '
+          'нужен автокран на 1–2 часа для разгрузки арматурных каркасов.',
     ),
     OrderMock(
       id: 'a3',
@@ -316,6 +352,9 @@ class MyOrdersStore {
       publishedAt: _yesterday(14, 30),
       customerName: 'Иванов Александр',
       customerPhone: '+7 999 123-45-67',
+      description:
+          'Траншея под дренаж вдоль забора, длина 18 м, глубина 0,7 м. '
+          'Отвал грунта рядом с траншеей — вывоз не требуется.',
     ),
   ];
 
@@ -330,6 +369,9 @@ class MyOrdersStore {
       address: 'Московская область, Москва, Улица1, д 144',
       publishedAgo: '2 часа назад',
       publishedAt: _hoursAgo(2),
+      description:
+          'Подготовка площадки под склад: снятие плодородного слоя, '
+          'планировка, монтаж водоотвода. Автокран для разгрузки труб.',
     ),
     OrderMock(
       id: 'r2',
@@ -346,6 +388,9 @@ class MyOrdersStore {
       address: 'Московская область, Москва, Улица1, д 144',
       publishedAgo: 'Вчера в 14:30',
       publishedAt: _yesterday(14, 30),
+      description:
+          'Котлован 12×15 м под фундамент двухэтажного коттеджа. '
+          'Глубина 2,0 м. Вывоз грунта — 30 м³ на полигон в 10 км.',
     ),
     OrderMock(
       id: 'r3',
@@ -362,6 +407,9 @@ class MyOrdersStore {
       address: 'Московская область, Москва, Улица1, д 144',
       publishedAgo: '3 дня назад',
       publishedAt: _daysAgo(3),
+      description:
+          'Разработка котлована под пристройку к жилому дому, '
+          'размеры 6×8 м, глубина 1,4 м. Доступ ограничен — узкие ворота.',
     ),
   ];
 
@@ -441,7 +489,13 @@ class MyOrdersStore {
         : MyOrderStatus.waiting;
     final int idx = newOrders.indexWhere((OrderMock x) => x.id == o.id);
     if (idx < 0) return newStatus;
-    newOrders[idx] = newOrders[idx].copyWith(status: newStatus);
+    // Сбрасываем контакты ранее предложенного исполнителя — он больше
+    // не ассоциирован с заказом. Иначе его имя и телефон тихо
+    // переехали бы в следующий матч.
+    newOrders[idx] = newOrders[idx].copyWith(
+      status: newStatus,
+      clearContacts: true,
+    );
     _bump();
     return newStatus;
   }

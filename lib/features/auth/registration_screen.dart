@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -6,6 +8,7 @@ import 'package:go_router/go_router.dart';
 
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
+import 'package:dispatcher_1/core/utils/photo_source.dart';
 import 'package:dispatcher_1/core/widgets/primary_button.dart';
 import 'package:dispatcher_1/features/auth/photo_crop_screen.dart';
 
@@ -38,9 +41,12 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   bool get _isValid => _firstNameController.text.trim().isNotEmpty && _agreed;
 
   Future<void> _openPhotoSheet() async {
-    // Переходим на экран кропа и получаем геометрию вырезанного круга
+    final String? imagePath = await pickImageFromGallery();
+    if (imagePath == null || !mounted) return;
     final result = await Navigator.of(context).push<CropResult>(
-      MaterialPageRoute(builder: (_) => const PhotoCropScreen()),
+      MaterialPageRoute(
+        builder: (_) => PhotoCropScreen(imagePath: imagePath),
+      ),
     );
     if (result != null && mounted) {
       setState(() {
@@ -126,6 +132,15 @@ class _AvatarSlot extends StatelessWidget {
   final VoidCallback onTap;
   final CropResult? cropResult;
 
+  Widget _sourceImage(String? path) {
+    if (path == null) {
+      return Image.asset('assets/icons/ui/avatar.webp', fit: BoxFit.cover);
+    }
+    return isAssetPath(path)
+        ? Image.asset(path, fit: BoxFit.cover)
+        : Image.file(File(path), fit: BoxFit.cover);
+  }
+
   @override
   Widget build(BuildContext context) {
     final bool hasPhoto = cropResult != null;
@@ -160,10 +175,7 @@ class _AvatarSlot extends StatelessWidget {
                           child: SizedBox(
                             width: cropResult!.screenSize.width,
                             height: cropResult!.screenSize.height,
-                            child: Image.asset(
-                              'assets/images/user1.png', 
-                              fit: BoxFit.cover,
-                            ),
+                            child: _sourceImage(cropResult!.imagePath),
                           ),
                         ),
                       ),

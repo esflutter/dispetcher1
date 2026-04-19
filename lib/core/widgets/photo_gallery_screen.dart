@@ -1,5 +1,9 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+
+import 'package:dispatcher_1/core/utils/photo_source.dart';
 
 /// Полноэкранный просмотр набора фотографий со свайпами между ними
 /// и pinch-zoom на каждом фото. Открывается из миниатюр.
@@ -69,10 +73,9 @@ class _PhotoGalleryScreenState extends State<PhotoGalleryScreen> {
           child: InteractiveViewer(
             minScale: 1,
             maxScale: 4,
-            child: Image.asset(
-              widget.photos[i],
-              fit: BoxFit.contain,
-            ),
+            child: isAssetPath(widget.photos[i])
+                ? Image.asset(widget.photos[i], fit: BoxFit.contain)
+                : Image.file(File(widget.photos[i]), fit: BoxFit.contain),
           ),
         ),
       ),

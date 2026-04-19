@@ -5,9 +5,9 @@ import 'package:go_router/go_router.dart';
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_spacing.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
-import 'package:dispatcher_1/core/widgets/cropped_avatar.dart';
 import 'package:dispatcher_1/core/widgets/primary_button.dart';
 import 'package:dispatcher_1/features/catalog/catalog_service_detail_screen.dart';
+import 'package:dispatcher_1/features/catalog/order_feed_screen.dart';
 import 'package:dispatcher_1/features/catalog/select_order_for_executor_screen.dart';
 import 'package:dispatcher_1/features/catalog/widgets/catalog_search_bar.dart';
 import 'package:dispatcher_1/features/orders/create_order_screen.dart';
@@ -24,11 +24,18 @@ class OrderDetailScreen extends StatefulWidget {
     this.price = '80 000 – 100 000 ₽',
     this.selectMode = false,
     this.onSelectExecutor,
+    this.executor,
   });
 
   final String orderId;
   final bool multipleEquipment;
   final String price;
+
+  /// Явно переданные данные исполнителя. Используется из экрана «Выбор
+  /// исполнителя», где id ответчиков не совпадают с id в каталоге, но
+  /// все поля карточки известны. Если null — данные ищутся в
+  /// [ExecutorMock.byId] по [orderId] с fallback на плейсхолдер.
+  final ExecutorMock? executor;
 
   /// Режим «выбор исполнителя из откликнувшихся». При `true` нижняя
   /// кнопка меняет смысл: вместо «Предложить заказ» — «Выбрать
@@ -131,7 +138,16 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final List<String> equipment = _orderEquipment;
+    final ExecutorMock? exec =
+        widget.executor ?? ExecutorMock.byId(widget.orderId);
+    final List<String> equipment = exec?.equipment ?? _orderEquipment;
+    final List<String> categories = exec?.categories ??
+        const <String>['Земляные работы', 'Погрузочно-разгрузочные работы'];
+    final String executorName = exec?.name ?? 'Александр Иванов';
+    final double executorRating = exec?.rating ?? 4.5;
+    final String executorExperience = exec?.experience ?? '';
+    final String executorLegalStatus = exec?.legalStatus ?? '';
+    final String executorAbout = exec?.about ?? '';
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -196,37 +212,45 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
-                      const _CustomerHeader(),
+                      _CustomerHeader(
+                        name: executorName,
+                        rating: executorRating,
+                      ),
                       SizedBox(height: 20.h),
                       _SectionTitle('Местоположение'),
                       SizedBox(height: 4.h),
                       Text('Московская область, Москва',
                           style: AppTextStyles.body),
-                      SizedBox(height: 16.h),
-                      _SectionTitle('Спецтехника'),
-                      SizedBox(height: 8.h),
-                      _FilledChipWrap(items: equipment),
-                      SizedBox(height: 16.h),
-                      _SectionTitle('Категории услуг'),
-                      SizedBox(height: 8.h),
-                      const _FilledChipWrap(items: <String>[
-                        'Земляные работы',
-                        'Погрузочно-разгрузочные работы',
-                      ]),
-                      SizedBox(height: 16.h),
-                      _SectionTitle('Опыт работы'),
-                      SizedBox(height: 4.h),
-                      Text('5 лет', style: AppTextStyles.body),
-                      SizedBox(height: 16.h),
-                      _SectionTitle('Статус'),
-                      SizedBox(height: 4.h),
-                      Text('Физ. лицо', style: AppTextStyles.body),
-                      SizedBox(height: 16.h),
-                      _SectionTitle('О себе'),
-                      SizedBox(height: 4.h),
-                      Text(
-                          'Опыт работы более 5 лет. Своя техника в хорошем состоянии, работаю без простоев. Готов выезжать в ближайшие районы.',
-                          style: AppTextStyles.body),
+                      if (equipment.isNotEmpty) ...<Widget>[
+                        SizedBox(height: 16.h),
+                        _SectionTitle('Спецтехника'),
+                        SizedBox(height: 8.h),
+                        _FilledChipWrap(items: equipment),
+                      ],
+                      if (categories.isNotEmpty) ...<Widget>[
+                        SizedBox(height: 16.h),
+                        _SectionTitle('Категории услуг'),
+                        SizedBox(height: 8.h),
+                        _FilledChipWrap(items: categories),
+                      ],
+                      if (executorExperience.trim().isNotEmpty) ...<Widget>[
+                        SizedBox(height: 16.h),
+                        _SectionTitle('Опыт работы'),
+                        SizedBox(height: 4.h),
+                        Text(executorExperience, style: AppTextStyles.body),
+                      ],
+                      if (executorLegalStatus.trim().isNotEmpty) ...<Widget>[
+                        SizedBox(height: 16.h),
+                        _SectionTitle('Статус'),
+                        SizedBox(height: 4.h),
+                        Text(executorLegalStatus, style: AppTextStyles.body),
+                      ],
+                      if (executorAbout.trim().isNotEmpty) ...<Widget>[
+                        SizedBox(height: 16.h),
+                        _SectionTitle('О себе'),
+                        SizedBox(height: 4.h),
+                        Text(executorAbout, style: AppTextStyles.body),
+                      ],
                       SizedBox(height: 16.h),
                       const _AvailabilitySection(),
                       SizedBox(height: 16.h),
@@ -340,27 +364,38 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
 }
 
 class _CustomerHeader extends StatelessWidget {
-  const _CustomerHeader();
+  const _CustomerHeader({required this.name, required this.rating});
+
+  final String name;
+  final double rating;
 
   @override
   Widget build(BuildContext context) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: <Widget>[
-          CroppedAvatar(size: 72.r),
+          ClipOval(
+            child: Image.asset(
+              'assets/images/catalog/avatar_placeholder.webp',
+              width: 72.r,
+              height: 72.r,
+              fit: BoxFit.cover,
+            ),
+          ),
           SizedBox(width: 12.w),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                Text('Александр Иванов', style: AppTextStyles.titleS),
+                Text(name, style: AppTextStyles.titleS),
                 SizedBox(height: 4.h),
                 Row(
                   children: <Widget>[
                     Image.asset('assets/images/catalog/star.webp',
                         width: 20.r, height: 20.r),
                     SizedBox(width: 4.w),
-                    Text('4,5', style: AppTextStyles.body),
+                    Text(rating.toString().replaceAll('.', ','),
+                        style: AppTextStyles.body),
                     SizedBox(width: 16.w),
                     Text('15 отзывов',
                         style: AppTextStyles.body.copyWith(
@@ -449,6 +484,11 @@ class _AvailabilitySectionState extends State<_AvailabilitySection> {
   // (Профиль → Мой график).
   late DateTime _selected;
 
+  // PageController для свайпа по неделям — как в расписании исполнителя.
+  late PageController _pageCtrl;
+  late DateTime _originWeek;
+  static const int _initialPage = 5000;
+
   // Моковый график: на этих датах у исполнителя заданы параметры.
   // Остальные дни — «свободен для заказов» без конкретики.
   // Нерабочие дни — в [_dayOffs].
@@ -460,6 +500,8 @@ class _AvailabilitySectionState extends State<_AvailabilitySection> {
     super.initState();
     final DateTime now = DateTime.now();
     _selected = DateTime(now.year, now.month, now.day);
+    _originWeek = _mondayOf(_selected);
+    _pageCtrl = PageController(initialPage: _initialPage);
 
     DateTime off(int days) => _selected.add(Duration(days: days));
 
@@ -527,17 +569,36 @@ class _AvailabilitySectionState extends State<_AvailabilitySection> {
 
   static const List<String> _weekLetters = <String>['п', 'в', 'с', 'ч', 'п', 'с', 'в'];
 
-  // Понедельник недели, содержащей [_selected].
-  DateTime get _weekStart {
-    final int weekday = _selected.weekday; // 1..7 (пн..вс)
-    return DateTime(_selected.year, _selected.month, _selected.day)
-        .subtract(Duration(days: weekday - 1));
+  // Понедельник произвольной даты.
+  DateTime _mondayOf(DateTime d) =>
+      DateTime(d.year, d.month, d.day).subtract(Duration(days: d.weekday - 1));
+
+  DateTime _weekFromPage(int page) =>
+      _originWeek.add(Duration(days: (page - _initialPage) * 7));
+
+  List<DateTime> _weekDaysFor(DateTime monday) =>
+      List<DateTime>.generate(7, (int i) => monday.add(Duration(days: i)));
+
+  void _onPageChanged(int page) {
+    setState(() => _selected = _weekFromPage(page));
   }
 
   void _shiftWeek(int delta) {
-    setState(() {
-      _selected = _selected.add(Duration(days: 7 * delta));
-    });
+    if (delta < 0) {
+      _pageCtrl.previousPage(
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOut);
+    } else {
+      _pageCtrl.nextPage(
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOut);
+    }
+  }
+
+  @override
+  void dispose() {
+    _pageCtrl.dispose();
+    super.dispose();
   }
 
   bool _sameDay(DateTime a, DateTime b) =>
@@ -553,7 +614,6 @@ class _AvailabilitySectionState extends State<_AvailabilitySection> {
 
   @override
   Widget build(BuildContext context) {
-    final DateTime start = _weekStart;
     final _AvailabilityDay? info = _dayInfo(_selected);
     final bool selectedDayOff = _isDayOff(_selected);
     return Column(
@@ -614,20 +674,30 @@ class _AvailabilitySectionState extends State<_AvailabilitySection> {
           ],
         ),
         SizedBox(height: 6.h),
-        // Числа недели: выбранный — оранжевый, выходной — F2F2F2, иначе обычный.
+        // Числа недели: свайпаемые (как в приложении исполнителя — Мой график).
+        // Выбранный — оранжевый, выходной — F2F2F2, иначе обычный.
         SizedBox(
           height: 44.h,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: <Widget>[
-              for (int i = 0; i < 7; i++)
-                _DayCell(
-                  date: start.add(Duration(days: i)),
-                  selected: _sameDay(start.add(Duration(days: i)), _selected),
-                  dayOff: _isDayOff(start.add(Duration(days: i))),
-                  onTap: (DateTime d) => setState(() => _selected = d),
-                ),
-            ],
+          child: PageView.builder(
+            controller: _pageCtrl,
+            onPageChanged: _onPageChanged,
+            itemBuilder: (BuildContext _, int page) {
+              final DateTime monday = _weekFromPage(page);
+              final List<DateTime> days = _weekDaysFor(monday);
+              return Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: <Widget>[
+                  for (final DateTime d in days)
+                    _DayCell(
+                      date: d,
+                      selected: _sameDay(d, _selected),
+                      dayOff: _isDayOff(d),
+                      onTap: (DateTime tapped) =>
+                          setState(() => _selected = tapped),
+                    ),
+                ],
+              );
+            },
           ),
         ),
         SizedBox(height: 12.h),

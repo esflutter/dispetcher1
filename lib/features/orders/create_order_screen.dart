@@ -1,9 +1,12 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
+import 'package:dispatcher_1/core/utils/photo_source.dart';
 import 'package:dispatcher_1/core/utils/thousand_separator_formatter.dart';
 import 'package:dispatcher_1/core/widgets/primary_button.dart';
 import 'package:dispatcher_1/features/catalog/catalog_filter_screen.dart';
@@ -193,15 +196,6 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
   static const List<String> _workUnits = <String>['м', 'м²', 'м³'];
   static const int _maxWorks = 20;
 
-  static const List<String> _demoPhotos = <String>[
-    'assets/images/profile/photo_1.webp',
-    'assets/images/profile/photo_2.webp',
-    'assets/images/profile/photo_3.webp',
-    'assets/images/profile/photo_4.webp',
-    'assets/images/profile/photo_5.webp',
-    'assets/images/profile/photo_6.webp',
-  ];
-
   static const List<String> _categories = <String>[
     'Земляные работы',
     'Погрузочно-разгрузочные работы',
@@ -287,16 +281,50 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
 
   void _onFieldChanged() => setState(() {});
 
-  void _addPhoto() {
-    if (_photos.length >= 8) return;
-    setState(() {
-      final String next = _demoPhotos[_photos.length % _demoPhotos.length];
-      _photos.add(next);
+  Future<void> _addPhoto() async {
+    final int remaining = 8 - _photos.length;
+    if (remaining <= 0) return;
+    final List<String> picked =
+        await pickMultipleImagesFromGallery(limit: remaining);
+    if (picked.isEmpty || !mounted) return;
+    final List<String> kept =
+        picked.length > remaining ? picked.sublist(0, remaining) : picked;
+    setState(() => _photos.addAll(kept));
+    if (picked.length > remaining) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Можно добавить не более 8 фото. Добавлены первые ${kept.length}.',
+          ),
+        ),
+      );
+    }
+  }
+
+  /// Якоря на раскрываемые пикеры даты и времени — нужны для того,
+  /// чтобы после открытия скроллить форму так, что бы пикер встал в
+  /// центр вьюпорта. На маленьких экранах он иначе выпадает ниже и
+  /// его не видно без ручного доскролла.
+  final GlobalKey _datePickerAnchorKey = GlobalKey();
+  final GlobalKey _timePickerAnchorKey = GlobalKey();
+
+  void _scrollPickerIntoView(GlobalKey key) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final BuildContext? ctx = key.currentContext;
+      if (ctx == null) return;
+      Scrollable.ensureVisible(
+        ctx,
+        alignment: 0.5,
+        duration: const Duration(milliseconds: 280),
+        curve: Curves.easeOut,
+      );
     });
   }
 
   void _toggleDatePicker(String key) {
-    setState(() => _openDatePicker = _openDatePicker == key ? null : key);
+    final bool willOpen = _openDatePicker != key;
+    setState(() => _openDatePicker = willOpen ? key : null);
+    if (willOpen) _scrollPickerIntoView(_datePickerAnchorKey);
   }
 
   String _fmtDate(DateTime? d) {
@@ -308,7 +336,9 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
       '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
 
   void _toggleTimePicker(String key) {
-    setState(() => _openTimePicker = _openTimePicker == key ? null : key);
+    final bool willOpen = _openTimePicker != key;
+    setState(() => _openTimePicker = willOpen ? key : null);
+    if (willOpen) _scrollPickerIntoView(_timePickerAnchorKey);
   }
 
   Future<void> _openAddressSheet() async {
@@ -551,6 +581,7 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
                       _openDatePicker == 'dateTo') ...<Widget>[
                     SizedBox(height: 8.h),
                     InlineCalendar(
+                      key: _datePickerAnchorKey,
                       selected: _openDatePicker == 'dateFrom'
                           ? _dateFrom
                           : (_dateTo ?? _dateFrom),
@@ -625,6 +656,7 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
                       _openTimePicker == 'timeTo') ...<Widget>[
                     SizedBox(height: 8.h),
                     InlineTimePicker(
+                      key: _timePickerAnchorKey,
                       selected: _openTimePicker == 'timeFrom'
                           ? _timeFrom
                           : _timeTo,
@@ -1103,12 +1135,19 @@ class _PhotosGrid extends StatelessWidget {
             children: <Widget>[
               ClipRRect(
                 borderRadius: BorderRadius.circular(10.r),
-                child: Image.asset(
-                  photos[i],
-                  width: 72.r,
-                  height: 72.r,
-                  fit: BoxFit.cover,
-                ),
+                child: isAssetPath(photos[i])
+                    ? Image.asset(
+                        photos[i],
+                        width: 72.r,
+                        height: 72.r,
+                        fit: BoxFit.cover,
+                      )
+                    : Image.file(
+                        File(photos[i]),
+                        width: 72.r,
+                        height: 72.r,
+                        fit: BoxFit.cover,
+                      ),
               ),
               Positioned(
                 top: 4.w,

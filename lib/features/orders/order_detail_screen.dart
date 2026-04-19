@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
@@ -5,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
+import 'package:dispatcher_1/core/utils/photo_source.dart';
 import 'package:dispatcher_1/core/widgets/primary_button.dart';
 import 'package:dispatcher_1/features/auth/photo_crop_screen.dart';
 import 'package:dispatcher_1/features/catalog/order_detail_screen.dart'
@@ -60,6 +63,8 @@ class MyOrderDetailScreen extends StatefulWidget {
       'Разработка грунта — 40 м³',
       'Планировка участка — 2 × 12 × 15 м',
     ],
+    this.description = '',
+    this.photos = const <String>[],
     this.rejectedStatus = MyOrderStatus.rejectedOther,
     this.waitingStatus = MyOrderStatus.waiting,
     this.onDecline,
@@ -70,6 +75,7 @@ class MyOrderDetailScreen extends StatefulWidget {
     this.reviewLeft = false,
     this.onReviewLeft,
     this.onPickAnother,
+    this.onOpenCatalog,
   });
 
   final MyOrderDetailState state;
@@ -84,6 +90,14 @@ class MyOrderDetailScreen extends StatefulWidget {
   final String publishedAgo;
   final String orderNumber;
   final List<String> workDescription;
+
+  /// Общее описание заказа — текстовый блок, который заказчик ввёл
+  /// при создании. Пустая строка → блок не показывается.
+  final String description;
+
+  /// Прикреплённые фото — пути ассетов или файлов на устройстве.
+  /// Если список пуст, блок «Фото» целиком скрыт (даже заголовок).
+  final List<String> photos;
 
   /// Какой именно красный статус показывать в state == rejected.
   final MyOrderStatus rejectedStatus;
@@ -127,6 +141,11 @@ class MyOrderDetailScreen extends StatefulWidget {
   /// и при отсутствии других откликов — переключиться на вкладку
   /// «Каталог», а при наличии — открыть список откликнувшихся.
   final VoidCallback? onPickAnother;
+
+  /// «Перейти в каталог» для статусов `waiting` и
+  /// `executorDeclinedWaiting` — когда откликов нет и выбирать некого.
+  /// Родитель закрывает экран и переключает bottom-nav на «Каталог».
+  final VoidCallback? onOpenCatalog;
 
   @override
   State<MyOrderDetailScreen> createState() => _MyOrderDetailScreenState();
@@ -249,14 +268,14 @@ class _MyOrderDetailScreenState extends State<MyOrderDetailScreen> {
       ),
       floatingActionButton: Padding(
         padding: EdgeInsets.only(
-          // 148h — две кнопки в waitingChoose; 88h — одна кнопка (в т.ч.
-          // в `waiting`, где «выбирать» некого); 24h — когда нижней
-          // панели вовсе нет.
-          bottom: _state == MyOrderDetailState.waitingConfirm &&
-                  widget.waitingStatus != MyOrderStatus.waiting &&
-                  widget.waitingStatus != MyOrderStatus.awaitingExecutor &&
-                  widget.waitingStatus !=
-                      MyOrderStatus.executorDeclinedWaiting
+          // 148h — когда снизу две кнопки (все варианты waitingConfirm:
+          // waiting/executorDeclinedWaiting → «Перейти в каталог» +
+          // «Переместить в архив»; waitingChoose/executorDeclined/
+          // awaitingExecutor → «Выбрать [другого] исполнителя» +
+          // «Переместить в архив»); 88h — когда одна кнопка (confirmed:
+          // только «Переместить в архив», completed: «Оставить отзыв»);
+          // 24h — когда нижней панели нет.
+          bottom: _state == MyOrderDetailState.waitingConfirm
               ? 148.h
               : _hasBottomBar
                   ? 88.h
@@ -270,7 +289,7 @@ class _MyOrderDetailScreenState extends State<MyOrderDetailScreen> {
           Expanded(
             child: SingleChildScrollView(
               padding: EdgeInsets.fromLTRB(16.w, 16.h, 16.w,
-                  _hasBottomBar ? 24.h : 24.h + MediaQuery.of(context).padding.bottom),
+                  _hasBottomBar ? 16.h : 16.h + MediaQuery.of(context).padding.bottom),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
@@ -359,6 +378,15 @@ class _MyOrderDetailScreenState extends State<MyOrderDetailScreen> {
                       ),
                     ),
                   ),
+                  if (widget.description.trim().isNotEmpty)
+                    _Section(
+                      title: 'Описание заказа',
+                      child: Text(
+                        widget.description,
+                        style: AppTextStyles.subBody
+                            .copyWith(fontWeight: FontWeight.w400),
+                      ),
+                    ),
                   _Section(
                     title: 'Требуемая спецтехника',
                     child: Wrap(
@@ -403,6 +431,11 @@ class _MyOrderDetailScreenState extends State<MyOrderDetailScreen> {
                           color: AppColors.primary,
                         )),
                   ),
+                  if (widget.photos.isNotEmpty)
+                    _Section(
+                      title: 'Фото',
+                      child: _PhotosGrid(photos: widget.photos),
+                    ),
                 ],
               ),
             ),
@@ -448,20 +481,33 @@ class _MyOrderDetailScreenState extends State<MyOrderDetailScreen> {
             context,
             onDecline: () {
               widget.onDecline?.call();
-              setState(() {
-                _state = MyOrderDetailState.rejected;
-                _rejectedStatus = MyOrderStatus.rejectedDeclined;
-              });
+              if (mounted) Navigator.of(context).maybePop();
             },
           ),
         );
         // Если откликов ещё не было (waiting) или выбранный исполнитель
         // отказался, а других откликов нет (executorDeclinedWaiting) —
-        // выбирать некого, показываем только «Переместить в архив».
+        // выбирать некого прямо из заказа: первый шаг — отправляем в
+        // каталог, чтобы заказчик сам нашёл подрядчика. Набор кнопок
+        // намеренно повторяет превью-экран пользовательских заказов
+        // (`CreateOrderPreviewScreen`), чтобы поведение между моковой и
+        // пользовательской карточкой не расходилось.
         if (widget.waitingStatus == MyOrderStatus.waiting ||
             widget.waitingStatus ==
                 MyOrderStatus.executorDeclinedWaiting) {
-          return archiveButton;
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              PrimaryButton(
+                label: 'Перейти в каталог',
+                enabled: !widget.isBlocked,
+                onPressed: widget.onOpenCatalog ??
+                    () => Navigator.of(context).maybePop(),
+              ),
+              SizedBox(height: 8.h),
+              archiveButton,
+            ],
+          );
         }
         // Заказ предложен конкретному исполнителю — кнопка «Выбрать
         // другого» уводит либо к списку откликнувшихся (если есть
@@ -489,10 +535,7 @@ class _MyOrderDetailScreenState extends State<MyOrderDetailScreen> {
             context,
             onRefuse: () {
               widget.onRefuse?.call();
-              setState(() {
-                _state = MyOrderDetailState.rejected;
-                _rejectedStatus = MyOrderStatus.rejectedDeclined;
-              });
+              if (mounted) Navigator.of(context).maybePop();
             },
           ),
         );
@@ -626,6 +669,37 @@ class _CustomerHeader extends StatelessWidget {
           ],
         ],
       ),
+    );
+  }
+}
+
+class _PhotosGrid extends StatelessWidget {
+  const _PhotosGrid({required this.photos});
+  final List<String> photos;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 8.w,
+      runSpacing: 8.h,
+      children: photos
+          .map((String p) => ClipRRect(
+                borderRadius: BorderRadius.circular(10.r),
+                child: isAssetPath(p)
+                    ? Image.asset(
+                        p,
+                        width: 72.r,
+                        height: 72.r,
+                        fit: BoxFit.cover,
+                      )
+                    : Image.file(
+                        File(p),
+                        width: 72.r,
+                        height: 72.r,
+                        fit: BoxFit.cover,
+                      ),
+              ))
+          .toList(),
     );
   }
 }

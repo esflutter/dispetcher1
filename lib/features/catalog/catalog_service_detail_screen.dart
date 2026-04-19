@@ -36,7 +36,11 @@ class CatalogServiceDetailScreen extends StatefulWidget {
     required this.categories,
     this.selectMode = false,
     this.onSelectExecutor,
-  });
+  }) : assert(
+          !selectMode || onSelectExecutor != null,
+          'selectMode требует non-null onSelectExecutor: иначе кнопка '
+          '«Выбрать исполнителя» будет показываться, но ничего не делать',
+        );
 
   final String executorOrderId;
   final String title;

@@ -53,36 +53,46 @@ class _OrderFeedScreenState extends State<OrderFeedScreen> {
     if (mounted) setState(() {});
   }
 
+  /// True только если реально отрисуется хотя бы один chip. Значения,
+  /// которые не попадают ни в один chip (например, одиночный `timeFrom`
+  /// без `timeTo`, `address` без `radiusKm`, пустая строка цены), не
+  /// делают фильтр «активным» — иначе мы бы рисовали пустой ряд чипов и
+  /// зажигали красную точку над иконкой без видимой причины.
   bool get _hasActiveFilter {
-    return AppliedFilter.categories.isNotEmpty ||
-        AppliedFilter.equipment.isNotEmpty ||
-        AppliedFilter.priceHour != null ||
-        AppliedFilter.priceDay != null ||
-        AppliedFilter.sortByPriceAsc ||
-        AppliedFilter.dateFrom != null ||
-        AppliedFilter.dateTo != null ||
-        AppliedFilter.timeFrom != null ||
-        AppliedFilter.timeTo != null ||
-        AppliedFilter.wholeDay ||
-        AppliedFilter.radiusKm != null ||
-        (AppliedFilter.address != null &&
-            AppliedFilter.address!.isNotEmpty);
+    if (AppliedFilter.categories.isNotEmpty) return true;
+    if (AppliedFilter.equipment.isNotEmpty) return true;
+    if (AppliedFilter.priceHour != null &&
+        AppliedFilter.priceHour!.isNotEmpty) {
+      return true;
+    }
+    if (AppliedFilter.priceDay != null &&
+        AppliedFilter.priceDay!.isNotEmpty) {
+      return true;
+    }
+    if (AppliedFilter.sortByPriceAsc) return true;
+    if (AppliedFilter.dateFrom != null) return true;
+    if (AppliedFilter.wholeDay) return true;
+    if (AppliedFilter.timeFrom != null && AppliedFilter.timeTo != null) {
+      return true;
+    }
+    if (AppliedFilter.radiusKm != null) return true;
+    return false;
   }
 
-  List<_MockOrder> get _visibleOrders {
+  List<ExecutorMock> get _visibleOrders {
     final String q = _query.trim().toLowerCase();
-    Iterable<_MockOrder> res = _orders;
+    Iterable<ExecutorMock> res = ExecutorMock.all;
 
     // Фильтр по категориям — хотя бы одна из выбранных категорий
     // должна присутствовать у исполнителя.
     if (AppliedFilter.categories.isNotEmpty) {
-      res = res.where((_MockOrder o) =>
+      res = res.where((ExecutorMock o) =>
           o.categories.any(AppliedFilter.categories.contains));
     }
 
     // Фильтр по спецтехнике — аналогично.
     if (AppliedFilter.equipment.isNotEmpty) {
-      res = res.where((_MockOrder o) =>
+      res = res.where((ExecutorMock o) =>
           o.equipment.any(AppliedFilter.equipment.contains));
     }
 
@@ -90,15 +100,15 @@ class _OrderFeedScreenState extends State<OrderFeedScreen> {
     // оставляем только тех, у кого цена не превышает указанную.
     final int? maxHour = _parseIntOrNull(AppliedFilter.priceHour);
     if (maxHour != null) {
-      res = res.where((_MockOrder o) => o.pricePerHour <= maxHour);
+      res = res.where((ExecutorMock o) => o.pricePerHour <= maxHour);
     }
     final int? maxDay = _parseIntOrNull(AppliedFilter.priceDay);
     if (maxDay != null) {
-      res = res.where((_MockOrder o) => o.pricePerDay <= maxDay);
+      res = res.where((ExecutorMock o) => o.pricePerDay <= maxDay);
     }
 
     if (q.isNotEmpty) {
-      res = res.where((_MockOrder o) {
+      res = res.where((ExecutorMock o) {
         if (o.name.toLowerCase().contains(q)) return true;
         for (final String e in o.equipment) {
           if (e.toLowerCase().contains(q)) return true;
@@ -110,68 +120,13 @@ class _OrderFeedScreenState extends State<OrderFeedScreen> {
       });
     }
 
-    final List<_MockOrder> out = res.toList();
+    final List<ExecutorMock> out = res.toList();
     if (AppliedFilter.sortByPriceAsc) {
-      out.sort((_MockOrder a, _MockOrder b) =>
+      out.sort((ExecutorMock a, ExecutorMock b) =>
           a.pricePerHour.compareTo(b.pricePerHour));
     }
     return out;
   }
-
-  static const List<_MockOrder> _orders = <_MockOrder>[
-    _MockOrder(
-      id: '1',
-      name: 'Александр Иванов',
-      rating: 4.5,
-      experience: '8 лет',
-      legalStatus: 'Юр. лицо',
-      equipment: <String>['Экскаватор', 'Автокран', 'Эвакуатор', 'Автовышка'],
-      categories: <String>[
-        'Строительные работы',
-        'Дорожные работы',
-        'Буровые работы',
-        'Высотные работы',
-      ],
-      pricePerHour: 3000,
-      pricePerDay: 25000,
-    ),
-    _MockOrder(
-      id: '2',
-      name: 'Сергей Петров',
-      rating: 4.8,
-      experience: '10 лет',
-      legalStatus: 'ИП',
-      equipment: <String>['Автокран', 'Экскаватор'],
-      categories: <String>[
-        'Строительные работы',
-        'Погрузочно-разгрузочные работы',
-      ],
-      pricePerHour: 5000,
-      pricePerDay: 40000,
-    ),
-    _MockOrder(
-      id: '3',
-      name: 'Дмитрий Сидоров',
-      rating: 4.2,
-      experience: '3 года',
-      legalStatus: 'Самозанятый',
-      equipment: <String>['Экскаватор', 'Автокран', 'Манипулятор'],
-      categories: <String>['Земляные работы', 'Строительные работы'],
-      pricePerHour: 2500,
-      pricePerDay: 20000,
-    ),
-    _MockOrder(
-      id: '4',
-      name: 'Андрей Козлов',
-      rating: 4.9,
-      experience: '12 лет',
-      legalStatus: 'Юр. лицо',
-      equipment: <String>['Самосвал', 'Погрузчик'],
-      categories: <String>['Перевозка материалов', 'Земляные работы'],
-      pricePerHour: 4000,
-      pricePerDay: 30000,
-    ),
-  ];
 
   void _openFilter() {
     Navigator.of(context).push(
@@ -259,7 +214,7 @@ class _OrderFeedScreenState extends State<OrderFeedScreen> {
                       itemCount: _visibleOrders.length,
                       separatorBuilder: (_, _) => SizedBox(height: 16.h),
                       itemBuilder: (BuildContext context, int i) {
-                        final _MockOrder o = _visibleOrders[i];
+                        final ExecutorMock o = _visibleOrders[i];
                         return Container(
                           decoration: BoxDecoration(
                             color: AppColors.fieldFill,
@@ -432,14 +387,11 @@ class _AppliedFilterChips extends StatelessWidget {
         _bump();
       }));
     }
+    // Один чип на «адрес + радиус» — это одна логическая настройка.
+    // Показываем радиус, по крестику снимаем оба поля.
     if (AppliedFilter.radiusKm != null) {
       chips.add(_ChipSpec('В радиусе ${AppliedFilter.radiusKm} км', () {
         AppliedFilter.radiusKm = null;
-        _bump();
-      }));
-    }
-    if (AppliedFilter.address != null && AppliedFilter.address!.isNotEmpty) {
-      chips.add(_ChipSpec(AppliedFilter.address!, () {
         AppliedFilter.address = null;
         _bump();
       }));
@@ -514,8 +466,8 @@ class _FilterChip extends StatelessWidget {
   }
 }
 
-class _MockOrder {
-  const _MockOrder({
+class ExecutorMock {
+  const ExecutorMock({
     required this.id,
     required this.name,
     required this.rating,
@@ -525,6 +477,7 @@ class _MockOrder {
     required this.categories,
     required this.pricePerHour,
     required this.pricePerDay,
+    this.about = '',
   });
   final String id;
   final String name;
@@ -535,4 +488,69 @@ class _MockOrder {
   final List<String> categories;
   final int pricePerHour;
   final int pricePerDay;
+  final String about;
+
+  static const List<ExecutorMock> all = <ExecutorMock>[
+    ExecutorMock(
+      id: '1',
+      name: 'Александр Иванов',
+      rating: 4.5,
+      experience: '8 лет',
+      legalStatus: 'Юр. лицо',
+      equipment: <String>['Экскаватор', 'Автокран', 'Эвакуатор', 'Автовышка'],
+      categories: <String>[
+        'Строительные работы',
+        'Дорожные работы',
+        'Буровые работы',
+        'Высотные работы',
+      ],
+      pricePerHour: 3000,
+      pricePerDay: 25000,
+      about:
+          'Опыт работы более 5 лет. Своя техника в хорошем состоянии, работаю без простоев. Готов выезжать в ближайшие районы.',
+    ),
+    ExecutorMock(
+      id: '2',
+      name: 'Сергей Петров',
+      rating: 4.8,
+      experience: '10 лет',
+      legalStatus: 'ИП',
+      equipment: <String>['Автокран', 'Экскаватор'],
+      categories: <String>[
+        'Строительные работы',
+        'Погрузочно-разгрузочные работы',
+      ],
+      pricePerHour: 5000,
+      pricePerDay: 40000,
+    ),
+    ExecutorMock(
+      id: '3',
+      name: 'Дмитрий Сидоров',
+      rating: 4.2,
+      experience: '3 года',
+      legalStatus: 'Самозанятый',
+      equipment: <String>['Экскаватор', 'Автокран', 'Манипулятор'],
+      categories: <String>['Земляные работы', 'Строительные работы'],
+      pricePerHour: 2500,
+      pricePerDay: 20000,
+    ),
+    ExecutorMock(
+      id: '4',
+      name: 'Андрей Козлов',
+      rating: 4.9,
+      experience: '12 лет',
+      legalStatus: 'Юр. лицо',
+      equipment: <String>['Самосвал', 'Погрузчик'],
+      categories: <String>['Перевозка материалов', 'Земляные работы'],
+      pricePerHour: 4000,
+      pricePerDay: 30000,
+    ),
+  ];
+
+  static ExecutorMock? byId(String id) {
+    for (final ExecutorMock e in all) {
+      if (e.id == id) return e;
+    }
+    return null;
+  }
 }

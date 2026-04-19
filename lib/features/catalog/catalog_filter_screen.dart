@@ -68,6 +68,12 @@ class _CatalogFilterScreenState extends State<CatalogFilterScreen> {
   int? _radiusKm; // 10/20/50
   String? _address;
 
+  /// Якорь на раскрываемый пикер даты/времени. После открытия скроллим
+  /// SingleChildScrollView так, чтобы этот блок оказался примерно в
+  /// центре вьюпорта — иначе на маленьких экранах он выпадает ниже
+  /// видимой области и приходится руками скроллить вниз.
+  final GlobalKey _pickerAnchorKey = GlobalKey();
+
   @override
   void initState() {
     super.initState();
@@ -135,7 +141,23 @@ class _CatalogFilterScreenState extends State<CatalogFilterScreen> {
       '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
 
   void _togglePicker(String key) {
-    setState(() => _openPicker = _openPicker == key ? null : key);
+    final bool willOpen = _openPicker != key;
+    setState(() => _openPicker = willOpen ? key : null);
+    if (!willOpen) return;
+    // Ждём кадр — к этому моменту пикер уже встроен в дерево и имеет
+    // свой BuildContext с RenderBox, так что Scrollable.ensureVisible
+    // может корректно вычислить смещение. alignment: 0.5 — блок в
+    // центре вьюпорта.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final BuildContext? ctx = _pickerAnchorKey.currentContext;
+      if (ctx == null) return;
+      Scrollable.ensureVisible(
+        ctx,
+        alignment: 0.5,
+        duration: const Duration(milliseconds: 280),
+        curve: Curves.easeOut,
+      );
+    });
   }
 
   @override
@@ -250,6 +272,7 @@ class _CatalogFilterScreenState extends State<CatalogFilterScreen> {
                           _openPicker == 'dateTo') ...<Widget>[
                         SizedBox(height: 8.h),
                         InlineCalendar(
+                          key: _pickerAnchorKey,
                           selected: _openPicker == 'dateFrom'
                               ? _dateFrom
                               : (_dateTo ?? _dateFrom),
@@ -328,6 +351,7 @@ class _CatalogFilterScreenState extends State<CatalogFilterScreen> {
                           _openPicker == 'timeTo') ...<Widget>[
                         SizedBox(height: 8.h),
                         InlineTimePicker(
+                          key: _pickerAnchorKey,
                           selected: _openPicker == 'timeFrom'
                               ? _timeFrom
                               : _timeTo,
@@ -369,7 +393,14 @@ class _CatalogFilterScreenState extends State<CatalogFilterScreen> {
                             builder: (_) => const AddressBottomSheet(),
                           );
                           if (result != null) {
-                            setState(() => _address = result);
+                            setState(() {
+                              _address = result;
+                              // Радиус поиска по умолчанию — 10 км.
+                              // Искать строго в точке адреса почти
+                              // бессмысленно (мало совпадений), но ручной
+                              // выбор другого радиуса не перезаписываем.
+                              _radiusKm ??= 10;
+                            });
                           }
                         },
                         child: Container(
@@ -1050,7 +1081,7 @@ class InlineTimePickerState extends State<InlineTimePicker> {
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
           SizedBox(
-            height: 180.h,
+            height: 229,
             child: Row(
               children: <Widget>[
                 Expanded(
@@ -1058,7 +1089,7 @@ class InlineTimePickerState extends State<InlineTimePicker> {
                     padding: EdgeInsets.only(left: 24.w),
                     child: ListWheelScrollView.useDelegate(
                       controller: _hourCtrl,
-                      itemExtent: 40.h,
+                      itemExtent: 42,
                       physics: const FixedExtentScrollPhysics(),
                       onSelectedItemChanged: (int i) {
                         _hour = i;
@@ -1070,8 +1101,8 @@ class InlineTimePickerState extends State<InlineTimePicker> {
                           final bool sel = i == _hour;
                           return Center(
                             child: Container(
-                              padding: EdgeInsets.symmetric(
-                                  horizontal: 19.w, vertical: 7.h),
+                              padding:
+                                  EdgeInsets.symmetric(horizontal: 19.w),
                               decoration: sel
                                   ? BoxDecoration(
                                       color: AppColors.primary
@@ -1084,7 +1115,7 @@ class InlineTimePickerState extends State<InlineTimePicker> {
                                 i.toString().padLeft(2, '0'),
                                 style: TextStyle(
                                   fontFamily: 'Roboto',
-                                  fontSize: 22.sp,
+                                  fontSize: 25,
                                   fontWeight:
                                       sel ? FontWeight.w600 : FontWeight.w400,
                                   color: sel
@@ -1103,7 +1134,7 @@ class InlineTimePickerState extends State<InlineTimePicker> {
                   ':',
                   style: TextStyle(
                     fontFamily: 'Roboto',
-                    fontSize: 22.sp,
+                    fontSize: 25.sp,
                     fontWeight: FontWeight.w600,
                     color: AppColors.textPrimary,
                   ),
@@ -1113,7 +1144,7 @@ class InlineTimePickerState extends State<InlineTimePicker> {
                     padding: EdgeInsets.only(right: 24.w),
                     child: ListWheelScrollView.useDelegate(
                       controller: _minuteCtrl,
-                      itemExtent: 40.h,
+                      itemExtent: 42,
                       physics: const FixedExtentScrollPhysics(),
                       onSelectedItemChanged: (int i) {
                         _minute = i;
@@ -1125,8 +1156,8 @@ class InlineTimePickerState extends State<InlineTimePicker> {
                           final bool sel = i == _minute;
                           return Center(
                             child: Container(
-                              padding: EdgeInsets.symmetric(
-                                  horizontal: 19.w, vertical: 7.h),
+                              padding:
+                                  EdgeInsets.symmetric(horizontal: 19.w),
                               decoration: sel
                                   ? BoxDecoration(
                                       color: AppColors.primary
@@ -1139,7 +1170,7 @@ class InlineTimePickerState extends State<InlineTimePicker> {
                                 i.toString().padLeft(2, '0'),
                                 style: TextStyle(
                                   fontFamily: 'Roboto',
-                                  fontSize: 22.sp,
+                                  fontSize: 25,
                                   fontWeight:
                                       sel ? FontWeight.w600 : FontWeight.w400,
                                   color: sel

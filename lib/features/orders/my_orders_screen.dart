@@ -272,14 +272,6 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
               Navigator.of(ctx).maybePop();
             },
             onExecutorSelected: (String _, String name, String phone) {
-              // Закрываем экран выбора исполнителя, переводим заказ
-              // в «accepted» с контактами выбранного исполнителя и
-              // сразу открываем его детали в новом статусе. Берём
-              // объект из `_accepted` (куда его только что положил
-              // _moveToAccepted), а не локальную copyWith — иначе
-              // дальнейшие обновления (reviewLeft через callback)
-              // уходили бы в отвязанную копию.
-              Navigator.of(ctx).maybePop();
               MyOrdersStore.moveToAccepted(o, name: name, phone: phone);
               final OrderMock updated = MyOrdersStore.accepted.firstWhere(
                 (OrderMock x) => x.id == o.id,
@@ -289,7 +281,8 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
                   customerPhone: phone,
                 ),
               );
-              _openOrderDetail(context, updated);
+              if (mounted) _tab.animateTo(1);
+              _swapToAcceptedOrderDetail(updated);
             },
           ),
         ),
@@ -356,6 +349,49 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
           rentDate: o.rentDate,
           address: o.address,
           publishedAgo: o.publishedAgo,
+          description: o.description,
+          photos: o.photos,
+          customerName: o.customerName ?? CropResult.namePlaceholder,
+          customerPhone: o.customerPhone ?? '+7 999 123-45-67',
+          customerEmail: o.customerEmail,
+          state: _detailStateForCard(o.status),
+          rejectedStatus: o.status,
+          waitingStatus: o.status,
+          onDecline: () => MyOrdersStore.moveToRejected(
+              o, MyOrderStatus.rejectedDeclined),
+          onRefuse: () => MyOrdersStore.moveToRejected(
+              o, MyOrderStatus.rejectedDeclined),
+          onConfirm: () => MyOrdersStore.moveToAccepted(o),
+          isBlocked: widget.isBlocked,
+          reviewLeft: o.reviewLeft,
+          onReviewLeft: () => MyOrdersStore.markReviewLeft(o.id),
+          onPickAnother: () => _handlePickAnotherFromAwaiting(ctx, o),
+          onOpenCatalog: () {
+            Navigator.of(ctx).maybePop();
+            widget.onGoToCatalog?.call();
+          },
+        ),
+      ),
+    );
+  }
+
+  /// После выбора исполнителя атомарно снимает всю цепочку экранов
+  /// выбора (SelectExecutorScreen → карточка исполнителя → услуги) и
+  /// пушит карточку принятого заказа. pushAndRemoveUntil гарантирует,
+  /// что состояния «на экране SelectExecutor» нет вообще — «назад» с
+  /// карточки принятого заказа ведёт сразу в список «Мои заказы».
+  void _swapToAcceptedOrderDetail(OrderMock o) {
+    if (!mounted) return;
+    Navigator.of(context, rootNavigator: true).pushAndRemoveUntil<void>(
+      MaterialPageRoute<void>(
+        builder: (BuildContext ctx) => MyOrderDetailScreen(
+          title: o.title,
+          equipment: o.equipment,
+          rentDate: o.rentDate,
+          address: o.address,
+          publishedAgo: o.publishedAgo,
+          description: o.description,
+          photos: o.photos,
           customerName: o.customerName ?? CropResult.namePlaceholder,
           customerPhone: o.customerPhone ?? '+7 999 123-45-67',
           customerEmail: o.customerEmail,
@@ -373,6 +409,7 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
           onPickAnother: () => _handlePickAnotherFromAwaiting(ctx, o),
         ),
       ),
+      (Route<dynamic> r) => r.isFirst,
     );
   }
 

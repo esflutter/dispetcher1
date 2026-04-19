@@ -1,12 +1,16 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
+import 'package:dispatcher_1/core/utils/photo_source.dart';
 import 'package:dispatcher_1/core/widgets/dark_sub_app_bar.dart';
 import 'package:dispatcher_1/core/widgets/primary_button.dart';
 import 'package:dispatcher_1/features/catalog/widgets/catalog_search_bar.dart';
+import 'package:dispatcher_1/features/orders/widgets/order_alerts.dart';
 import 'package:dispatcher_1/features/orders/widgets/order_status_pill.dart';
 
 /// Данные черновика заказа, которые передаются в предварительный
@@ -108,6 +112,10 @@ class CreateOrderPreviewScreen extends StatelessWidget {
       sections.add(_Section(title: title, child: child));
     }
 
+    // Порядок секций совпадает со стандартной карточкой заказа
+    // (MyOrderDetailScreen): Дата → Адрес → Описание → Спецтехника →
+    // Категория → Характер работ → Стоимость → Фото. Описание и фото
+    // опциональные — показываются только если заполнены.
     addSection(
       'Дата и время аренды',
       Text(
@@ -138,19 +146,6 @@ class CreateOrderPreviewScreen extends StatelessWidget {
       );
     }
 
-    if (draft.budget.trim().isNotEmpty) {
-      addSection(
-        'Стоимость',
-        Text(
-          draft.budget,
-          style: AppTextStyles.bodyMMedium.copyWith(
-            color: AppColors.primary,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-      );
-    }
-
     if (draft.machinery.isNotEmpty) {
       addSection('Требуемая спецтехника', _ChipRow(items: draft.machinery));
     }
@@ -175,6 +170,19 @@ class CreateOrderPreviewScreen extends StatelessWidget {
                 ),
               ),
           ],
+        ),
+      );
+    }
+
+    if (draft.budget.trim().isNotEmpty) {
+      addSection(
+        'Стоимость',
+        Text(
+          draft.budget,
+          style: AppTextStyles.bodyMMedium.copyWith(
+            color: AppColors.primary,
+            fontWeight: FontWeight.w700,
+          ),
         ),
       );
     }
@@ -263,6 +271,14 @@ class CreateOrderPreviewScreen extends StatelessWidget {
     );
   }
 
+  /// Обёртка над `onMoveToArchive`: показывает подтверждающий диалог и
+  /// только при нажатии «Переместить в архив» вызывает исходный колбэк.
+  void _confirmMoveToArchive(BuildContext context) {
+    final VoidCallback? cb = onMoveToArchive;
+    if (cb == null) return;
+    showConfirmRefuseDialog(context, onRefuse: cb);
+  }
+
   /// Набор кнопок нижней панели в зависимости от статуса заказа.
   /// Пустой список означает, что нижней панели нет вообще.
   List<Widget> _buildBottomButtons(BuildContext context) {
@@ -293,7 +309,7 @@ class CreateOrderPreviewScreen extends StatelessWidget {
           SizedBox(height: 8.h),
           SecondaryButton(
             label: 'Переместить в архив',
-            onPressed: onMoveToArchive,
+            onPressed: () => _confirmMoveToArchive(context),
           ),
         ];
       case MyOrderStatus.awaitingExecutor:
@@ -310,7 +326,7 @@ class CreateOrderPreviewScreen extends StatelessWidget {
           SizedBox(height: 8.h),
           SecondaryButton(
             label: 'Переместить в архив',
-            onPressed: onMoveToArchive,
+            onPressed: () => _confirmMoveToArchive(context),
           ),
         ];
       case MyOrderStatus.waitingChoose:
@@ -324,7 +340,7 @@ class CreateOrderPreviewScreen extends StatelessWidget {
           SizedBox(height: 8.h),
           SecondaryButton(
             label: 'Переместить в архив',
-            onPressed: onMoveToArchive,
+            onPressed: () => _confirmMoveToArchive(context),
           ),
         ];
       case MyOrderStatus.completed:
@@ -425,12 +441,19 @@ class _PhotosGrid extends StatelessWidget {
       children: photos
           .map((String p) => ClipRRect(
                 borderRadius: BorderRadius.circular(10.r),
-                child: Image.asset(
-                  p,
-                  width: 72.r,
-                  height: 72.r,
-                  fit: BoxFit.cover,
-                ),
+                child: isAssetPath(p)
+                    ? Image.asset(
+                        p,
+                        width: 72.r,
+                        height: 72.r,
+                        fit: BoxFit.cover,
+                      )
+                    : Image.file(
+                        File(p),
+                        width: 72.r,
+                        height: 72.r,
+                        fit: BoxFit.cover,
+                      ),
               ))
           .toList(),
     );

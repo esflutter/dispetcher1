@@ -6,6 +6,7 @@ import 'package:dispatcher_1/core/theme/app_text_styles.dart';
 import 'package:dispatcher_1/core/widgets/dark_sub_app_bar.dart';
 import 'package:dispatcher_1/core/widgets/primary_button.dart';
 import 'package:dispatcher_1/features/catalog/order_detail_screen.dart';
+import 'package:dispatcher_1/features/catalog/order_feed_screen.dart';
 import 'package:dispatcher_1/features/catalog/widgets/order_card.dart';
 import 'package:dispatcher_1/features/orders/orders_store.dart';
 import 'package:dispatcher_1/features/orders/widgets/order_alerts.dart';
@@ -168,6 +169,12 @@ class SelectExecutorScreen extends StatelessWidget {
                           highlightEquipment: order.equipment.toSet(),
                           onTap: () {
                             final _Responder responder = _mockResponders[i];
+                            // Запоминаем route самого SelectExecutorScreen,
+                            // чтобы позже одним `popUntil` закрыть всю
+                            // цепочку «карточка исполнителя → услуги» —
+                            // даже если пользователь провалился в services.
+                            final ModalRoute<dynamic>? selectRoute =
+                                ModalRoute.of(context);
                             Navigator.of(context).push<void>(
                               MaterialPageRoute<void>(
                                 builder: (BuildContext detailCtx) =>
@@ -175,13 +182,23 @@ class SelectExecutorScreen extends StatelessWidget {
                                   orderId: responder.id,
                                   multipleEquipment: true,
                                   selectMode: true,
+                                  executor: responder.toExecutor(),
                                   onSelectExecutor: () async {
                                     await showExecutorSelectedDialog(detailCtx);
                                     if (!detailCtx.mounted) return;
-                                    // Закрываем карточку исполнителя → сам
-                                    // SelectExecutorScreen закроется в колбэке
-                                    // onExecutorSelected у родителя.
-                                    Navigator.of(detailCtx).pop();
+                                    // Сворачиваем всю вложенную цепочку
+                                    // (services + executor card) до
+                                    // SelectExecutorScreen. Дальше
+                                    // onExecutorSelected закроет его и
+                                    // откроет карточку заказа в статусе
+                                    // accepted — в итоге «назад» с
+                                    // этой карточки вернёт в список
+                                    // заказов, без промежуточных слоёв.
+                                    if (selectRoute != null) {
+                                      Navigator.of(detailCtx).popUntil(
+                                          (Route<dynamic> r) =>
+                                              r == selectRoute);
+                                    }
                                     onExecutorSelected(
                                       responder.id,
                                       responder.name,
@@ -218,7 +235,10 @@ class SelectExecutorScreen extends StatelessWidget {
               padding: EdgeInsets.fromLTRB(16.w, 12.h, 16.w, 16.h),
               child: SecondaryButton(
                 label: 'Переместить в архив',
-                onPressed: onMoveToArchive,
+                onPressed: () => showConfirmRefuseDialog(
+                  context,
+                  onRefuse: onMoveToArchive,
+                ),
               ),
             ),
           ],
@@ -248,4 +268,18 @@ class _Responder {
   final String legalStatus;
   final List<String> equipment;
   final List<String> categories;
+
+  /// Для передачи в `OrderDetailScreen(executor: ...)` — чтобы карточка
+  /// исполнителя показывала данные ответчика, а не fallback-заглушку.
+  ExecutorMock toExecutor() => ExecutorMock(
+        id: id,
+        name: name,
+        rating: rating,
+        experience: experience,
+        legalStatus: legalStatus,
+        equipment: equipment,
+        categories: categories,
+        pricePerHour: 0,
+        pricePerDay: 0,
+      );
 }
