@@ -26,7 +26,9 @@ class _ReviewScreenState extends State<ReviewScreen> {
   Future<void> _submit() async {
     await showReviewSentDialog(context);
     if (!mounted) return;
-    Navigator.of(context).maybePop();
+    // Возвращаем `true`, чтобы родитель пометил заказ как «отзыв оставлен»
+    // и больше не показывал кнопку «Оставить отзыв».
+    Navigator.of(context).pop(true);
   }
 
   @override

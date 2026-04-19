@@ -123,8 +123,13 @@ class _CatalogFilterScreenState extends State<CatalogFilterScreen> {
   /// 'timeFrom' / 'timeTo'. Одновременно виден только один.
   String? _openPicker;
 
+  static const List<String> _monthNamesGen = <String>[
+    'января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
+    'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря',
+  ];
+
   String _formatDate(DateTime d) =>
-      '${d.day.toString().padLeft(2, '0')}.${d.month.toString().padLeft(2, '0')}.${(d.year % 100).toString().padLeft(2, '0')}';
+      '${d.day} ${_monthNamesGen[d.month - 1]}';
 
   String _formatTime(TimeOfDay t) =>
       '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
@@ -191,7 +196,7 @@ class _CatalogFilterScreenState extends State<CatalogFilterScreen> {
                         }),
                       ),
                       SizedBox(height: 24.h),
-                      _SectionTitle('Стоимость'),
+                      _SectionTitle('Стоимость, не более'),
                       SizedBox(height: 12.h),
                       Row(
                         children: <Widget>[
@@ -1355,7 +1360,15 @@ class AppliedFilter {
 
   static final Set<String> categories = <String>{};
   static final Set<String> equipment = <String>{};
+
+  /// Верхняя граница цены «₽ / час». Заказчик указывает, сколько он
+  /// максимум готов платить за час. `null` или пустая строка — без
+  /// ограничения. Соответствует лейблу «Стоимость, не более» и чипу
+  /// «до N ₽ / час». Поле называлось `priceHour` до смены семантики
+  /// «От»→«До», текущее имя отражает реальное использование.
   static String? priceHour;
+
+  /// Верхняя граница цены «₽ / день». Семантика — как у [priceHour].
   static String? priceDay;
   static bool sortByPriceAsc = false;
   static DateTime? dateFrom;

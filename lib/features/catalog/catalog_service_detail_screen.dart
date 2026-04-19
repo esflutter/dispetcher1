@@ -5,10 +5,12 @@ import 'package:go_router/go_router.dart';
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
 import 'package:dispatcher_1/core/widgets/dark_sub_app_bar.dart';
+import 'package:dispatcher_1/core/widgets/photo_gallery_screen.dart';
 import 'package:dispatcher_1/core/widgets/primary_button.dart';
 import 'package:dispatcher_1/features/catalog/select_order_for_executor_screen.dart';
 import 'package:dispatcher_1/features/catalog/widgets/catalog_search_bar.dart';
 import 'package:dispatcher_1/features/orders/create_order_screen.dart';
+import 'package:dispatcher_1/features/orders/orders_store.dart';
 
 /// Склонение «час» после предлога «от» (род. падеж).
 String _hoursWord(int n) {
@@ -32,6 +34,8 @@ class CatalogServiceDetailScreen extends StatefulWidget {
     required this.minOrderHours,
     required this.machinery,
     required this.categories,
+    this.selectMode = false,
+    this.onSelectExecutor,
   });
 
   final String executorOrderId;
@@ -42,6 +46,16 @@ class CatalogServiceDetailScreen extends StatefulWidget {
   final int minOrderHours;
   final List<String> machinery;
   final List<String> categories;
+
+  /// true — экран открыт из потока «Выберите исполнителя»: вместо
+  /// «Предложить заказ» внизу показываем «Выбрать исполнителя» и
+  /// по нажатию вызываем [onSelectExecutor]. Нужно для согласованности
+  /// с карточкой исполнителя (`catalog/order_detail_screen.dart`).
+  final bool selectMode;
+
+  /// Колбэк «Выбрать исполнителя» в `selectMode`. Родитель должен
+  /// показать диалог подтверждения и перевести заказ в `accepted`.
+  final VoidCallback? onSelectExecutor;
 
   @override
   State<CatalogServiceDetailScreen> createState() =>
@@ -75,11 +89,15 @@ class _CatalogServiceDetailScreenState
     if (mounted) setState(() {});
   }
 
+  /// В `selectMode` флаг «уже предложено» не применим — там показываем
+  /// кнопку «Выбрать исполнителя» вне зависимости от прошлых
+  /// предложений. «Уже предложено» имеет смысл только в каталоге.
   bool get _alreadyOffered =>
+      !widget.selectMode &&
       OfferSubmissions.isOffered(widget.executorOrderId);
 
   Future<void> _onRespondTap() async {
-    if (CustomerOrdersStub.orders.isEmpty) {
+    if (MyOrdersStore.offerable.isEmpty) {
       await showDialog<void>(
         context: context,
         barrierColor: Colors.black.withValues(alpha: 0.35),
@@ -214,8 +232,12 @@ class _CatalogServiceDetailScreenState
                 16.h + MediaQuery.of(context).padding.bottom,
               ),
               child: PrimaryButton(
-                label: 'Предложить заказ',
-                onPressed: _onRespondTap,
+                label: widget.selectMode
+                    ? 'Выбрать исполнителя'
+                    : 'Предложить заказ',
+                onPressed: widget.selectMode
+                    ? widget.onSelectExecutor
+                    : _onRespondTap,
               ),
             ),
         ],
@@ -289,9 +311,20 @@ class _PhotosGrid extends StatelessWidget {
         crossAxisSpacing: 4.r,
       ),
       itemCount: photos.length,
-      itemBuilder: (_, int i) => ClipRRect(
-        borderRadius: BorderRadius.circular(8.r),
-        child: Image.asset(photos[i], fit: BoxFit.cover),
+      itemBuilder: (BuildContext ctx, int i) => GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => Navigator.of(ctx).push<void>(
+          MaterialPageRoute<void>(
+            builder: (_) => PhotoGalleryScreen(
+              photos: photos,
+              initialIndex: i,
+            ),
+          ),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(8.r),
+          child: Image.asset(photos[i], fit: BoxFit.cover),
+        ),
       ),
     );
   }

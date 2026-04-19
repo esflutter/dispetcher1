@@ -64,11 +64,12 @@ class CreateOrderPreviewScreen extends StatelessWidget {
     super.key,
     required this.draft,
     this.status,
+    this.reviewLeft = false,
     this.onPickAnother,
     this.onMoveToArchive,
     this.onLeaveReview,
     this.onRepublish,
-    this.onEditRemoved,
+    this.onOpenCatalog,
   });
 
   final OrderDraft draft;
@@ -76,6 +77,10 @@ class CreateOrderPreviewScreen extends StatelessWidget {
   /// Статус опубликованного заказа. `null` — режим создания заказа
   /// (до публикации), показываются кнопки «Опубликовать / Редактировать».
   final MyOrderStatus? status;
+
+  /// Был ли уже оставлен отзыв по этому заказу. Если `true`, кнопка
+  /// «Оставить отзыв» в статусе [MyOrderStatus.completed] не показывается.
+  final bool reviewLeft;
 
   /// Колбэк «Выбрать другого исполнителя» — для waiting/waitingChoose/
   /// accepted.
@@ -87,13 +92,12 @@ class CreateOrderPreviewScreen extends StatelessWidget {
   /// Колбэк «Оставить отзыв» — для completed.
   final VoidCallback? onLeaveReview;
 
-  /// Колбэк «Опубликовать заново» — для rejectedRemoved.
+  /// Колбэк «Опубликовать заново» — для rejectedDeclined.
   final VoidCallback? onRepublish;
 
-  /// Колбэк «Редактировать» на экране архивного заказа
-  /// (rejectedRemoved). В режиме создания (status == null) по
-  /// «Редактировать» pop-им экран с `false`.
-  final VoidCallback? onEditRemoved;
+  /// Колбэк «Перейти в каталог» — для waiting, когда откликов ещё нет
+  /// и заказчику предлагается поискать исполнителей самостоятельно.
+  final VoidCallback? onOpenCatalog;
 
   @override
   Widget build(BuildContext context) {
@@ -277,8 +281,41 @@ class CreateOrderPreviewScreen extends StatelessWidget {
     }
     switch (status!) {
       case MyOrderStatus.waiting:
+      case MyOrderStatus.executorDeclinedWaiting:
+        // Откликов (ещё) нет — предлагаем заказчику перейти в каталог
+        // и самому поискать исполнителей. Второй кейс — когда ранее
+        // выбранный исполнитель отказался и других откликов нет.
+        return <Widget>[
+          PrimaryButton(
+            label: 'Перейти в каталог',
+            onPressed: onOpenCatalog,
+          ),
+          SizedBox(height: 8.h),
+          SecondaryButton(
+            label: 'Переместить в архив',
+            onPressed: onMoveToArchive,
+          ),
+        ];
+      case MyOrderStatus.awaitingExecutor:
+        // Заказ предложен конкретному исполнителю. Можно подождать
+        // подтверждения — либо сразу выбрать другого. Логика «другого»:
+        // если были другие отклики — переходим к списку, иначе — в
+        // каталог, чтобы искать вручную (это решает родительский
+        // колбэк [onPickAnother]).
+        return <Widget>[
+          PrimaryButton(
+            label: 'Выбрать другого исполнителя',
+            onPressed: onPickAnother,
+          ),
+          SizedBox(height: 8.h),
+          SecondaryButton(
+            label: 'Переместить в архив',
+            onPressed: onMoveToArchive,
+          ),
+        ];
       case MyOrderStatus.waitingChoose:
       case MyOrderStatus.accepted:
+      case MyOrderStatus.executorDeclined:
         return <Widget>[
           PrimaryButton(
             label: 'Выбрать другого исполнителя',
@@ -291,26 +328,23 @@ class CreateOrderPreviewScreen extends StatelessWidget {
           ),
         ];
       case MyOrderStatus.completed:
+        // После оставленного отзыва кнопка скрывается — отзыв можно
+        // оставить только один раз.
+        if (reviewLeft) return const <Widget>[];
         return <Widget>[
           PrimaryButton(
             label: 'Оставить отзыв',
             onPressed: onLeaveReview,
           ),
         ];
-      case MyOrderStatus.rejectedRemoved:
+      case MyOrderStatus.rejectedDeclined:
         return <Widget>[
           PrimaryButton(
             label: 'Опубликовать заново',
             onPressed: onRepublish,
           ),
-          SizedBox(height: 8.h),
-          SecondaryButton(
-            label: 'Редактировать',
-            onPressed: onEditRemoved,
-          ),
         ];
       case MyOrderStatus.rejectedOther:
-      case MyOrderStatus.rejectedDeclined:
         return const <Widget>[];
     }
   }

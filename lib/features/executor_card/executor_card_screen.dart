@@ -9,6 +9,7 @@ import 'package:dispatcher_1/core/widgets/dark_sub_app_bar.dart';
 import 'package:dispatcher_1/core/widgets/primary_button.dart';
 import 'package:dispatcher_1/features/catalog/widgets/catalog_search_bar.dart';
 import 'package:dispatcher_1/core/widgets/cropped_avatar.dart';
+import 'package:dispatcher_1/features/auth/photo_crop_screen.dart';
 import 'package:dispatcher_1/features/profile/account_block.dart';
 
 /// Экран «Моя карточка заказчика». Два состояния:
@@ -66,7 +67,7 @@ class _ExecutorCardScreenState extends State<ExecutorCardScreen> {
         child: Column(
           children: <Widget>[
             Expanded(
-              child: filled ? const _FilledCard() : const _EmptyContent(),
+              child: filled ? _FilledCard() : const _EmptyContent(),
             ),
             Container(
               decoration: BoxDecoration(
@@ -142,9 +143,17 @@ class _EmptyContent extends StatelessWidget {
   }
 }
 
-/// Данные карточки заказчика (до появления бэкенда).
+/// Данные карточки заказчика (до появления бэкенда). Имя и телефон
+/// синхронизируются с профилем ([CropResult]) — это геттеры-обёртки.
+/// Телефон менять нельзя (он задаётся только при регистрации).
 class ExecutorCardData {
-  static String phone = '+7 999 123-45-67';
+  /// Имя — всегда совпадает с именем профиля.
+  static String get name => CropResult.userName;
+  static set name(String value) => CropResult.userName = value;
+
+  /// Телефон — всегда совпадает с номером профиля (поле регистрации).
+  static String get phone => CropResult.userPhone;
+
   static String? location;
   static String? radius;
   static List<String> machinery = <String>[];
@@ -157,7 +166,11 @@ class ExecutorCardData {
 class _FilledCard extends StatelessWidget {
   const _FilledCard();
 
-  String _val(String? v) => (v != null && v.isNotEmpty) ? v : '—';
+  /// Для владельца карточки незаполненные поля «О себе» и «Статус»
+  /// показываем прочерком — чтобы было видно, что блок есть и его
+  /// можно заполнить. В публичном просмотре (экран со стороны
+  /// исполнителя) такие пустые блоки скрываются.
+  String _val(String? v) => (v != null && v.trim().isNotEmpty) ? v : '—';
 
   @override
   Widget build(BuildContext context) {
@@ -171,16 +184,16 @@ class _FilledCard extends StatelessWidget {
           _SectionTitle('Номер телефона'),
           SizedBox(height: 4.h),
           Text(ExecutorCardData.phone, style: AppTextStyles.body),
+          if (CropResult.hasEmail) ...<Widget>[
+            SizedBox(height: 16.h),
+            _SectionTitle('Электронная почта'),
+            SizedBox(height: 4.h),
+            Text(CropResult.userEmail, style: AppTextStyles.body),
+          ],
           SizedBox(height: 16.h),
           _SectionTitle('О себе'),
           SizedBox(height: 4.h),
-          Text(
-            _val(ExecutorCardData.about).isNotEmpty &&
-                    _val(ExecutorCardData.about) != '—'
-                ? _val(ExecutorCardData.about)
-                : 'Частный заказчик. Периодически нужны услуги спецтехники для строительных работ и благоустройства участка.',
-            style: AppTextStyles.body,
-          ),
+          Text(_val(ExecutorCardData.about), style: AppTextStyles.body),
           SizedBox(height: 16.h),
           _SectionTitle('Статус'),
           SizedBox(height: 4.h),
@@ -208,7 +221,12 @@ class _HeaderRow extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              Text('Александр Иванов', style: AppTextStyles.titleS),
+              Text(
+                ExecutorCardData.name.trim().isEmpty
+                    ? CropResult.namePlaceholder
+                    : ExecutorCardData.name,
+                style: AppTextStyles.titleS,
+              ),
               SizedBox(height: 4.h),
               Row(
                 children: <Widget>[

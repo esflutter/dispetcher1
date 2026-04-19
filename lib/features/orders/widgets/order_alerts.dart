@@ -63,6 +63,62 @@ Future<void> showConfirmAcceptDialog(
   );
 }
 
+/// Алерт «Исполнитель выбран. Свяжитесь с ним по указанным на странице
+/// данным.» — показывается заказчику после выбора исполнителя из
+/// списка откликнувшихся. После закрытия заказ уходит в статус
+/// «Свяжитесь с исполнителем».
+Future<void> showExecutorSelectedDialog(BuildContext context) {
+  return showDialog<void>(
+    context: context,
+    barrierColor: Colors.black.withValues(alpha: 0.35),
+    builder: (BuildContext ctx) => Dialog(
+      insetPadding: EdgeInsets.symmetric(horizontal: 16.w),
+      backgroundColor: Colors.transparent,
+      child: Container(
+        padding: EdgeInsets.fromLTRB(16.r, 22.r, 16.r, 22.r),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(20.r),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            Text(
+              'Исполнитель выбран',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontFamily: 'Roboto',
+                fontSize: 20.sp,
+                fontWeight: FontWeight.w600,
+                height: 1.3,
+                color: AppColors.textPrimary,
+              ),
+            ),
+            SizedBox(height: 8.h),
+            Text(
+              'Свяжитесь с ним по указанным на странице данным.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontFamily: 'Roboto',
+                fontSize: 16.sp,
+                fontWeight: FontWeight.w400,
+                height: 1.3,
+                color: AppColors.textSecondary,
+              ),
+            ),
+            SizedBox(height: 18.h),
+            PrimaryButton(
+              label: 'Ок',
+              onPressed: () => Navigator.of(ctx).pop(),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
 /// Алерт «Вы оставили отзыв» — показывается после успешной отправки отзыва.
 /// Возвращает `true`, если пользователь нажал «Мои отзывы», иначе `null`.
 Future<bool?> showReviewSentDialog(BuildContext context) {

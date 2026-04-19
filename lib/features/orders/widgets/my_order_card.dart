@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 
 import 'package:dispatcher_1/core/theme/app_colors.dart';
+import 'package:dispatcher_1/features/auth/photo_crop_screen.dart';
 import 'package:dispatcher_1/features/orders/widgets/order_status_pill.dart';
 
 /// Карточка заказа в списке «Мои заказы».
@@ -17,8 +18,10 @@ class MyOrderCard extends StatelessWidget {
     required this.rentDate,
     required this.address,
     required this.publishedAgo,
+    this.statusCount,
     this.customerName,
     this.customerPhone,
+    this.customerEmail,
     this.customerAvatar,
     this.price = '80 000 – 100 000 ₽',
     this.onTap,
@@ -26,6 +29,10 @@ class MyOrderCard extends StatelessWidget {
   });
 
   final MyOrderStatus status;
+
+  /// Опциональный счётчик рядом со статусом (например, количество
+  /// откликов для waitingChoose — «Выберите исполнителя (3)»).
+  final int? statusCount;
   final String title;
   final List<String> equipment;
   final String rentDate;
@@ -34,14 +41,13 @@ class MyOrderCard extends StatelessWidget {
   final String price;
   final String? customerName;
   final String? customerPhone;
+  final String? customerEmail;
   final String? customerAvatar;
   final VoidCallback? onTap;
   final VoidCallback? onContact;
 
   bool get _showCustomerRow =>
-      (status == MyOrderStatus.accepted ||
-          status == MyOrderStatus.completed) &&
-      customerName != null;
+      status == MyOrderStatus.accepted && customerName != null;
 
   @override
   Widget build(BuildContext context) {
@@ -62,7 +68,7 @@ class MyOrderCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            OrderStatusPill(status: status),
+            OrderStatusPill(status: status, count: statusCount),
             SizedBox(height: 6.h),
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -196,7 +202,7 @@ class _CustomerRow extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
               Text(
-                name,
+                name.trim().isEmpty ? CropResult.namePlaceholder : name,
                 style: TextStyle(
                   fontFamily: 'Roboto',
                   fontSize: 16.sp,
@@ -230,7 +236,7 @@ class _CustomerRow extends StatelessWidget {
               borderRadius: BorderRadius.circular(10.r),
             ),
             child: Icon(
-              Icons.arrow_forward,
+              Icons.phone,
               color: Colors.white,
               size: 22.r,
             ),

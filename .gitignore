@@ -46,3 +46,6 @@ app.*.map.json
 
 # Figma API caches (большие JSON, не нужны в репо)
 .figma_cache/
+
+# Local agent/session files
+.claude/

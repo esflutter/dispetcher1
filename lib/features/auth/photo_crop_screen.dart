@@ -18,6 +18,27 @@ class CropResult {
 
   /// Телефон пользователя, введённый при регистрации.
   static String userPhone = '+7 999 123-45-67';
+
+  /// Email пользователя. Необязательное поле, по умолчанию пустое.
+  /// Пользователь может заполнить/изменить его в «Редактирование
+  /// профиля». Конвенция: хранится как `String` без `null`, пустая
+  /// строка означает «не задан». Для проверки «задан ли» используйте
+  /// [hasEmail] — это единая точка вместо разбросанных
+  /// `.trim().isNotEmpty` и `email != null && ...`.
+  static String userEmail = '';
+
+  /// Заглушка, которую подставляем вместо пустого имени пользователя —
+  /// чтобы на всех экранах (карточки, отзывы, превью) не было пустоты.
+  static const String namePlaceholder = 'Пользователь';
+
+  /// Имя для отображения: если по какой-то причине [userName] пусто,
+  /// показываем [namePlaceholder].
+  static String get displayName =>
+      userName.trim().isEmpty ? namePlaceholder : userName;
+
+  /// Задан ли email у пользователя. Использовать вместо ручной
+  /// проверки на пустоту в разных местах экрана.
+  static bool get hasEmail => userEmail.trim().isNotEmpty;
 }
 
 class PhotoCropScreen extends StatefulWidget {

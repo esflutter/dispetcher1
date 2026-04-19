@@ -86,14 +86,15 @@ class _OrderFeedScreenState extends State<OrderFeedScreen> {
           o.equipment.any(AppliedFilter.equipment.contains));
     }
 
-    // Минимальные цены — отсекаем тех, у кого цена ниже указанной.
-    final int? minHour = _parseIntOrNull(AppliedFilter.priceHour);
-    if (minHour != null) {
-      res = res.where((_MockOrder o) => o.pricePerHour >= minHour);
+    // Максимальные цены — заказчик задаёт потолок бюджета, поэтому
+    // оставляем только тех, у кого цена не превышает указанную.
+    final int? maxHour = _parseIntOrNull(AppliedFilter.priceHour);
+    if (maxHour != null) {
+      res = res.where((_MockOrder o) => o.pricePerHour <= maxHour);
     }
-    final int? minDay = _parseIntOrNull(AppliedFilter.priceDay);
-    if (minDay != null) {
-      res = res.where((_MockOrder o) => o.pricePerDay >= minDay);
+    final int? maxDay = _parseIntOrNull(AppliedFilter.priceDay);
+    if (maxDay != null) {
+      res = res.where((_MockOrder o) => o.pricePerDay <= maxDay);
     }
 
     if (q.isNotEmpty) {
@@ -250,39 +251,39 @@ class _OrderFeedScreenState extends State<OrderFeedScreen> {
                 : MediaQuery.removePadding(
                     context: context,
                     removeTop: true,
-                    child: ListView.builder(
-                      padding: EdgeInsets.zero,
+                    child: ListView.separated(
+                      // Когда фильтры применены — чип выше уже даёт
+                      // вертикальный отступ снизу; иначе добавляем свой.
+                      padding: EdgeInsets.fromLTRB(
+                          16.w, _hasActiveFilter ? 0 : 16.h, 16.w, 16.h),
                       itemCount: _visibleOrders.length,
+                      separatorBuilder: (_, _) => SizedBox(height: 16.h),
                       itemBuilder: (BuildContext context, int i) {
                         final _MockOrder o = _visibleOrders[i];
-                        final bool isLast = i == _visibleOrders.length - 1;
-                        return Column(
-                          children: <Widget>[
-                            OrderCard(
-                              name: o.name,
-                              rating: o.rating,
-                              experience: o.experience,
-                              legalStatus: o.legalStatus,
-                              equipment: o.equipment,
-                              categories: o.categories,
-                              highlightEquipment: AppliedFilter.equipment,
-                              highlightCategories: AppliedFilter.categories,
-                              onTap: () => Navigator.of(context).push(
-                                MaterialPageRoute<void>(
-                                  builder: (_) => OrderDetailScreen(
-                                    orderId: o.id,
-                                    multipleEquipment: o.equipment.length > 1,
-                                  ),
+                        return Container(
+                          decoration: BoxDecoration(
+                            color: AppColors.fieldFill,
+                            borderRadius: BorderRadius.circular(14.r),
+                          ),
+                          clipBehavior: Clip.antiAlias,
+                          child: OrderCard(
+                            name: o.name,
+                            rating: o.rating,
+                            experience: o.experience,
+                            legalStatus: o.legalStatus,
+                            equipment: o.equipment,
+                            categories: o.categories,
+                            highlightEquipment: AppliedFilter.equipment,
+                            highlightCategories: AppliedFilter.categories,
+                            onTap: () => Navigator.of(context).push(
+                              MaterialPageRoute<void>(
+                                builder: (_) => OrderDetailScreen(
+                                  orderId: o.id,
+                                  multipleEquipment: o.equipment.length > 1,
                                 ),
                               ),
                             ),
-                            if (!isLast)
-                              Container(
-                                height:
-                                    1 / MediaQuery.of(context).devicePixelRatio,
-                                color: AppColors.primary,
-                              ),
-                          ],
+                          ),
                         );
                       },
                     ),
@@ -414,13 +415,13 @@ class _AppliedFilterChips extends StatelessWidget {
     }
 
     if (AppliedFilter.priceHour != null && AppliedFilter.priceHour!.isNotEmpty) {
-      chips.add(_ChipSpec('от ${AppliedFilter.priceHour} ₽ / час', () {
+      chips.add(_ChipSpec('до ${AppliedFilter.priceHour} ₽ / час', () {
         AppliedFilter.priceHour = null;
         _bump();
       }));
     }
     if (AppliedFilter.priceDay != null && AppliedFilter.priceDay!.isNotEmpty) {
-      chips.add(_ChipSpec('от ${AppliedFilter.priceDay} ₽ / день', () {
+      chips.add(_ChipSpec('до ${AppliedFilter.priceDay} ₽ / день', () {
         AppliedFilter.priceDay = null;
         _bump();
       }));
@@ -453,7 +454,7 @@ class _AppliedFilterChips extends StatelessWidget {
       width: double.infinity,
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
-        padding: EdgeInsets.fromLTRB(16.w, 12.h, 16.w, 8.h),
+        padding: EdgeInsets.fromLTRB(16.w, 12.h, 16.w, 12.h),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[

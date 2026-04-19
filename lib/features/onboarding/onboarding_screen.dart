@@ -211,36 +211,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               ),
             ),
           ),
-
-          // TODO: временная кнопка для быстрого перехода в каталог при тестировании.
-          Positioned(
-            top: 8.h,
-            right: 8.w,
-            child: SafeArea(
-              child: Material(
-                color: Colors.black.withValues(alpha: 0.55),
-                borderRadius: BorderRadius.circular(20.r),
-                child: InkWell(
-                  onTap: () => context.go('/shell'),
-                  borderRadius: BorderRadius.circular(20.r),
-                  child: Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 8.h),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.fast_forward, size: 18.r, color: Colors.white),
-                        SizedBox(width: 6.w),
-                        Text(
-                          'В каталог',
-                          style: AppTextStyles.body.copyWith(color: Colors.white),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
         ],
       ),
     );

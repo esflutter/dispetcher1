@@ -44,6 +44,16 @@ class DailyOrderLimit {
     _count++;
   }
 
+  /// Сбрасывает дневной счётчик вне зависимости от календаря. Нужен
+  /// при разблокировке аккаунта: заблокированный пользователь не мог
+  /// создавать заказы, и после восстановления он должен получить
+  /// полную суточную квоту, а не остаток от прерванного дня.
+  static void resetToday() {
+    final DateTime now = DateTime.now();
+    _date = DateTime(now.year, now.month, now.day);
+    _count = 0;
+  }
+
   /// Диалог «Лимит заказов на сегодня исчерпан».
   static Future<void> showLimitDialog(BuildContext context) {
     return showDialog<void>(
@@ -291,9 +301,7 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
 
   String _fmtDate(DateTime? d) {
     if (d == null) return '';
-    final String dd = d.day.toString().padLeft(2, '0');
-    final String mm = d.month.toString().padLeft(2, '0');
-    return '$dd.$mm.${d.year}';
+    return _formatDateRu(d);
   }
 
   String _fmtTime(TimeOfDay t) =>
@@ -342,7 +350,7 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
     );
     if (!mounted || published != true) return;
     DailyOrderLimit.increment();
-    CreatedOrdersStore.add(_buildOrderMock(draft));
+    MyOrdersStore.addCreated(_buildOrderMock(draft));
     Navigator.of(context).maybePop();
   }
 
@@ -396,6 +404,7 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
       rentDate: draft.rentDate,
       address: draft.address,
       publishedAgo: 'Только что',
+      publishedAt: DateTime.now(),
       price: draft.budget.isEmpty ? null : draft.budget,
       number: draft.number,
       description: draft.description,

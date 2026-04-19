@@ -21,6 +21,7 @@ dependencies:
   pinput: ^5.0.1
   connectivity_plus: ^6.0.5
   geolocator: ^13.0.1
+  url_launcher: ^6.3.0
 
 dev_dependencies:
   flutter_test:

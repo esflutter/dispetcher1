@@ -205,27 +205,30 @@ class _CatalogCategoriesScreenState extends State<CatalogCategoriesScreen> {
       );
     }
     return ListView.separated(
-      padding: EdgeInsets.zero,
+      padding: EdgeInsets.fromLTRB(16.w, 16.h, 16.w, 16.h),
       itemCount: results.length,
-      separatorBuilder: (_, _) => Divider(
-        height: 1,
-        thickness: 1,
-        color: AppColors.divider,
-      ),
+      separatorBuilder: (_, _) => SizedBox(height: 16.h),
       itemBuilder: (BuildContext context, int i) {
         final _SearchableOrder o = results[i];
-        return OrderCard(
-          name: o.name,
-          rating: o.rating,
-          experience: o.experience,
-          legalStatus: o.legalStatus,
-          equipment: o.equipment,
-          categories: o.categories,
-          onTap: () => Navigator.of(context).push(
-            MaterialPageRoute<void>(
-              builder: (_) => OrderDetailScreen(
-                orderId: o.id,
-                multipleEquipment: o.equipment.length > 1,
+        return Container(
+          decoration: BoxDecoration(
+            color: AppColors.fieldFill,
+            borderRadius: BorderRadius.circular(14.r),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: OrderCard(
+            name: o.name,
+            rating: o.rating,
+            experience: o.experience,
+            legalStatus: o.legalStatus,
+            equipment: o.equipment,
+            categories: o.categories,
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => OrderDetailScreen(
+                  orderId: o.id,
+                  multipleEquipment: o.equipment.length > 1,
+                ),
               ),
             ),
           ),

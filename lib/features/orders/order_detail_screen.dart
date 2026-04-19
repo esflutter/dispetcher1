@@ -1,14 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
 import 'package:dispatcher_1/core/widgets/primary_button.dart';
+import 'package:dispatcher_1/features/auth/photo_crop_screen.dart';
+import 'package:dispatcher_1/features/catalog/order_detail_screen.dart'
+    as catalog;
 import 'package:dispatcher_1/features/catalog/widgets/catalog_search_bar.dart';
 import 'package:dispatcher_1/features/orders/review_screen.dart';
 import 'package:dispatcher_1/features/orders/widgets/order_alerts.dart';
 import 'package:dispatcher_1/features/orders/widgets/order_status_pill.dart';
+import 'package:dispatcher_1/features/profile/reviews_screen.dart';
 
 /// Состояние экрана деталей «моего» заказа (для заказчика).
 enum MyOrderDetailState {
@@ -48,6 +53,7 @@ class MyOrderDetailScreen extends StatefulWidget {
     this.address = 'Московская область, Москва, Улица1, д 144',
     this.customerName = 'Иванов Александр',
     this.customerPhone = '+7 999 123-45-67',
+    this.customerEmail,
     this.publishedAgo = 'Вчера в 14:30',
     this.orderNumber = '№123456',
     this.workDescription = const <String>[
@@ -61,6 +67,9 @@ class MyOrderDetailScreen extends StatefulWidget {
     this.onConfirm,
     this.isBlocked = false,
     this.price = '80 000 – 100 000 ₽',
+    this.reviewLeft = false,
+    this.onReviewLeft,
+    this.onPickAnother,
   });
 
   final MyOrderDetailState state;
@@ -71,6 +80,7 @@ class MyOrderDetailScreen extends StatefulWidget {
   final String address;
   final String customerName;
   final String customerPhone;
+  final String? customerEmail;
   final String publishedAgo;
   final String orderNumber;
   final List<String> workDescription;
@@ -99,23 +109,40 @@ class MyOrderDetailScreen extends StatefulWidget {
   final bool isBlocked;
   final String price;
 
+  /// Был ли уже оставлен отзыв по этому заказу. Источник правды —
+  /// родительский список `OrderMock.reviewLeft`, который передаёт
+  /// актуальное значение сюда; экран локально не хранит статический
+  /// «Set пройденных заказов», чтобы не было расхождения между
+  /// открытием через список и открытием из превью.
+  final bool reviewLeft;
+
+  /// Колбэк «отзыв оставлен». Родитель должен пометить свой
+  /// `OrderMock.reviewLeft = true`, чтобы при следующем открытии
+  /// кнопка «Оставить отзыв» больше не показывалась.
+  final VoidCallback? onReviewLeft;
+
+  /// Колбэк «Выбрать другого исполнителя» на статусе
+  /// `awaitingExecutor`. Родитель должен вызвать
+  /// [MyOrdersStore.pickAnotherFromAwaiting], закрыть текущий экран
+  /// и при отсутствии других откликов — переключиться на вкладку
+  /// «Каталог», а при наличии — открыть список откликнувшихся.
+  final VoidCallback? onPickAnother;
+
   @override
   State<MyOrderDetailScreen> createState() => _MyOrderDetailScreenState();
 }
 
 class _MyOrderDetailScreenState extends State<MyOrderDetailScreen> {
-  static final Set<String> _reviewedOrders = {};
-
   late MyOrderDetailState _state;
   late MyOrderStatus _rejectedStatus;
-  bool _reviewLeft = false;
+  late bool _reviewLeft;
 
   @override
   void initState() {
     super.initState();
     _state = widget.state;
     _rejectedStatus = widget.rejectedStatus;
-    _reviewLeft = _reviewedOrders.contains(widget.orderNumber);
+    _reviewLeft = widget.reviewLeft;
   }
 
   MyOrderStatus get _pillStatus {
@@ -134,9 +161,54 @@ class _MyOrderDetailScreenState extends State<MyOrderDetailScreen> {
     }
   }
 
-  bool get _showPhone =>
-      _state == MyOrderDetailState.confirmed ||
-      _state == MyOrderDetailState.completed;
+  /// Показываем контакты и шапку исполнителя только пока заказ
+  /// активен (executor выбран, но ещё не закрыт). У завершённых
+  /// заказов блок исполнителя не нужен — заказ исторический, звонить
+  /// и писать смысла нет.
+  bool get _showExecutor => _state == MyOrderDetailState.confirmed;
+
+  bool get _showPhone => _showExecutor;
+
+  /// Открывает полную карточку исполнителя из каталога. Режим
+  /// просмотра — без `selectMode`, поэтому кнопка «Выбрать
+  /// исполнителя» там не появится. id-шник у мокового заказа может
+  /// отсутствовать — тогда каталог-экран покажет стандартное
+  /// содержимое по дефолтному id.
+  void _openExecutorProfile() {
+    Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => catalog.OrderDetailScreen(
+          orderId: widget.orderNumber,
+          multipleEquipment: widget.equipment.length > 1,
+        ),
+      ),
+    );
+  }
+
+  /// Открывает экран отзывов исполнителя по тапу «15 отзывов».
+  void _openExecutorReviews() {
+    Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(builder: (_) => const ReviewsScreen()),
+    );
+  }
+
+  /// Открывает системный номеронабиратель с подставленным номером.
+  /// Звонок не запускается автоматически — нужно нажать кнопку вызова
+  /// в приложении телефона. Используется стандартная `tel:`-схема.
+  Future<void> _dialPhone(String phone) async {
+    if (phone.trim().isEmpty) return;
+    final String cleaned = phone.replaceAll(RegExp(r'[^\d+]'), '');
+    final Uri uri = Uri.parse('tel:$cleaned');
+    final bool ok = await launchUrl(uri);
+    if (!ok && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Не удалось открыть приложение телефона'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -176,7 +248,20 @@ class _MyOrderDetailScreenState extends State<MyOrderDetailScreen> {
         ),
       ),
       floatingActionButton: Padding(
-        padding: EdgeInsets.only(bottom: _state == MyOrderDetailState.waitingConfirm ? 148.h : _hasBottomBar ? 88.h : 24.h),
+        padding: EdgeInsets.only(
+          // 148h — две кнопки в waitingChoose; 88h — одна кнопка (в т.ч.
+          // в `waiting`, где «выбирать» некого); 24h — когда нижней
+          // панели вовсе нет.
+          bottom: _state == MyOrderDetailState.waitingConfirm &&
+                  widget.waitingStatus != MyOrderStatus.waiting &&
+                  widget.waitingStatus != MyOrderStatus.awaitingExecutor &&
+                  widget.waitingStatus !=
+                      MyOrderStatus.executorDeclinedWaiting
+              ? 148.h
+              : _hasBottomBar
+                  ? 88.h
+                  : 24.h,
+        ),
         child: AiAssistantFab(onTap: () => context.push('/assistant/chat')),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
@@ -190,15 +275,19 @@ class _MyOrderDetailScreenState extends State<MyOrderDetailScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
                   OrderStatusPill(status: _pillStatus),
-                  SizedBox(height: 12.h),
-                  _CustomerHeader(
-                    name: widget.customerName,
-                    onTap: () {},
-                  ),
+                  if (_showExecutor) ...<Widget>[
+                    SizedBox(height: 12.h),
+                    _CustomerHeader(
+                      name: widget.customerName,
+                      onTap: _openExecutorProfile,
+                      onCall: () => _dialPhone(widget.customerPhone),
+                      onReviewsTap: _openExecutorReviews,
+                    ),
+                  ],
                   if (_showPhone) ...<Widget>[
                     SizedBox(height: 12.h),
                     Text(
-                      'Номер телефона исполнителя',
+                      'Номер телефона',
                       style: TextStyle(
                         fontFamily: 'Roboto',
                         fontSize: 16.sp,
@@ -213,6 +302,26 @@ class _MyOrderDetailScreenState extends State<MyOrderDetailScreen> {
                       style: AppTextStyles.subBody
                           .copyWith(fontWeight: FontWeight.w400),
                     ),
+                    if (widget.customerEmail != null &&
+                        widget.customerEmail!.trim().isNotEmpty) ...<Widget>[
+                      SizedBox(height: 12.h),
+                      Text(
+                        'Электронная почта',
+                        style: TextStyle(
+                          fontFamily: 'Roboto',
+                          fontSize: 16.sp,
+                          fontWeight: FontWeight.w600,
+                          height: 1.3,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                      SizedBox(height: 4.h),
+                      Text(
+                        widget.customerEmail!,
+                        style: AppTextStyles.subBody
+                            .copyWith(fontWeight: FontWeight.w400),
+                      ),
+                    ],
                   ],
                   SizedBox(height: 11.h),
                   Text(
@@ -333,32 +442,48 @@ class _MyOrderDetailScreenState extends State<MyOrderDetailScreen> {
   Widget _buildAction() {
     switch (_state) {
       case MyOrderDetailState.waitingConfirm:
+        final Widget archiveButton = SecondaryButton(
+          label: 'Переместить в архив',
+          onPressed: () => showConfirmDeclineDialog(
+            context,
+            onDecline: () {
+              widget.onDecline?.call();
+              setState(() {
+                _state = MyOrderDetailState.rejected;
+                _rejectedStatus = MyOrderStatus.rejectedDeclined;
+              });
+            },
+          ),
+        );
+        // Если откликов ещё не было (waiting) или выбранный исполнитель
+        // отказался, а других откликов нет (executorDeclinedWaiting) —
+        // выбирать некого, показываем только «Переместить в архив».
+        if (widget.waitingStatus == MyOrderStatus.waiting ||
+            widget.waitingStatus ==
+                MyOrderStatus.executorDeclinedWaiting) {
+          return archiveButton;
+        }
+        // Заказ предложен конкретному исполнителю — кнопка «Выбрать
+        // другого» уводит либо к списку откликнувшихся (если есть
+        // другие), либо в каталог; ветвлением занимается родитель
+        // через [onPickAnother].
         return Column(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
             PrimaryButton(
               label: 'Выбрать другого исполнителя',
               enabled: !widget.isBlocked,
-              onPressed: () => Navigator.of(context).maybePop(),
+              onPressed: widget.waitingStatus ==
+                      MyOrderStatus.awaitingExecutor
+                  ? widget.onPickAnother
+                  : () => Navigator.of(context).maybePop(),
             ),
             SizedBox(height: 8.h),
-            SecondaryButton(
-              label: 'Переместить в архив',
-              onPressed: () => showConfirmDeclineDialog(
-                context,
-                onDecline: () {
-                  widget.onDecline?.call();
-                  setState(() {
-                    _state = MyOrderDetailState.rejected;
-                    _rejectedStatus = MyOrderStatus.rejectedDeclined;
-                  });
-                },
-              ),
-            ),
+            archiveButton,
           ],
         );
       case MyOrderDetailState.confirmed:
-        return PrimaryButton(
+        return SecondaryButton(
           label: 'Переместить в архив',
           onPressed: () => showConfirmRefuseDialog(
             context,
@@ -376,13 +501,13 @@ class _MyOrderDetailScreenState extends State<MyOrderDetailScreen> {
         return PrimaryButton(
           label: 'Оставить отзыв',
           onPressed: () async {
-            await Navigator.of(context).push(
-              MaterialPageRoute<void>(
+            final bool? submitted = await Navigator.of(context).push<bool>(
+              MaterialPageRoute<bool>(
                 builder: (_) => const ReviewScreen(),
               ),
             );
-            if (mounted) {
-              _reviewedOrders.add(widget.orderNumber);
+            if (submitted == true && mounted) {
+              widget.onReviewLeft?.call();
               setState(() => _reviewLeft = true);
             }
           },
@@ -394,10 +519,24 @@ class _MyOrderDetailScreenState extends State<MyOrderDetailScreen> {
 }
 
 class _CustomerHeader extends StatelessWidget {
-  const _CustomerHeader({required this.name, required this.onTap});
+  const _CustomerHeader({
+    required this.name,
+    required this.onTap,
+    this.onCall,
+    this.onReviewsTap,
+  });
 
   final String name;
   final VoidCallback onTap;
+
+  /// Если задан — справа появляется оранжевая кнопка с телефоном.
+  /// Видна только когда есть кого звонить (accepted/completed).
+  final VoidCallback? onCall;
+
+  /// Тап по «15 отзывов» — открывает экран отзывов. Если `null`,
+  /// текст остаётся некликабельным (для состояний, где у исполнителя
+  /// ещё нет профиля-мэтча).
+  final VoidCallback? onReviewsTap;
 
   @override
   Widget build(BuildContext context) {
@@ -418,7 +557,7 @@ class _CustomerHeader extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
                 Text(
-                  name,
+                  name.trim().isEmpty ? CropResult.namePlaceholder : name,
                   style: TextStyle(
                     fontFamily: 'Roboto',
                     fontSize: 16.sp,
@@ -446,15 +585,19 @@ class _CustomerHeader extends StatelessWidget {
                       ),
                     ),
                     SizedBox(width: 16.w),
-                    Text(
-                      '15 отзывов',
-                      style: TextStyle(
-                        fontFamily: 'Roboto',
-                        fontSize: 16.sp,
-                        fontWeight: FontWeight.w400,
-                        height: 1.3,
-                        color: AppColors.textPrimary,
-                        decoration: TextDecoration.underline,
+                    GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: onReviewsTap,
+                      child: Text(
+                        '15 отзывов',
+                        style: TextStyle(
+                          fontFamily: 'Roboto',
+                          fontSize: 16.sp,
+                          fontWeight: FontWeight.w400,
+                          height: 1.3,
+                          color: AppColors.textPrimary,
+                          decoration: TextDecoration.underline,
+                        ),
                       ),
                     ),
                   ],
@@ -462,6 +605,25 @@ class _CustomerHeader extends StatelessWidget {
               ],
             ),
           ),
+          if (onCall != null) ...<Widget>[
+            SizedBox(width: 8.w),
+            GestureDetector(
+              onTap: onCall,
+              child: Container(
+                width: 40.r,
+                height: 40.r,
+                decoration: BoxDecoration(
+                  color: AppColors.primary,
+                  borderRadius: BorderRadius.circular(10.r),
+                ),
+                child: Icon(
+                  Icons.phone,
+                  color: Colors.white,
+                  size: 22.r,
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );

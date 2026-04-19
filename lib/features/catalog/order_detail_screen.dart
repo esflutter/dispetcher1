@@ -11,6 +11,7 @@ import 'package:dispatcher_1/features/catalog/catalog_service_detail_screen.dart
 import 'package:dispatcher_1/features/catalog/select_order_for_executor_screen.dart';
 import 'package:dispatcher_1/features/catalog/widgets/catalog_search_bar.dart';
 import 'package:dispatcher_1/features/orders/create_order_screen.dart';
+import 'package:dispatcher_1/features/orders/orders_store.dart';
 import 'package:dispatcher_1/features/profile/account_block.dart';
 
 /// Карточка исполнителя (детали). По Figma — заголовок исполнителя сверху,
@@ -21,11 +22,22 @@ class OrderDetailScreen extends StatefulWidget {
     required this.orderId,
     this.multipleEquipment = false,
     this.price = '80 000 – 100 000 ₽',
+    this.selectMode = false,
+    this.onSelectExecutor,
   });
 
   final String orderId;
   final bool multipleEquipment;
   final String price;
+
+  /// Режим «выбор исполнителя из откликнувшихся». При `true` нижняя
+  /// кнопка меняет смысл: вместо «Предложить заказ» — «Выбрать
+  /// исполнителя», и по нажатию вызывается [onSelectExecutor].
+  final bool selectMode;
+
+  /// Колбэк при нажатии на «Выбрать исполнителя» (только при
+  /// [selectMode] `== true`).
+  final VoidCallback? onSelectExecutor;
 
   @override
   State<OrderDetailScreen> createState() => _OrderDetailScreenState();
@@ -66,7 +78,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
       : const <String>['Экскаватор', 'Автокран', 'Манипулятор', 'Погрузчик', 'Автовышка'];
 
   Future<void> _onRespondTap() async {
-    if (CustomerOrdersStub.orders.isEmpty) {
+    if (MyOrdersStore.offerable.isEmpty) {
       await showDialog<void>(
         context: context,
         barrierColor: Colors.black.withValues(alpha: 0.35),
@@ -107,6 +119,11 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
           minOrderHours: minOrderHours,
           machinery: machinery,
           categories: categories,
+          // Пробрасываем selectMode/колбэк — если карточку исполнителя
+          // открыли из потока «Выбрать исполнителя», то на экране
+          // услуги тоже должна быть «Выбрать исполнителя».
+          selectMode: widget.selectMode,
+          onSelectExecutor: widget.onSelectExecutor,
         ),
       ),
     );
@@ -169,9 +186,12 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                 16.w,
                 16.h,
                 16.w,
-                _alreadyOffered
-                    ? 16.h + MediaQuery.of(context).padding.bottom
-                    : 0,
+                // Нижний отступ: если кнопки нет — сами добавляем safe-area,
+                // если кнопка есть — оставляем 16.h, чтобы последняя
+                // карточка услуги не прилипала к кнопке.
+                (widget.selectMode || !_alreadyOffered)
+                    ? 16.h
+                    : 16.h + MediaQuery.of(context).padding.bottom,
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -211,91 +231,82 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                       const _AvailabilitySection(),
                       SizedBox(height: 16.h),
                       _SectionTitle('Услуги'),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: <Widget>[
-                          _ServiceItem(
-                            topPadding: 8.h,
-                            equipment: 'Экскаватор',
+                      SizedBox(height: 8.h),
+                      _ServiceTile(
+                        child: _ServiceItem(
+                          equipment: 'Экскаватор',
+                          title: 'Экскаватор для копки траншеи',
+                          description:
+                              'Экскаватор для земляных работ. Копка траншей, разработка котлованов, выравнивание участка. Работаю аккуратно, соблюдаю сроки. Возможен выезд в ближайшие районы.',
+                          priceHour: '1 000 ₽',
+                          priceDay: '14 000 ₽',
+                          onTap: () => _openServiceDetail(
+                            context,
                             title: 'Экскаватор для копки траншеи',
                             description:
                                 'Экскаватор для земляных работ. Копка траншей, разработка котлованов, выравнивание участка. Работаю аккуратно, соблюдаю сроки. Возможен выезд в ближайшие районы.',
                             priceHour: '1 000 ₽',
                             priceDay: '14 000 ₽',
-                            onTap: () => _openServiceDetail(
-                              context,
-                              title: 'Экскаватор для копки траншеи',
-                              description:
-                                  'Экскаватор для земляных работ. Копка траншей, разработка котлованов, выравнивание участка. Работаю аккуратно, соблюдаю сроки. Возможен выезд в ближайшие районы.',
-                              priceHour: '1 000 ₽',
-                              priceDay: '14 000 ₽',
-                              minOrderHours: 4,
-                              machinery: const <String>['Экскаватор'],
-                              categories: const <String>[
-                                'Земляные работы',
-                                'Погрузочно-разгрузочные работы',
-                              ],
-                            ),
+                            minOrderHours: 4,
+                            machinery: const <String>['Экскаватор'],
+                            categories: const <String>[
+                              'Земляные работы',
+                              'Погрузочно-разгрузочные работы',
+                            ],
                           ),
-                          Divider(
-                            height: 1,
-                            thickness: 1,
-                            color:
-                                AppColors.primary.withValues(alpha: 0.3),
-                          ),
-                          _ServiceItem(
-                            equipment: 'Самосвал',
+                        ),
+                      ),
+                      SizedBox(height: 16.h),
+                      _ServiceTile(
+                        child: _ServiceItem(
+                          equipment: 'Самосвал',
+                          title: 'Самосвал для вывоза грунта',
+                          description:
+                              'Вывоз грунта, мусора и сыпучих материалов. Работаю быстро, без задержек. Возможен выезд в ближайшие районы.',
+                          priceHour: '1 500 ₽',
+                          priceDay: '18 000 ₽',
+                          onTap: () => _openServiceDetail(
+                            context,
                             title: 'Самосвал для вывоза грунта',
                             description:
                                 'Вывоз грунта, мусора и сыпучих материалов. Работаю быстро, без задержек. Возможен выезд в ближайшие районы.',
                             priceHour: '1 500 ₽',
                             priceDay: '18 000 ₽',
-                            onTap: () => _openServiceDetail(
-                              context,
-                              title: 'Самосвал для вывоза грунта',
-                              description:
-                                  'Вывоз грунта, мусора и сыпучих материалов. Работаю быстро, без задержек. Возможен выезд в ближайшие районы.',
-                              priceHour: '1 500 ₽',
-                              priceDay: '18 000 ₽',
-                              minOrderHours: 3,
-                              machinery: const <String>['Самосвал'],
-                              categories: const <String>[
-                                'Погрузочно-разгрузочные работы',
-                              ],
-                            ),
+                            minOrderHours: 3,
+                            machinery: const <String>['Самосвал'],
+                            categories: const <String>[
+                              'Погрузочно-разгрузочные работы',
+                            ],
                           ),
-                          Divider(
-                            height: 1,
-                            thickness: 1,
-                            color:
-                                AppColors.primary.withValues(alpha: 0.3),
-                          ),
-                          _ServiceItem(
-                            equipment: 'Автовышка',
+                        ),
+                      ),
+                      SizedBox(height: 16.h),
+                      _ServiceTile(
+                        child: _ServiceItem(
+                          equipment: 'Автовышка',
+                          title: 'Работы на высоте',
+                          description:
+                              'Работы на высоте: монтаж, обслуживание, обрезка деревьев. Техника исправна, работаю аккуратно.',
+                          priceHour: '2 000 ₽',
+                          priceDay: '20 000 ₽',
+                          onTap: () => _openServiceDetail(
+                            context,
                             title: 'Работы на высоте',
                             description:
                                 'Работы на высоте: монтаж, обслуживание, обрезка деревьев. Техника исправна, работаю аккуратно.',
                             priceHour: '2 000 ₽',
                             priceDay: '20 000 ₽',
-                            onTap: () => _openServiceDetail(
-                              context,
-                              title: 'Работы на высоте',
-                              description:
-                                  'Работы на высоте: монтаж, обслуживание, обрезка деревьев. Техника исправна, работаю аккуратно.',
-                              priceHour: '2 000 ₽',
-                              priceDay: '20 000 ₽',
-                              minOrderHours: 2,
-                              machinery: const <String>['Автовышка'],
-                              categories: const <String>['Высотные работы'],
-                            ),
+                            minOrderHours: 2,
+                            machinery: const <String>['Автовышка'],
+                            categories: const <String>['Высотные работы'],
                           ),
-                        ],
+                        ),
                       ),
                     ],
                   ),
                 ),
               ),
-          if (!_alreadyOffered)
+          if (widget.selectMode || !_alreadyOffered)
             Container(
               decoration: BoxDecoration(
                 color: AppColors.background,
@@ -313,9 +324,13 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                   16.w,
                   16.h + MediaQuery.of(context).padding.bottom),
               child: PrimaryButton(
-                label: 'Предложить заказ',
-                enabled: !AccountBlock.isBlocked,
-                onPressed: AccountBlock.isBlocked ? null : _onRespondTap,
+                label: widget.selectMode
+                    ? 'Выбрать исполнителя'
+                    : 'Предложить заказ',
+                enabled: widget.selectMode || !AccountBlock.isBlocked,
+                onPressed: widget.selectMode
+                    ? widget.onSelectExecutor
+                    : (AccountBlock.isBlocked ? null : _onRespondTap),
               ),
             ),
         ],
@@ -682,6 +697,28 @@ class _DayCell extends StatelessWidget {
   }
 }
 
+/// Контейнер-обёртка вокруг [_ServiceItem] с мягкой оранжевой заливкой
+/// (`AppColors.fieldFill`). Объединяет карточки услуг в отдельные блоки
+/// с закруглёнными углами — так же, как и карточки исполнителей
+/// в [SelectExecutorScreen].
+class _ServiceTile extends StatelessWidget {
+  const _ServiceTile({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.fieldFill,
+        borderRadius: BorderRadius.circular(14.r),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: child,
+    );
+  }
+}
+
 /// Карточка услуги в блоке «Услуги». Стиль — как в `ServiceCard`
 /// приложения исполнителя на экране «Мои услуги»: без заливки, тэг
 /// техники → заголовок → описание → цены.
@@ -692,7 +729,6 @@ class _ServiceItem extends StatelessWidget {
     this.equipment,
     this.priceHour,
     this.priceDay,
-    this.topPadding,
     this.onTap,
   });
   final String title;
@@ -700,7 +736,6 @@ class _ServiceItem extends StatelessWidget {
   final String? equipment;
   final String? priceHour;
   final String? priceDay;
-  final double? topPadding;
   final VoidCallback? onTap;
 
   bool get _hasHour => priceHour != null && priceHour!.isNotEmpty;
@@ -720,7 +755,7 @@ class _ServiceItem extends StatelessWidget {
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
       child: Padding(
-      padding: EdgeInsets.only(top: topPadding ?? 12.h, bottom: 12.h),
+      padding: EdgeInsets.all(16.r),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
