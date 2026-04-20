@@ -358,7 +358,7 @@ class _HeaderRow extends StatefulWidget {
 
 class _HeaderRowState extends State<_HeaderRow> {
   Future<void> _openCrop() async {
-    final String? imagePath = await pickImageFromGallery();
+    final String? imagePath = await pickImageFromGallery(context: context);
     if (imagePath == null || !mounted) return;
     final result = await Navigator.of(context).push<CropResult>(
       MaterialPageRoute(

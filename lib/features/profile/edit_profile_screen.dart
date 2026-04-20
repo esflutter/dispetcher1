@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:dispatcher_1/core/auth/auth_reset.dart';
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_spacing.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
@@ -171,6 +172,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                 onTap: () async {
                   final confirmed = await showLogoutAlert(context);
                   if (confirmed == true && context.mounted) {
+                    resetForLogout();
                     context.go('/auth/phone');
                   }
                 },
@@ -184,6 +186,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                 onTap: () async {
                   final confirmed = await showDeleteAccountAlert(context);
                   if (confirmed == true && context.mounted) {
+                    resetForLogout();
                     context.go('/auth/phone');
                   }
                 },
@@ -204,7 +207,7 @@ class _PhotoPicker extends StatefulWidget {
 
 class _PhotoPickerState extends State<_PhotoPicker> {
   Future<void> _openCrop() async {
-    final String? imagePath = await pickImageFromGallery();
+    final String? imagePath = await pickImageFromGallery(context: context);
     if (imagePath == null || !mounted) return;
     final result = await Navigator.of(context).push<CropResult>(
       MaterialPageRoute(

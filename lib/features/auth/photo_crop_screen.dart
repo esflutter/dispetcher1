@@ -47,6 +47,17 @@ class CropResult {
   /// Задан ли email у пользователя. Использовать вместо ручной
   /// проверки на пустоту в разных местах экрана.
   static bool get hasEmail => userEmail.trim().isNotEmpty;
+
+  /// Полный сброс данных профиля — для logout / удаления аккаунта.
+  /// Возвращает статические поля к значениям «как при первом запуске»,
+  /// чтобы на устройстве, где потом зарегистрируется другой человек,
+  /// не осталось предыдущих имени/email/аватара.
+  static void clearAuthData() {
+    saved = null;
+    userName = 'Александр Иванов';
+    userPhone = '+7 999 123-45-67';
+    userEmail = '';
+  }
 }
 
 class PhotoCropScreen extends StatefulWidget {

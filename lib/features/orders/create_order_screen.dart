@@ -285,7 +285,7 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
     final int remaining = 8 - _photos.length;
     if (remaining <= 0) return;
     final List<String> picked =
-        await pickMultipleImagesFromGallery(limit: remaining);
+        await pickMultipleImagesFromGallery(limit: remaining, context: context);
     if (picked.isEmpty || !mounted) return;
     final List<String> kept =
         picked.length > remaining ? picked.sublist(0, remaining) : picked;

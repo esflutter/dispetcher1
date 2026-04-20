@@ -161,6 +161,17 @@ class ExecutorCardData {
   static String? experience;
   static String? status;
   static String? about;
+
+  /// Сбросить все поля карточки — для logout.
+  static void clear() {
+    location = null;
+    radius = null;
+    machinery = <String>[];
+    categories = <String>[];
+    experience = null;
+    status = null;
+    about = null;
+  }
 }
 
 class _FilledCard extends StatelessWidget {

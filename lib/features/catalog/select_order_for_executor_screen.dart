@@ -24,6 +24,13 @@ class OfferSubmissions {
   static void mark(String executorOrderId) {
     if (_offered.add(executorOrderId)) revision.value++;
   }
+
+  /// Полный сброс истории предложенных заказов — для logout.
+  static void clear() {
+    if (_offered.isEmpty) return;
+    _offered.clear();
+    revision.value++;
+  }
 }
 
 /// Экран «Выбор заказа для исполнителя».

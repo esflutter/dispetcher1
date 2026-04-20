@@ -41,7 +41,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   bool get _isValid => _firstNameController.text.trim().isNotEmpty && _agreed;
 
   Future<void> _openPhotoSheet() async {
-    final String? imagePath = await pickImageFromGallery();
+    final String? imagePath = await pickImageFromGallery(context: context);
     if (imagePath == null || !mounted) return;
     final result = await Navigator.of(context).push<CropResult>(
       MaterialPageRoute(
@@ -102,7 +102,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                 color: AppColors.background,
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.04),
+                    color: Colors.black.withValues(alpha: 0.04),
                     offset: const Offset(0, -4),
                     blurRadius: 16,
                   ),
@@ -167,11 +167,18 @@ class _AvatarSlot extends StatelessWidget {
                         child: Transform(
                           // Матрица трансформации для идеального маппинга кружка кропа в миниатюру
                           transform: Matrix4.identity()
-                            ..translate(
+                            ..translateByDouble(
                               56.w - cropResult!.center.dx * (56.w / cropResult!.radius),
                               56.w - cropResult!.center.dy * (56.w / cropResult!.radius),
+                              0,
+                              0,
                             )
-                            ..scale(56.w / cropResult!.radius),
+                            ..scaleByDouble(
+                              56.w / cropResult!.radius,
+                              56.w / cropResult!.radius,
+                              56.w / cropResult!.radius,
+                              1,
+                            ),
                           child: SizedBox(
                             width: cropResult!.screenSize.width,
                             height: cropResult!.screenSize.height,
