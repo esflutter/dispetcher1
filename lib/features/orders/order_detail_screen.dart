@@ -71,7 +71,6 @@ class MyOrderDetailScreen extends StatefulWidget {
     this.onRefuse,
     this.onConfirm,
     this.isBlocked = false,
-    this.price = '80 000 – 100 000 ₽',
     this.reviewLeft = false,
     this.onReviewLeft,
     this.onPickAnother,
@@ -121,7 +120,6 @@ class MyOrderDetailScreen extends StatefulWidget {
   final VoidCallback? onConfirm;
 
   final bool isBlocked;
-  final String price;
 
   /// Был ли уже оставлен отзыв по этому заказу. Источник правды —
   /// родительский список `OrderMock.reviewLeft`, который передаёт
@@ -420,16 +418,6 @@ class _MyOrderDetailScreenState extends State<MyOrderDetailScreen> {
                           ),
                       ],
                     ),
-                  ),
-                  _Section(
-                    title: 'Стоимость',
-                    child: Text(widget.price,
-                        style: TextStyle(
-                          fontFamily: 'Roboto',
-                          fontSize: 16.sp,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.primary,
-                        )),
                   ),
                   if (widget.photos.isNotEmpty)
                     _Section(

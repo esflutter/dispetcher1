@@ -23,7 +23,6 @@ class MyOrderCard extends StatelessWidget {
     this.customerPhone,
     this.customerEmail,
     this.customerAvatar,
-    this.price = '80 000 – 100 000 ₽',
     this.onTap,
     this.onContact,
   });
@@ -38,7 +37,6 @@ class MyOrderCard extends StatelessWidget {
   final String rentDate;
   final String address;
   final String publishedAgo;
-  final String price;
   final String? customerName;
   final String? customerPhone;
   final String? customerEmail;
@@ -104,14 +102,6 @@ class MyOrderCard extends StatelessWidget {
               value: address,
               valueUnderlined: true,
             ),
-            SizedBox(height: 8.h),
-            Text(price,
-                style: TextStyle(
-                  fontFamily: 'Roboto',
-                  fontSize: 15.sp,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.primary,
-                )),
             if (_showCustomerRow) ...<Widget>[
               SizedBox(height: 12.h),
               _CustomerRow(

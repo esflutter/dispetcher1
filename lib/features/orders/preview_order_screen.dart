@@ -22,7 +22,6 @@ class OrderDraft {
     required this.number,
     required this.title,
     required this.description,
-    required this.budget,
     required this.rentDate,
     required this.address,
     required this.machinery,
@@ -37,10 +36,6 @@ class OrderDraft {
 
   /// Текст описания. Может быть пустым — тогда блок не показывается.
   final String description;
-
-  /// Отформатированная стоимость: «от 10 000 ₽», «до 50 000 ₽»,
-  /// «10 000 – 50 000 ₽» либо пустая строка.
-  final String budget;
 
   /// Готовая строка «15 июня · 09:00–18:00».
   final String rentDate;
@@ -61,8 +56,8 @@ class OrderDraft {
 /// Редактировать»), и при просмотре уже опубликованного заказа
 /// (`status != null`, набор кнопок зависит от статуса).
 ///
-/// Необязательные блоки (Описание, Стоимость, Характер работ, Фото)
-/// показываются, только если заполнены.
+/// Необязательные блоки (Описание, Характер работ, Фото) показываются,
+/// только если заполнены.
 class CreateOrderPreviewScreen extends StatelessWidget {
   const CreateOrderPreviewScreen({
     super.key,
@@ -114,8 +109,8 @@ class CreateOrderPreviewScreen extends StatelessWidget {
 
     // Порядок секций совпадает со стандартной карточкой заказа
     // (MyOrderDetailScreen): Дата → Адрес → Описание → Спецтехника →
-    // Категория → Характер работ → Стоимость → Фото. Описание и фото
-    // опциональные — показываются только если заполнены.
+    // Категория → Характер работ → Фото. Описание и фото опциональные —
+    // показываются только если заполнены.
     addSection(
       'Дата и время аренды',
       Text(
@@ -170,19 +165,6 @@ class CreateOrderPreviewScreen extends StatelessWidget {
                 ),
               ),
           ],
-        ),
-      );
-    }
-
-    if (draft.budget.trim().isNotEmpty) {
-      addSection(
-        'Стоимость',
-        Text(
-          draft.budget,
-          style: AppTextStyles.bodyMMedium.copyWith(
-            color: AppColors.primary,
-            fontWeight: FontWeight.w700,
-          ),
         ),
       );
     }

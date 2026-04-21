@@ -7,7 +7,6 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
 import 'package:dispatcher_1/core/utils/photo_source.dart';
-import 'package:dispatcher_1/core/utils/thousand_separator_formatter.dart';
 import 'package:dispatcher_1/core/widgets/primary_button.dart';
 import 'package:dispatcher_1/features/catalog/catalog_filter_screen.dart';
 import 'package:dispatcher_1/features/orders/orders_store.dart';
@@ -175,13 +174,10 @@ class _WorkItem {
 class _CreateOrderScreenState extends State<CreateOrderScreen> {
   final TextEditingController _titleCtrl = TextEditingController();
   final TextEditingController _descCtrl = TextEditingController();
-  final TextEditingController _budgetFromCtrl = TextEditingController();
-  final TextEditingController _budgetToCtrl = TextEditingController();
 
   DateTime? _dateFrom;
   DateTime? _dateTo;
   bool _exactDate = false;
-  bool _exactBudget = false;
   String? _openDatePicker;
   TimeOfDay? _timeFrom;
   TimeOfDay? _timeTo;
@@ -230,8 +226,6 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
     super.initState();
     _titleCtrl.addListener(_onFieldChanged);
     _descCtrl.addListener(_onFieldChanged);
-    _budgetFromCtrl.addListener(_onFieldChanged);
-    _budgetToCtrl.addListener(_onFieldChanged);
     for (final _WorkItem w in _works) {
       _attachWorkListeners(w);
     }
@@ -251,12 +245,8 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
   void dispose() {
     _titleCtrl.removeListener(_onFieldChanged);
     _descCtrl.removeListener(_onFieldChanged);
-    _budgetFromCtrl.removeListener(_onFieldChanged);
-    _budgetToCtrl.removeListener(_onFieldChanged);
     _titleCtrl.dispose();
     _descCtrl.dispose();
-    _budgetFromCtrl.dispose();
-    _budgetToCtrl.dispose();
     for (final _WorkItem w in _works) {
       w.dispose();
     }
@@ -361,10 +351,6 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
       _dateFrom != null &&
       (_exactDate || _dateTo != null) &&
       (_wholeDay || (_timeFrom != null && _timeTo != null)) &&
-      (_exactBudget
-          ? _budgetFromCtrl.text.trim().isNotEmpty
-          : (_budgetFromCtrl.text.trim().isNotEmpty ||
-              _budgetToCtrl.text.trim().isNotEmpty)) &&
       _address != null;
 
   Future<void> _onCreateTap() async {
@@ -399,7 +385,6 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
       number: '№${n.toString().padLeft(6, '0')}',
       title: _titleCtrl.text.trim(),
       description: _descCtrl.text.trim(),
-      budget: _formatBudget(),
       rentDate: _formatRentDateTime(),
       address: _address ?? '',
       machinery: _selMach.toList(),
@@ -414,16 +399,6 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
     );
   }
 
-  String _formatBudget() {
-    final String from = _budgetFromCtrl.text.trim();
-    final String to = _budgetToCtrl.text.trim();
-    if (_exactBudget) return from.isEmpty ? '' : '$from ₽';
-    if (from.isEmpty && to.isEmpty) return '';
-    if (from.isNotEmpty && to.isNotEmpty) return '$from – $to ₽';
-    if (from.isNotEmpty) return 'От $from ₽';
-    return 'До $to ₽';
-  }
-
   /// Преобразует черновик в карточку для списка «Мои заказы».
   OrderMock _buildOrderMock(OrderDraft draft) {
     return OrderMock(
@@ -435,7 +410,6 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
       address: draft.address,
       publishedAgo: 'Только что',
       publishedAt: DateTime.now(),
-      price: draft.budget.isEmpty ? null : draft.budget,
       number: draft.number,
       description: draft.description,
       categories: draft.categories,
@@ -497,51 +471,6 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
                     minLines: 2,
                     maxLines: null,
                     maxLength: 500,
-                  ),
-                  SizedBox(height: 16.h),
-                  _SectionTitle('Стоимость'),
-                  SizedBox(height: 8.h),
-                  Row(
-                    children: <Widget>[
-                      Expanded(
-                        child: _TintField(
-                          controller: _budgetFromCtrl,
-                          hint: _exactBudget ? 'Цена' : 'От',
-                          prefix: _exactBudget ? null : 'От ',
-                          suffix: ' ₽',
-                          keyboardType: TextInputType.number,
-                          maxLength: 9,
-                          thousandSeparator: true,
-                        ),
-                      ),
-                      SizedBox(width: 12.w),
-                      Expanded(
-                        child: IgnorePointer(
-                          ignoring: _exactBudget,
-                          child: Opacity(
-                            opacity: _exactBudget ? 0.5 : 1.0,
-                            child: _TintField(
-                              controller: _budgetToCtrl,
-                              hint: 'До',
-                              prefix: 'До ',
-                              suffix: ' ₽',
-                              keyboardType: TextInputType.number,
-                              maxLength: 9,
-                              thousandSeparator: true,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  SizedBox(height: 8.h),
-                  CheckRow(
-                    label: 'Точная стоимость',
-                    value: _exactBudget,
-                    onChanged: (bool v) => setState(() {
-                      _exactBudget = v;
-                      if (v) _budgetToCtrl.clear();
-                    }),
                   ),
                   SizedBox(height: 16.h),
                   _SectionTitle('Дата аренды'),
@@ -924,9 +853,6 @@ class _TintField extends StatelessWidget {
     this.maxLines = 1,
     this.keyboardType,
     this.maxLength,
-    this.suffix,
-    this.prefix,
-    this.thousandSeparator = false,
     this.fontSize,
     this.height,
   });
@@ -936,9 +862,6 @@ class _TintField extends StatelessWidget {
   final int? maxLines;
   final TextInputType? keyboardType;
   final int? maxLength;
-  final String? suffix;
-  final String? prefix;
-  final bool thousandSeparator;
   final double? fontSize;
   final double? height;
 
@@ -946,84 +869,8 @@ class _TintField extends StatelessWidget {
       ? AppTextStyles.body
       : AppTextStyles.body.copyWith(fontSize: fontSize);
 
-  List<TextInputFormatter>? _buildFormatters() {
-    if (thousandSeparator) {
-      return <TextInputFormatter>[
-        ThousandSeparatorFormatter(maxDigits: maxLength ?? 9),
-      ];
-    }
-    final List<TextInputFormatter> fs = <TextInputFormatter>[];
-    if (maxLength != null) fs.add(LengthLimitingTextInputFormatter(maxLength));
-    return fs.isEmpty ? null : fs;
-  }
-
   @override
   Widget build(BuildContext context) {
-    final bool hasAffixDef = suffix != null || prefix != null;
-
-    if (hasAffixDef) {
-      final bool hasText = controller.text.isNotEmpty;
-      double prefixWidth = 0;
-      if (hasText && prefix != null) {
-        final TextPainter tp = TextPainter(
-          text: TextSpan(text: prefix, style: _textStyle),
-          textDirection: TextDirection.ltr,
-        )..layout();
-        prefixWidth = tp.width;
-      }
-      return Stack(
-        children: <Widget>[
-          TextField(
-            controller: controller,
-            keyboardType: keyboardType,
-            inputFormatters: _buildFormatters(),
-            style: hasText
-                ? _textStyle.copyWith(color: Colors.transparent)
-                : _textStyle,
-            decoration: InputDecoration(
-              hintText: hasText ? null : hint,
-              hintStyle:
-                  _textStyle.copyWith(color: AppColors.textTertiary),
-              filled: true,
-              fillColor: AppColors.fieldFill,
-              contentPadding: EdgeInsets.fromLTRB(
-                16.w + prefixWidth,
-                12.h,
-                16.w,
-                12.h,
-              ),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12.r),
-                borderSide: BorderSide.none,
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12.r),
-                borderSide: BorderSide.none,
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12.r),
-                borderSide: const BorderSide(color: AppColors.primary),
-              ),
-            ),
-          ),
-          if (hasText)
-            Positioned.fill(
-              child: IgnorePointer(
-                child: Container(
-                  padding:
-                      EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    '${prefix ?? ''}${controller.text}${suffix ?? ''}',
-                    style: _textStyle,
-                  ),
-                ),
-              ),
-            ),
-        ],
-      );
-    }
-
     double? verticalPad;
     if (height != null) {
       final double lineHeight = (fontSize ?? 16) * 1.4;

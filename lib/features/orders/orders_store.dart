@@ -15,7 +15,6 @@ class OrderMock {
     required this.address,
     required this.publishedAgo,
     required this.publishedAt,
-    this.price,
     this.customerName,
     this.customerPhone,
     this.customerEmail,
@@ -43,10 +42,6 @@ class OrderMock {
   /// перерисовку.
   final DateTime publishedAt;
 
-  /// Отформатированная стоимость, например «80 000 – 100 000 ₽»,
-  /// «От 80 000 ₽» или «50 000 ₽» для точной цены. Если null — берётся
-  /// дефолтное значение из [MyOrderCard].
-  final String? price;
   final String? customerName;
   final String? customerPhone;
 
@@ -103,7 +98,6 @@ class OrderMock {
       address: address,
       publishedAgo: publishedAgo,
       publishedAt: publishedAt,
-      price: price,
       // [clearContacts] принудительно обнуляет контактные поля,
       // независимо от того, что передали в customerName/phone/email.
       // Нужен, когда заказ возвращается в «Откликов пока нет» — чтобы
