@@ -127,7 +127,7 @@ class _CatalogServiceDetailScreenState
       backgroundColor: AppColors.background,
       appBar: const DarkSubAppBar(title: 'Детали услуги'),
       floatingActionButton: Padding(
-        padding: EdgeInsets.only(bottom: _alreadyOffered ? 24.h : 88.h),
+        padding: EdgeInsets.only(bottom: 88.h),
         child: AiAssistantFab(onTap: () => context.push('/assistant/chat')),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
@@ -135,14 +135,7 @@ class _CatalogServiceDetailScreenState
         children: <Widget>[
           Expanded(
             child: SingleChildScrollView(
-              padding: EdgeInsets.fromLTRB(
-                16.w,
-                16.h,
-                16.w,
-                _alreadyOffered
-                    ? 16.h + MediaQuery.of(context).padding.bottom
-                    : 0,
-              ),
+              padding: EdgeInsets.fromLTRB(16.w, 16.h, 16.w, 0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
@@ -217,33 +210,35 @@ class _CatalogServiceDetailScreenState
               ),
             ),
           ),
-          if (!_alreadyOffered)
-            Container(
-              decoration: BoxDecoration(
-                color: AppColors.background,
-                boxShadow: <BoxShadow>[
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.08),
-                    blurRadius: 8,
-                    offset: const Offset(0, -2),
-                  ),
-                ],
-              ),
-              padding: EdgeInsets.fromLTRB(
-                16.w,
-                12.h,
-                16.w,
-                16.h + MediaQuery.of(context).padding.bottom,
-              ),
-              child: PrimaryButton(
-                label: widget.selectMode
-                    ? 'Выбрать исполнителя'
-                    : 'Предложить заказ',
-                onPressed: widget.selectMode
-                    ? widget.onSelectExecutor
-                    : _onRespondTap,
-              ),
+          Container(
+            decoration: BoxDecoration(
+              color: AppColors.background,
+              boxShadow: <BoxShadow>[
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.08),
+                  blurRadius: 8,
+                  offset: const Offset(0, -2),
+                ),
+              ],
             ),
+            padding: EdgeInsets.fromLTRB(
+              16.w,
+              12.h,
+              16.w,
+              16.h + MediaQuery.of(context).padding.bottom,
+            ),
+            child: PrimaryButton(
+              label: widget.selectMode
+                  ? 'Выбрать исполнителя'
+                  : (_alreadyOffered
+                      ? 'Предложение уже отправлено'
+                      : 'Предложить заказ'),
+              enabled: widget.selectMode || !_alreadyOffered,
+              onPressed: widget.selectMode
+                  ? widget.onSelectExecutor
+                  : (_alreadyOffered ? null : _onRespondTap),
+            ),
+          ),
         ],
       ),
     );

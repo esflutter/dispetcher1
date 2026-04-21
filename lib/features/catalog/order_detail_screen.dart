@@ -188,7 +188,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
         actions: const <Widget>[],
       ),
       floatingActionButton: Padding(
-        padding: EdgeInsets.only(bottom: _alreadyOffered ? 24.h : 88.h),
+        padding: EdgeInsets.only(bottom: 88.h),
         child: AiAssistantFab(
           onTap: () => context.push('/assistant/chat'),
         ),
@@ -198,17 +198,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
         children: <Widget>[
           Expanded(
             child: SingleChildScrollView(
-              padding: EdgeInsets.fromLTRB(
-                16.w,
-                16.h,
-                16.w,
-                // Нижний отступ: если кнопки нет — сами добавляем safe-area,
-                // если кнопка есть — оставляем 16.h, чтобы последняя
-                // карточка услуги не прилипала к кнопке.
-                (widget.selectMode || !_alreadyOffered)
-                    ? 16.h
-                    : 16.h + MediaQuery.of(context).padding.bottom,
-              ),
+              padding: EdgeInsets.fromLTRB(16.w, 16.h, 16.w, 16.h),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
@@ -330,33 +320,37 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                   ),
                 ),
               ),
-          if (widget.selectMode || !_alreadyOffered)
-            Container(
-              decoration: BoxDecoration(
-                color: AppColors.background,
-                boxShadow: <BoxShadow>[
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.08),
-                    blurRadius: 8,
-                    offset: const Offset(0, -2),
-                  ),
-                ],
-              ),
-              padding: EdgeInsets.fromLTRB(
-                  16.w,
-                  12.h,
-                  16.w,
-                  16.h + MediaQuery.of(context).padding.bottom),
-              child: PrimaryButton(
-                label: widget.selectMode
-                    ? 'Выбрать исполнителя'
-                    : 'Предложить заказ',
-                enabled: widget.selectMode || !AccountBlock.isBlocked,
-                onPressed: widget.selectMode
-                    ? widget.onSelectExecutor
-                    : (AccountBlock.isBlocked ? null : _onRespondTap),
-              ),
+          Container(
+            decoration: BoxDecoration(
+              color: AppColors.background,
+              boxShadow: <BoxShadow>[
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.08),
+                  blurRadius: 8,
+                  offset: const Offset(0, -2),
+                ),
+              ],
             ),
+            padding: EdgeInsets.fromLTRB(
+                16.w,
+                12.h,
+                16.w,
+                16.h + MediaQuery.of(context).padding.bottom),
+            child: PrimaryButton(
+              label: widget.selectMode
+                  ? 'Выбрать исполнителя'
+                  : (_alreadyOffered
+                      ? 'Предложение уже отправлено'
+                      : 'Предложить заказ'),
+              enabled: widget.selectMode ||
+                  (!AccountBlock.isBlocked && !_alreadyOffered),
+              onPressed: widget.selectMode
+                  ? widget.onSelectExecutor
+                  : ((AccountBlock.isBlocked || _alreadyOffered)
+                      ? null
+                      : _onRespondTap),
+            ),
+          ),
         ],
       ),
     );
