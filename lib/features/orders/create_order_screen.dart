@@ -224,8 +224,9 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
   @override
   void initState() {
     super.initState();
-    _titleCtrl.addListener(_onFieldChanged);
-    _descCtrl.addListener(_onFieldChanged);
+    // Поля _titleCtrl/_descCtrl отдельный listener не получают — кнопка
+    // «Создать» подписана на них через ListenableBuilder; остальная
+    // форма от их ввода не зависит.
     for (final _WorkItem w in _works) {
       _attachWorkListeners(w);
     }
@@ -243,8 +244,6 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
 
   @override
   void dispose() {
-    _titleCtrl.removeListener(_onFieldChanged);
-    _descCtrl.removeListener(_onFieldChanged);
     _titleCtrl.dispose();
     _descCtrl.dispose();
     for (final _WorkItem w in _works) {
@@ -804,10 +803,14 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: <Widget>[
-                PrimaryButton(
-                  label: 'Создать',
-                  enabled: _canCreate,
-                  onPressed: _canCreate ? _onCreateTap : null,
+                ListenableBuilder(
+                  listenable:
+                      Listenable.merge(<Listenable>[_titleCtrl, _descCtrl]),
+                  builder: (_, _) => PrimaryButton(
+                    label: 'Создать',
+                    enabled: _canCreate,
+                    onPressed: _canCreate ? _onCreateTap : null,
+                  ),
                 ),
                 SizedBox(height: 8.h),
                 SecondaryButton(

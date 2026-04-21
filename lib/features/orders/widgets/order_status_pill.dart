@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 
+import 'package:dispatcher_1/core/theme/app_colors.dart';
+
 /// Состояния заказа заказчика — определяют цвет и текст пилюли статуса.
 enum MyOrderStatus {
   /// Заказ опубликован, но ни один исполнитель ещё не откликнулся.
@@ -67,16 +69,16 @@ extension MyOrderStatusX on MyOrderStatus {
       case MyOrderStatus.waiting:
       case MyOrderStatus.awaitingExecutor:
       case MyOrderStatus.executorDeclinedWaiting:
-        return const Color(0xFFE6F8EF);
+        return AppColors.statusPillSuccessBg;
       case MyOrderStatus.waitingChoose:
       case MyOrderStatus.accepted:
       case MyOrderStatus.executorDeclined:
-        // #1DAEDE @ 10%
+        // statusPillInfoFg @ 10%
         return const Color(0x1A1DAEDE);
       case MyOrderStatus.completed:
       case MyOrderStatus.rejectedOther:
       case MyOrderStatus.rejectedDeclined:
-        return const Color(0xFFF1F1F1);
+        return AppColors.categoryCard;
     }
   }
 
@@ -85,15 +87,15 @@ extension MyOrderStatusX on MyOrderStatus {
       case MyOrderStatus.waiting:
       case MyOrderStatus.awaitingExecutor:
       case MyOrderStatus.executorDeclinedWaiting:
-        return const Color(0xFF1FAE5C);
+        return AppColors.statusPillSuccessFg;
       case MyOrderStatus.waitingChoose:
       case MyOrderStatus.accepted:
       case MyOrderStatus.executorDeclined:
-        return const Color(0xFF1DAEDE);
+        return AppColors.statusPillInfoFg;
       case MyOrderStatus.completed:
       case MyOrderStatus.rejectedOther:
       case MyOrderStatus.rejectedDeclined:
-        return const Color(0xFF7A7A7A);
+        return AppColors.textMuted;
     }
   }
 }

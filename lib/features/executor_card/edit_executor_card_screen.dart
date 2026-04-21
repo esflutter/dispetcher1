@@ -76,11 +76,6 @@ class _EditExecutorCardScreenState extends State<EditExecutorCardScreen> {
     _emailCtrl = TextEditingController(text: CropResult.userEmail);
     _selectedStatus = ExecutorCardData.status;
 
-    _nameCtrl.addListener(() {
-      // Имя в шапке карточки должно реагировать «в живую» на набор текста.
-      if (mounted) setState(() {});
-    });
-
     _nameFocus.addListener(() {
       if (!_nameFocus.hasFocus) {
         final String value = _nameCtrl.text.trim();
@@ -153,7 +148,10 @@ class _EditExecutorCardScreenState extends State<EditExecutorCardScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-              _HeaderRow(displayName: _nameCtrl.text),
+              ListenableBuilder(
+                listenable: _nameCtrl,
+                builder: (_, _) => _HeaderRow(displayName: _nameCtrl.text),
+              ),
               SizedBox(height: 16.h),
               _PlainEditableField(
                 controller: _nameCtrl,

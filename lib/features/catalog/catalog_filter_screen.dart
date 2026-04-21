@@ -827,7 +827,7 @@ class InlineCalendarState extends State<InlineCalendar> {
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(16.r),
-        border: Border.all(color: const Color(0xFFD1D1D6)),
+        border: Border.all(color: AppColors.borderInputLight),
       ),
       padding: EdgeInsets.symmetric(vertical: 16.h),
       child: Column(
@@ -1074,7 +1074,7 @@ class InlineTimePickerState extends State<InlineTimePicker> {
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(16.r),
-        border: Border.all(color: const Color(0xFFD1D1D6)),
+        border: Border.all(color: AppColors.borderInputLight),
       ),
       padding: EdgeInsets.symmetric(horizontal: 16.r, vertical: 12.r),
       child: Column(

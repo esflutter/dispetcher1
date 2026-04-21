@@ -92,11 +92,6 @@ class _CreateServiceScreenState extends State<CreateServiceScreen> {
   @override
   void initState() {
     super.initState();
-    _titleCtrl.addListener(_onFieldChanged);
-    _descCtrl.addListener(_onFieldChanged);
-    _priceHourCtrl.addListener(_onFieldChanged);
-    _priceDayCtrl.addListener(_onFieldChanged);
-    _minHoursCtrl.addListener(_onFieldChanged);
     if (_isEdit) {
       try {
         _editingService = ServiceData.services
@@ -117,8 +112,6 @@ class _CreateServiceScreenState extends State<CreateServiceScreen> {
       }
     }
   }
-
-  void _onFieldChanged() => setState(() {});
 
   Future<void> _addPhoto() async {
     final int remaining = 8 - _photos.length;
@@ -142,11 +135,6 @@ class _CreateServiceScreenState extends State<CreateServiceScreen> {
 
   @override
   void dispose() {
-    _titleCtrl.removeListener(_onFieldChanged);
-    _descCtrl.removeListener(_onFieldChanged);
-    _priceHourCtrl.removeListener(_onFieldChanged);
-    _priceDayCtrl.removeListener(_onFieldChanged);
-    _minHoursCtrl.removeListener(_onFieldChanged);
     _titleCtrl.dispose();
     _descCtrl.dispose();
     _priceHourCtrl.dispose();
@@ -402,10 +390,19 @@ class _CreateServiceScreenState extends State<CreateServiceScreen> {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        PrimaryButton(
-          label: 'Создать',
-          enabled: _canCreate,
-          onPressed: _canCreate ? _onCreateTap : null,
+        ListenableBuilder(
+          listenable: Listenable.merge(<Listenable>[
+            _titleCtrl,
+            _descCtrl,
+            _priceHourCtrl,
+            _priceDayCtrl,
+            _minHoursCtrl,
+          ]),
+          builder: (_, _) => PrimaryButton(
+            label: 'Создать',
+            enabled: _canCreate,
+            onPressed: _canCreate ? _onCreateTap : null,
+          ),
         ),
         SizedBox(height: 8.h),
         SecondaryButton(
