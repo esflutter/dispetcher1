@@ -215,6 +215,18 @@ class _OrderFeedScreenState extends State<OrderFeedScreen> {
                       separatorBuilder: (_, _) => SizedBox(height: 16.h),
                       itemBuilder: (BuildContext context, int i) {
                         final ExecutorMock o = _visibleOrders[i];
+                        // Активен фильтр по спецтехнике — показываем только
+                        // подходящие услуги исполнителя с ценами. Те виды
+                        // техники, которых у него нет, просто не попадают
+                        // в список.
+                        final Set<String> eqFilter = AppliedFilter.equipment;
+                        final List<ExecutorServiceOffer>? matching =
+                            eqFilter.isEmpty
+                                ? null
+                                : o.services
+                                    .where((ExecutorServiceOffer s) =>
+                                        eqFilter.contains(s.equipment))
+                                    .toList();
                         return Container(
                           decoration: BoxDecoration(
                             color: AppColors.fieldFill,
@@ -224,10 +236,9 @@ class _OrderFeedScreenState extends State<OrderFeedScreen> {
                           child: OrderCard(
                             name: o.name,
                             rating: o.rating,
-                            experience: o.experience,
-                            legalStatus: o.legalStatus,
                             equipment: o.equipment,
                             categories: o.categories,
+                            matchingServices: matching,
                             highlightEquipment: AppliedFilter.equipment,
                             highlightCategories: AppliedFilter.categories,
                             onTap: () => Navigator.of(context).push(
@@ -466,6 +477,29 @@ class _FilterChip extends StatelessWidget {
   }
 }
 
+/// Одна услуга исполнителя: тип спецтехники, название, описание,
+/// цена за час и за день, минимальный заказ в часах, категории работ.
+/// Используется и в поиске (при фильтре по технике карточка показывает
+/// только подходящие услуги с ценами), и на экране деталей исполнителя.
+class ExecutorServiceOffer {
+  const ExecutorServiceOffer({
+    required this.equipment,
+    required this.title,
+    required this.description,
+    required this.pricePerHour,
+    required this.pricePerDay,
+    required this.minHours,
+    this.categories = const <String>[],
+  });
+  final String equipment;
+  final String title;
+  final String description;
+  final int pricePerHour;
+  final int pricePerDay;
+  final int minHours;
+  final List<String> categories;
+}
+
 class ExecutorMock {
   const ExecutorMock({
     required this.id,
@@ -477,6 +511,7 @@ class ExecutorMock {
     required this.categories,
     required this.pricePerHour,
     required this.pricePerDay,
+    this.services = const <ExecutorServiceOffer>[],
     this.about = '',
   });
   final String id;
@@ -488,6 +523,7 @@ class ExecutorMock {
   final List<String> categories;
   final int pricePerHour;
   final int pricePerDay;
+  final List<ExecutorServiceOffer> services;
   final String about;
 
   static const List<ExecutorMock> all = <ExecutorMock>[
@@ -504,8 +540,50 @@ class ExecutorMock {
         'Буровые работы',
         'Высотные работы',
       ],
-      pricePerHour: 3000,
-      pricePerDay: 25000,
+      pricePerHour: 2000,
+      pricePerDay: 14000,
+      services: <ExecutorServiceOffer>[
+        ExecutorServiceOffer(
+          equipment: 'Экскаватор',
+          title: 'Экскаватор для копки траншеи',
+          description:
+              'Экскаватор для земляных работ. Копка траншей, разработка котлованов, выравнивание участка. Работаю аккуратно, соблюдаю сроки. Возможен выезд в ближайшие районы.',
+          pricePerHour: 3500,
+          pricePerDay: 17000,
+          minHours: 4,
+          categories: <String>['Земляные работы', 'Погрузочно-разгрузочные работы'],
+        ),
+        ExecutorServiceOffer(
+          equipment: 'Автокран',
+          title: 'Автокран для подъёма материалов',
+          description:
+              'Автокран грузоподъёмностью 25 тонн. Подъём и перемещение материалов на стройплощадке, монтажные работы. Оператор с допуском.',
+          pricePerHour: 4000,
+          pricePerDay: 18000,
+          minHours: 3,
+          categories: <String>['Строительные работы', 'Погрузочно-разгрузочные работы'],
+        ),
+        ExecutorServiceOffer(
+          equipment: 'Эвакуатор',
+          title: 'Эвакуатор для легковых и коммерческих авто',
+          description:
+              'Эвакуация автомобилей массой до 3.5 тонн. Работаю круглосуточно, выезжаю по городу и области.',
+          pricePerHour: 2000,
+          pricePerDay: 14000,
+          minHours: 2,
+          categories: <String>['Перевозка материалов'],
+        ),
+        ExecutorServiceOffer(
+          equipment: 'Автовышка',
+          title: 'Автовышка для работ на высоте',
+          description:
+              'Работы на высоте до 18 метров: монтаж, обслуживание, обрезка деревьев. Техника исправна, работаю аккуратно.',
+          pricePerHour: 2500,
+          pricePerDay: 15000,
+          minHours: 2,
+          categories: <String>['Высотные работы'],
+        ),
+      ],
       about:
           'Опыт работы более 5 лет. Своя техника в хорошем состоянии, работаю без простоев. Готов выезжать в ближайшие районы.',
     ),
@@ -520,8 +598,30 @@ class ExecutorMock {
         'Строительные работы',
         'Погрузочно-разгрузочные работы',
       ],
-      pricePerHour: 5000,
-      pricePerDay: 40000,
+      pricePerHour: 3500,
+      pricePerDay: 17000,
+      services: <ExecutorServiceOffer>[
+        ExecutorServiceOffer(
+          equipment: 'Автокран',
+          title: 'Автокран 40 тонн',
+          description:
+              'Автокран грузоподъёмностью 40 тонн, стрела до 34 метров. Монтаж тяжёлых конструкций, разгрузка фур. Опытный оператор.',
+          pricePerHour: 4000,
+          pricePerDay: 18000,
+          minHours: 4,
+          categories: <String>['Строительные работы', 'Погрузочно-разгрузочные работы'],
+        ),
+        ExecutorServiceOffer(
+          equipment: 'Экскаватор',
+          title: 'Экскаватор гусеничный',
+          description:
+              'Гусеничный экскаватор для тяжёлых земляных работ. Разработка котлованов, снятие плодородного слоя, обратная засыпка.',
+          pricePerHour: 3500,
+          pricePerDay: 17000,
+          minHours: 4,
+          categories: <String>['Строительные работы', 'Земляные работы'],
+        ),
+      ],
     ),
     ExecutorMock(
       id: '3',
@@ -532,7 +632,39 @@ class ExecutorMock {
       equipment: <String>['Экскаватор', 'Автокран', 'Манипулятор'],
       categories: <String>['Земляные работы', 'Строительные работы'],
       pricePerHour: 2500,
-      pricePerDay: 20000,
+      pricePerDay: 15000,
+      services: <ExecutorServiceOffer>[
+        ExecutorServiceOffer(
+          equipment: 'Экскаватор',
+          title: 'Миниэкскаватор для небольших участков',
+          description:
+              'Миниэкскаватор на узких участках: дачи, огороды, узкие проезды. Копка траншей под коммуникации, ямы под столбы.',
+          pricePerHour: 2500,
+          pricePerDay: 15000,
+          minHours: 3,
+          categories: <String>['Земляные работы'],
+        ),
+        ExecutorServiceOffer(
+          equipment: 'Автокран',
+          title: 'Автокран 14 тонн',
+          description:
+              'Автокран 14 тонн, компактный, подходит для городских условий. Разгрузка материалов, монтаж небольших конструкций.',
+          pricePerHour: 3000,
+          pricePerDay: 16000,
+          minHours: 3,
+          categories: <String>['Строительные работы'],
+        ),
+        ExecutorServiceOffer(
+          equipment: 'Манипулятор',
+          title: 'Манипулятор 5 тонн',
+          description:
+              'Манипулятор грузоподъёмностью 5 тонн со стрелой. Доставка и разгрузка стройматериалов: плиты, кирпич, поддоны.',
+          pricePerHour: 3000,
+          pricePerDay: 16000,
+          minHours: 2,
+          categories: <String>['Строительные работы', 'Перевозка материалов'],
+        ),
+      ],
     ),
     ExecutorMock(
       id: '4',
@@ -542,8 +674,30 @@ class ExecutorMock {
       legalStatus: 'Юр. лицо',
       equipment: <String>['Самосвал', 'Погрузчик'],
       categories: <String>['Перевозка материалов', 'Земляные работы'],
-      pricePerHour: 4000,
-      pricePerDay: 30000,
+      pricePerHour: 3000,
+      pricePerDay: 16000,
+      services: <ExecutorServiceOffer>[
+        ExecutorServiceOffer(
+          equipment: 'Самосвал',
+          title: 'Самосвал для вывоза грунта',
+          description:
+              'Вывоз грунта, мусора и сыпучих материалов. Работаю быстро, без задержек. Возможен выезд в ближайшие районы.',
+          pricePerHour: 3500,
+          pricePerDay: 17000,
+          minHours: 3,
+          categories: <String>['Перевозка материалов', 'Земляные работы'],
+        ),
+        ExecutorServiceOffer(
+          equipment: 'Погрузчик',
+          title: 'Фронтальный погрузчик',
+          description:
+              'Погрузка сыпучих материалов, перемещение грузов по стройплощадке, уборка снега. Ковш 2 м³.',
+          pricePerHour: 3000,
+          pricePerDay: 16000,
+          minHours: 3,
+          categories: <String>['Погрузочно-разгрузочные работы'],
+        ),
+      ],
     ),
   ];
 

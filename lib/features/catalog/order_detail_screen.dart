@@ -14,6 +14,18 @@ import 'package:dispatcher_1/features/orders/create_order_screen.dart';
 import 'package:dispatcher_1/features/orders/orders_store.dart';
 import 'package:dispatcher_1/features/profile/account_block.dart';
 
+/// Форматирует число с разделителем тысяч: 12500 → «12 500».
+String _fmtThousands(int value) {
+  final String s = value.toString();
+  final StringBuffer out = StringBuffer();
+  for (int i = 0; i < s.length; i++) {
+    final int rest = s.length - i;
+    if (i > 0 && rest % 3 == 0) out.write(' ');
+    out.write(s[i]);
+  }
+  return out.toString();
+}
+
 /// Карточка исполнителя (детали). По Figma — заголовок исполнителя сверху,
 /// далее «техника → местоположение → категории → описание → стоимость».
 class OrderDetailScreen extends StatefulWidget {
@@ -243,79 +255,33 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                       ],
                       SizedBox(height: 16.h),
                       const _AvailabilitySection(),
-                      SizedBox(height: 16.h),
-                      _SectionTitle('Услуги'),
-                      SizedBox(height: 8.h),
-                      _ServiceTile(
-                        child: _ServiceItem(
-                          equipment: 'Экскаватор',
-                          title: 'Экскаватор для копки траншеи',
-                          description:
-                              'Экскаватор для земляных работ. Копка траншей, разработка котлованов, выравнивание участка. Работаю аккуратно, соблюдаю сроки. Возможен выезд в ближайшие районы.',
-                          priceHour: '1 000 ₽',
-                          priceDay: '14 000 ₽',
-                          onTap: () => _openServiceDetail(
-                            context,
-                            title: 'Экскаватор для копки траншеи',
-                            description:
-                                'Экскаватор для земляных работ. Копка траншей, разработка котлованов, выравнивание участка. Работаю аккуратно, соблюдаю сроки. Возможен выезд в ближайшие районы.',
-                            priceHour: '1 000 ₽',
-                            priceDay: '14 000 ₽',
-                            minOrderHours: 4,
-                            machinery: const <String>['Экскаватор'],
-                            categories: const <String>[
-                              'Земляные работы',
-                              'Погрузочно-разгрузочные работы',
-                            ],
+                      if (exec != null && exec.services.isNotEmpty) ...<Widget>[
+                        SizedBox(height: 16.h),
+                        _SectionTitle('Услуги'),
+                        SizedBox(height: 8.h),
+                        for (int i = 0; i < exec.services.length; i++) ...<Widget>[
+                          if (i > 0) SizedBox(height: 16.h),
+                          _ServiceTile(
+                            child: _ServiceItem(
+                              equipment: exec.services[i].equipment,
+                              title: exec.services[i].title,
+                              description: exec.services[i].description,
+                              priceHour: '${_fmtThousands(exec.services[i].pricePerHour)} ₽',
+                              priceDay: '${_fmtThousands(exec.services[i].pricePerDay)} ₽',
+                              onTap: () => _openServiceDetail(
+                                context,
+                                title: exec.services[i].title,
+                                description: exec.services[i].description,
+                                priceHour: '${_fmtThousands(exec.services[i].pricePerHour)} ₽',
+                                priceDay: '${_fmtThousands(exec.services[i].pricePerDay)} ₽',
+                                minOrderHours: exec.services[i].minHours,
+                                machinery: <String>[exec.services[i].equipment],
+                                categories: exec.services[i].categories,
+                              ),
+                            ),
                           ),
-                        ),
-                      ),
-                      SizedBox(height: 16.h),
-                      _ServiceTile(
-                        child: _ServiceItem(
-                          equipment: 'Самосвал',
-                          title: 'Самосвал для вывоза грунта',
-                          description:
-                              'Вывоз грунта, мусора и сыпучих материалов. Работаю быстро, без задержек. Возможен выезд в ближайшие районы.',
-                          priceHour: '1 500 ₽',
-                          priceDay: '18 000 ₽',
-                          onTap: () => _openServiceDetail(
-                            context,
-                            title: 'Самосвал для вывоза грунта',
-                            description:
-                                'Вывоз грунта, мусора и сыпучих материалов. Работаю быстро, без задержек. Возможен выезд в ближайшие районы.',
-                            priceHour: '1 500 ₽',
-                            priceDay: '18 000 ₽',
-                            minOrderHours: 3,
-                            machinery: const <String>['Самосвал'],
-                            categories: const <String>[
-                              'Погрузочно-разгрузочные работы',
-                            ],
-                          ),
-                        ),
-                      ),
-                      SizedBox(height: 16.h),
-                      _ServiceTile(
-                        child: _ServiceItem(
-                          equipment: 'Автовышка',
-                          title: 'Работы на высоте',
-                          description:
-                              'Работы на высоте: монтаж, обслуживание, обрезка деревьев. Техника исправна, работаю аккуратно.',
-                          priceHour: '2 000 ₽',
-                          priceDay: '20 000 ₽',
-                          onTap: () => _openServiceDetail(
-                            context,
-                            title: 'Работы на высоте',
-                            description:
-                                'Работы на высоте: монтаж, обслуживание, обрезка деревьев. Техника исправна, работаю аккуратно.',
-                            priceHour: '2 000 ₽',
-                            priceDay: '20 000 ₽',
-                            minOrderHours: 2,
-                            machinery: const <String>['Автовышка'],
-                            categories: const <String>['Высотные работы'],
-                          ),
-                        ),
-                      ),
+                        ],
+                      ],
                     ],
                   ),
                 ),
@@ -478,10 +444,13 @@ class _AvailabilitySectionState extends State<_AvailabilitySection> {
   // (Профиль → Мой график).
   late DateTime _selected;
 
-  // PageController для свайпа по неделям — как в расписании исполнителя.
+  // PageController для свайпа по неделям — как в расписании исполнителя
+  // (Профиль → Мой график). Листать назад нельзя, вперёд — ровно на год
+  // (52 недели), чтобы заказчик не видел бесконечное пустое будущее.
   late PageController _pageCtrl;
   late DateTime _originWeek;
-  static const int _initialPage = 5000;
+  static const int _initialPage = 0;
+  static const int _maxPage = 52;
 
   // Моковый график: на этих датах у исполнителя заданы параметры.
   // Остальные дни — «свободен для заказов» без конкретики.
@@ -577,12 +546,21 @@ class _AvailabilitySectionState extends State<_AvailabilitySection> {
     setState(() => _selected = _weekFromPage(page));
   }
 
+  int get _currentPage {
+    final double p = _pageCtrl.hasClients
+        ? (_pageCtrl.page ?? _initialPage.toDouble())
+        : _initialPage.toDouble();
+    return p.round();
+  }
+
   void _shiftWeek(int delta) {
     if (delta < 0) {
+      if (_currentPage <= _initialPage) return;
       _pageCtrl.previousPage(
           duration: const Duration(milliseconds: 300),
           curve: Curves.easeInOut);
     } else {
+      if (_currentPage >= _maxPage) return;
       _pageCtrl.nextPage(
           duration: const Duration(milliseconds: 300),
           curve: Curves.easeInOut);
@@ -622,27 +600,33 @@ class _AvailabilitySectionState extends State<_AvailabilitySection> {
               style: AppTextStyles.body,
             ),
             SizedBox(width: 8.w),
-            GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () => _shiftWeek(-1),
-              child: Padding(
-                padding: EdgeInsets.all(4.r),
-                child: Image.asset(
-                    'assets/icons/ui/arrow_left.webp',
-                    width: 17.r,
-                    height: 17.r),
+            Opacity(
+              opacity: _currentPage <= _initialPage ? 0.35 : 1.0,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => _shiftWeek(-1),
+                child: Padding(
+                  padding: EdgeInsets.all(4.r),
+                  child: Image.asset(
+                      'assets/icons/ui/arrow_left.webp',
+                      width: 17.r,
+                      height: 17.r),
+                ),
               ),
             ),
             SizedBox(width: 4.w),
-            GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () => _shiftWeek(1),
-              child: Padding(
-                padding: EdgeInsets.all(4.r),
-                child: Image.asset(
-                    'assets/icons/ui/arrow_right.webp',
-                    width: 17.r,
-                    height: 17.r),
+            Opacity(
+              opacity: _currentPage >= _maxPage ? 0.35 : 1.0,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => _shiftWeek(1),
+                child: Padding(
+                  padding: EdgeInsets.all(4.r),
+                  child: Image.asset(
+                      'assets/icons/ui/arrow_right.webp',
+                      width: 17.r,
+                      height: 17.r),
+                ),
               ),
             ),
           ],
@@ -675,6 +659,7 @@ class _AvailabilitySectionState extends State<_AvailabilitySection> {
           child: PageView.builder(
             controller: _pageCtrl,
             onPageChanged: _onPageChanged,
+            itemCount: _maxPage + 1,
             itemBuilder: (BuildContext _, int page) {
               final DateTime monday = _weekFromPage(page);
               final List<DateTime> days = _weekDaysFor(monday);

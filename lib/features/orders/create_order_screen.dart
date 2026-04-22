@@ -714,13 +714,13 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
                   _SectionTitle('Фото'),
                   SizedBox(height: 4.h),
                   Text(
-                    'По желанию добавьте изображения к заказу, до 8 шт',
+                    'По желанию добавьте фото, до 8 шт.',
                     style: TextStyle(
                       fontFamily: 'Roboto',
                       fontSize: 14.sp,
                       fontWeight: FontWeight.w400,
                       height: 1.3,
-                      color: AppColors.textSecondary,
+                      color: AppColors.textTertiary,
                     ),
                   ),
                   SizedBox(height: 8.h),

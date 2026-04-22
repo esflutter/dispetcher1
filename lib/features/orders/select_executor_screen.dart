@@ -162,8 +162,6 @@ class SelectExecutorScreen extends StatelessWidget {
                         child: OrderCard(
                           name: _mockResponders[i].name,
                           rating: _mockResponders[i].rating,
-                          experience: _mockResponders[i].experience,
-                          legalStatus: _mockResponders[i].legalStatus,
                           equipment: _mockResponders[i].equipment,
                           categories: _mockResponders[i].categories,
                           highlightEquipment: order.equipment.toSet(),

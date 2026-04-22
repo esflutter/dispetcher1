@@ -1472,7 +1472,7 @@ class _PriceFieldState extends State<_PriceField> {
           controller: widget.controller,
           keyboardType: TextInputType.number,
           inputFormatters: <TextInputFormatter>[
-            ThousandSeparatorFormatter(maxDigits: 9),
+            ThousandSeparatorFormatter(maxDigits: 7),
           ],
           style: hasText
               ? AppTextStyles.body.copyWith(color: Colors.transparent)
