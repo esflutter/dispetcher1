@@ -4,6 +4,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_spacing.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
+import 'package:dispatcher_1/core/utils/plural.dart';
 
 const String _kAbout =
     'Частный заказчик. Периодически нужны услуги спецтехники для строительных '
@@ -71,7 +72,7 @@ class CustomerCardScreen extends StatelessWidget {
                     SizedBox(height: AppSpacing.md),
                     Text('Александр Иванов', style: AppTextStyles.h3),
                     SizedBox(height: AppSpacing.xxs),
-                    Text('15 отзывов',
+                    Text('15 ${reviewsWord(15)}',
                         style: AppTextStyles.caption
                             .copyWith(color: AppColors.textTertiary)),
                   ],

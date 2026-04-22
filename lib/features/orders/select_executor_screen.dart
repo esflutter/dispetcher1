@@ -53,9 +53,9 @@ class SelectExecutorScreen extends StatelessWidget {
     ),
     _Responder(
       id: 'resp_2',
-      name: 'Иван Петров',
+      name: 'Дмитрий Сидоров',
       phone: '+7 999 222-33-44',
-      rating: 4.8,
+      rating: 4.2,
       experience: '5 лет',
       legalStatus: 'Юр. лицо',
       equipment: <String>['Экскаватор', 'Автокран', 'Эвакуатор', 'Автовышка'],
@@ -86,7 +86,7 @@ class SelectExecutorScreen extends StatelessWidget {
     // из цифр, чтобы на экране не было букв из тех. id.
     final String digitsOnly = order.id.replaceAll(RegExp(r'\D'), '');
     final String number = order.number ??
-        '№${digitsOnly.padLeft(6, '0').substring(0, 6)}';
+        '№${digitsOnly.padLeft(8, '0').substring(0, 8)}';
     // Показываем столько карточек, сколько в заказе откликов. Если
     // счётчик не задан — берём весь моковый список. Клэмпим на всякий
     // случай, чтобы не вылезти за пределы массива.
@@ -146,6 +146,45 @@ class SelectExecutorScreen extends StatelessWidget {
                               .copyWith(fontWeight: FontWeight.w400),
                         ),
                         SizedBox(height: 16.h),
+                        Text(
+                          'Требуемая спецтехника',
+                          style: TextStyle(
+                            fontFamily: 'Roboto',
+                            fontSize: 16.sp,
+                            fontWeight: FontWeight.w700,
+                            height: 1.3,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                        SizedBox(height: 8.h),
+                        Wrap(
+                          spacing: 8.w,
+                          runSpacing: 8.h,
+                          children: order.equipment
+                              .map((String e) => Container(
+                                    padding: EdgeInsets.symmetric(
+                                        horizontal: 12.w, vertical: 6.h),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.surface,
+                                      border: Border.all(
+                                          color: AppColors.primary, width: 1),
+                                      borderRadius:
+                                          BorderRadius.circular(100.r),
+                                    ),
+                                    child: Text(
+                                      e,
+                                      style: TextStyle(
+                                        fontFamily: 'Roboto',
+                                        fontSize: 13.sp,
+                                        fontWeight: FontWeight.w400,
+                                        height: 1.3,
+                                        color: AppColors.textPrimary,
+                                      ),
+                                    ),
+                                  ))
+                              .toList(),
+                        ),
+                        SizedBox(height: 16.h),
                       ],
                     ),
                   ),
@@ -159,52 +198,80 @@ class SelectExecutorScreen extends StatelessWidget {
                           borderRadius: BorderRadius.circular(14.r),
                         ),
                         clipBehavior: Clip.antiAlias,
-                        child: OrderCard(
-                          name: _mockResponders[i].name,
-                          rating: _mockResponders[i].rating,
-                          equipment: _mockResponders[i].equipment,
-                          categories: _mockResponders[i].categories,
-                          highlightEquipment: order.equipment.toSet(),
-                          onTap: () {
-                            final _Responder responder = _mockResponders[i];
-                            // Запоминаем route самого SelectExecutorScreen,
-                            // чтобы позже одним `popUntil` закрыть всю
-                            // цепочку «карточка исполнителя → услуги» —
-                            // даже если пользователь провалился в services.
-                            final ModalRoute<dynamic>? selectRoute =
-                                ModalRoute.of(context);
-                            Navigator.of(context).push<void>(
-                              MaterialPageRoute<void>(
-                                builder: (BuildContext detailCtx) =>
-                                    OrderDetailScreen(
-                                  orderId: responder.id,
-                                  multipleEquipment: true,
-                                  selectMode: true,
-                                  executor: responder.toExecutor(),
-                                  onSelectExecutor: () async {
-                                    await showExecutorSelectedDialog(detailCtx);
-                                    if (!detailCtx.mounted) return;
-                                    // Сворачиваем всю вложенную цепочку
-                                    // (services + executor card) до
-                                    // SelectExecutorScreen. Дальше
-                                    // onExecutorSelected закроет его и
-                                    // откроет карточку заказа в статусе
-                                    // accepted — в итоге «назад» с
-                                    // этой карточки вернёт в список
-                                    // заказов, без промежуточных слоёв.
-                                    if (selectRoute != null) {
-                                      Navigator.of(detailCtx).popUntil(
-                                          (Route<dynamic> r) =>
-                                              r == selectRoute);
-                                    }
-                                    onExecutorSelected(
-                                      responder.id,
-                                      responder.name,
-                                      responder.phone,
-                                    );
-                                  },
-                                ),
-                              ),
+                        child: Builder(
+                          builder: (BuildContext _) {
+                            // По имени находим исполнителя в каталоге —
+                            // оттуда подтягиваем услуги с ценами, чтобы
+                            // в списке откликов показать их в формате
+                            // «Экскаватор — 3500 ₽/час, от 4 часов», а
+                            // не блоки «Спецтехника / Категории услуг».
+                            ExecutorMock? catalogMatch;
+                            for (final ExecutorMock e in ExecutorMock.all) {
+                              if (e.name == _mockResponders[i].name) {
+                                catalogMatch = e;
+                                break;
+                              }
+                            }
+                            final Set<String> orderEq = order.equipment.toSet();
+                            final List<ExecutorServiceOffer>? matching =
+                                catalogMatch?.services
+                                    .where((ExecutorServiceOffer s) =>
+                                        orderEq.contains(s.equipment))
+                                    .toList();
+                            return OrderCard(
+                              name: _mockResponders[i].name,
+                              rating: _mockResponders[i].rating,
+                              equipment: _mockResponders[i].equipment,
+                              categories: _mockResponders[i].categories,
+                              matchingServices: matching,
+                              highlightEquipment: order.equipment.toSet(),
+                              onTap: () {
+                                final _Responder responder =
+                                    _mockResponders[i];
+                                // Запоминаем route самого
+                                // SelectExecutorScreen, чтобы позже одним
+                                // `popUntil` закрыть всю цепочку
+                                // «карточка исполнителя → услуги» —
+                                // даже если пользователь провалился в
+                                // services.
+                                final ModalRoute<dynamic>? selectRoute =
+                                    ModalRoute.of(context);
+                                Navigator.of(context).push<void>(
+                                  MaterialPageRoute<void>(
+                                    builder: (BuildContext detailCtx) =>
+                                        OrderDetailScreen(
+                                      orderId: responder.id,
+                                      multipleEquipment: true,
+                                      selectMode: true,
+                                      executor: responder.toExecutor(),
+                                      onSelectExecutor: () async {
+                                        await showExecutorSelectedDialog(
+                                            detailCtx);
+                                        if (!detailCtx.mounted) return;
+                                        // Сворачиваем всю вложенную
+                                        // цепочку (services + executor
+                                        // card) до SelectExecutorScreen.
+                                        // Дальше onExecutorSelected
+                                        // закроет его и откроет карточку
+                                        // заказа в статусе accepted — в
+                                        // итоге «назад» с этой карточки
+                                        // вернёт в список заказов, без
+                                        // промежуточных слоёв.
+                                        if (selectRoute != null) {
+                                          Navigator.of(detailCtx).popUntil(
+                                              (Route<dynamic> r) =>
+                                                  r == selectRoute);
+                                        }
+                                        onExecutorSelected(
+                                          responder.id,
+                                          responder.name,
+                                          responder.phone,
+                                        );
+                                      },
+                                    ),
+                                  ),
+                                );
+                              },
                             );
                           },
                         ),
@@ -269,15 +336,32 @@ class _Responder {
 
   /// Для передачи в `OrderDetailScreen(executor: ...)` — чтобы карточка
   /// исполнителя показывала данные ответчика, а не fallback-заглушку.
-  ExecutorMock toExecutor() => ExecutorMock(
-        id: id,
-        name: name,
-        rating: rating,
-        experience: experience,
-        legalStatus: legalStatus,
-        equipment: equipment,
-        categories: categories,
-        pricePerHour: 0,
-        pricePerDay: 0,
-      );
+  /// Если этот же исполнитель есть в каталоге (`ExecutorMock.all`) —
+  /// берём его цены и услуги оттуда, чтобы блок «Услуги» на карточке
+  /// показал реальные ₽/час и ₽/день, а не нули.
+  ExecutorMock toExecutor() {
+    // Ищем каталог-исполнителя по имени: у responders id вида `resp_1`,
+    // у `ExecutorMock.all` — `1`, `2` и т.д., так что по id не совпадёт.
+    // По имени — совпадает и подтянет реальные услуги/цены.
+    ExecutorMock? catalogMatch;
+    for (final ExecutorMock e in ExecutorMock.all) {
+      if (e.name == name) {
+        catalogMatch = e;
+        break;
+      }
+    }
+    return ExecutorMock(
+      id: id,
+      name: name,
+      rating: rating,
+      experience: experience,
+      legalStatus: legalStatus,
+      equipment: equipment,
+      categories: categories,
+      pricePerHour: catalogMatch?.pricePerHour ?? 0,
+      pricePerDay: catalogMatch?.pricePerDay ?? 0,
+      services: catalogMatch?.services ?? const <ExecutorServiceOffer>[],
+      about: catalogMatch?.about ?? '',
+    );
+  }
 }

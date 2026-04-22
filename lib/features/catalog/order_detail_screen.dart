@@ -5,11 +5,13 @@ import 'package:go_router/go_router.dart';
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_spacing.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
+import 'package:dispatcher_1/core/utils/plural.dart';
 import 'package:dispatcher_1/core/widgets/primary_button.dart';
 import 'package:dispatcher_1/features/catalog/catalog_service_detail_screen.dart';
 import 'package:dispatcher_1/features/catalog/order_feed_screen.dart';
 import 'package:dispatcher_1/features/catalog/select_order_for_executor_screen.dart';
 import 'package:dispatcher_1/features/catalog/widgets/catalog_search_bar.dart';
+import 'package:dispatcher_1/features/executor_card/executor_card_screen.dart';
 import 'package:dispatcher_1/features/orders/create_order_screen.dart';
 import 'package:dispatcher_1/features/orders/orders_store.dart';
 import 'package:dispatcher_1/features/profile/account_block.dart';
@@ -97,6 +99,12 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
       : const <String>['Экскаватор', 'Автокран', 'Манипулятор', 'Погрузчик', 'Автовышка'];
 
   Future<void> _onRespondTap() async {
+    // Без своей карточки заказчика предлагать заказы нельзя — иначе
+    // исполнитель не сможет увидеть, кто именно предлагает заказ.
+    if (!ExecutorCardScreen.cardCreated) {
+      await showCreateCustomerCardDialog(context);
+      return;
+    }
     if (MyOrdersStore.offerable.isEmpty) {
       await showDialog<void>(
         context: context,
@@ -357,7 +365,7 @@ class _CustomerHeader extends StatelessWidget {
                     Text(rating.toString().replaceAll('.', ','),
                         style: AppTextStyles.body),
                     SizedBox(width: 16.w),
-                    Text('15 отзывов',
+                    Text('15 ${reviewsWord(15)}',
                         style: AppTextStyles.body.copyWith(
                           color: AppColors.textPrimary,
                           decoration: TextDecoration.underline,

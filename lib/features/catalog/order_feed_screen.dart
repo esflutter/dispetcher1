@@ -533,7 +533,13 @@ class ExecutorMock {
       rating: 4.5,
       experience: '8 лет',
       legalStatus: 'Юр. лицо',
-      equipment: <String>['Экскаватор', 'Автокран', 'Эвакуатор', 'Автовышка'],
+      equipment: <String>[
+        'Экскаватор',
+        'Автокран',
+        'Эвакуатор',
+        'Автовышка',
+        'Манипулятор',
+      ],
       categories: <String>[
         'Строительные работы',
         'Дорожные работы',
@@ -582,6 +588,16 @@ class ExecutorMock {
           pricePerDay: 15000,
           minHours: 2,
           categories: <String>['Высотные работы'],
+        ),
+        ExecutorServiceOffer(
+          equipment: 'Манипулятор',
+          title: 'Манипулятор со стрелой 8 тонн',
+          description:
+              'Манипулятор грузоподъёмностью 8 тонн со стрелой. Доставка и разгрузка ЖБИ, плит, поддонов, бытовок. Оператор с допуском.',
+          pricePerHour: 3000,
+          pricePerDay: 16000,
+          minHours: 3,
+          categories: <String>['Перевозка материалов', 'Строительные работы'],
         ),
       ],
       about:

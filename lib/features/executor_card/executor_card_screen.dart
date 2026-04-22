@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_spacing.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
+import 'package:dispatcher_1/core/utils/plural.dart';
 import 'package:dispatcher_1/core/widgets/dark_sub_app_bar.dart';
 import 'package:dispatcher_1/core/widgets/primary_button.dart';
 import 'package:dispatcher_1/features/catalog/widgets/catalog_search_bar.dart';
@@ -247,7 +248,7 @@ class _HeaderRow extends StatelessWidget {
                   GestureDetector(
                     onTap: () => context.push('/profile/reviews'),
                     child: Text(
-                      '$reviewsCount отзывов',
+                      '$reviewsCount ${reviewsWord(reviewsCount)}',
                       style: AppTextStyles.body.copyWith(
                         color: AppColors.textPrimary,
                         decoration: TextDecoration.underline,
@@ -274,6 +275,68 @@ class _SectionTitle extends StatelessWidget {
       style: AppTextStyles.bodyMedium.copyWith(fontWeight: FontWeight.w700),
     );
   }
+}
+
+/// Диалог «Нет карточки заказчика» — показывается при попытке предложить
+/// заказ исполнителю, пока у пользователя не создана своя карточка.
+/// Кнопка «Создать карточку» ведёт на `/executor-card/edit`; если
+/// карточка сохранена, флаг `ExecutorCardScreen.cardCreated` становится
+/// `true`, и следующая попытка предложить заказ проходит без диалога.
+Future<void> showCreateCustomerCardDialog(BuildContext context) {
+  return showDialog<void>(
+    context: context,
+    barrierColor: Colors.black.withValues(alpha: 0.35),
+    builder: (BuildContext ctx) => Dialog(
+      insetPadding: EdgeInsets.symmetric(horizontal: 16.w),
+      backgroundColor: Colors.transparent,
+      child: Container(
+        padding: EdgeInsets.fromLTRB(16.r, 14.r, 16.r, 22.r),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(20.r),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            Align(
+              alignment: Alignment.centerRight,
+              child: GestureDetector(
+                onTap: () => Navigator.of(ctx).pop(),
+                child: Icon(Icons.close_rounded,
+                    size: 22.r, color: AppColors.textTertiary),
+              ),
+            ),
+            SizedBox(height: 20.h),
+            Text(
+              'Создайте карточку\nзаказчика',
+              textAlign: TextAlign.center,
+              style:
+                  AppTextStyles.titleL.copyWith(fontWeight: FontWeight.w700),
+            ),
+            SizedBox(height: 8.h),
+            Text(
+              'Чтобы предлагать заказы исполнителям, '
+              'сначала заполните свою карточку — имя, '
+              'контакты и краткое описание.',
+              textAlign: TextAlign.center,
+              style: AppTextStyles.bodyMRegular
+                  .copyWith(color: AppColors.textSecondary),
+            ),
+            SizedBox(height: 18.h),
+            PrimaryButton(
+              label: 'Создать карточку',
+              onPressed: () {
+                Navigator.of(ctx).pop();
+                ctx.push('/executor-card/edit');
+              },
+            ),
+            SizedBox(height: 12.h),
+          ],
+        ),
+      ),
+    ),
+  );
 }
 
 /// Диалог «Ваш профиль заблокирован на 30 дней» — показывается при попытке

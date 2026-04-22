@@ -8,10 +8,13 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
 import 'package:dispatcher_1/core/utils/photo_source.dart';
+import 'package:dispatcher_1/core/utils/plural.dart';
 import 'package:dispatcher_1/core/widgets/primary_button.dart';
 import 'package:dispatcher_1/features/auth/photo_crop_screen.dart';
 import 'package:dispatcher_1/features/catalog/order_detail_screen.dart'
     as catalog;
+import 'package:dispatcher_1/features/catalog/order_feed_screen.dart'
+    show ExecutorMock, ExecutorServiceOffer;
 import 'package:dispatcher_1/features/catalog/widgets/catalog_search_bar.dart';
 import 'package:dispatcher_1/features/orders/review_screen.dart';
 import 'package:dispatcher_1/features/orders/widgets/order_alerts.dart';
@@ -58,7 +61,7 @@ class MyOrderDetailScreen extends StatefulWidget {
     this.customerPhone = '+7 999 123-45-67',
     this.customerEmail,
     this.publishedAgo = 'Вчера в 14:30',
-    this.orderNumber = '№123456',
+    this.orderNumber = '№12345678',
     this.workDescription = const <String>[
       'Разработка грунта — 40 м³',
       'Планировка участка — 2 × 12 × 15 м',
@@ -419,6 +422,60 @@ class _MyOrderDetailScreenState extends State<MyOrderDetailScreen> {
                       ],
                     ),
                   ),
+                  // Блок «Цена» — показывается всегда. В confirmed
+                  // статусе берём цены конкретного исполнителя, с
+                  // которым состоялся мэтч (лукап в каталоге по имени).
+                  // В остальных статусах (когда исполнитель ещё не
+                  // назначен) показываем минимальную цену по каталогу
+                  // для каждого требуемого вида техники — как
+                  // ориентир стоимости.
+                  Builder(
+                    builder: (BuildContext _) {
+                      ExecutorMock? exec;
+                      for (final ExecutorMock e in ExecutorMock.all) {
+                        if (e.name == widget.customerName) {
+                          exec = e;
+                          break;
+                        }
+                      }
+                      final Set<String> neededEq = widget.equipment.toSet();
+                      List<ExecutorServiceOffer> matched;
+                      if (exec != null) {
+                        matched = exec.services
+                            .where((ExecutorServiceOffer s) =>
+                                neededEq.contains(s.equipment))
+                            .toList();
+                      } else {
+                        matched = <ExecutorServiceOffer>[];
+                        for (final String eq in widget.equipment) {
+                          ExecutorServiceOffer? cheapest;
+                          for (final ExecutorMock e in ExecutorMock.all) {
+                            for (final ExecutorServiceOffer s in e.services) {
+                              if (s.equipment != eq) continue;
+                              if (cheapest == null ||
+                                  s.pricePerHour < cheapest.pricePerHour) {
+                                cheapest = s;
+                              }
+                            }
+                          }
+                          if (cheapest != null) matched.add(cheapest);
+                        }
+                      }
+                      if (matched.isEmpty) return const SizedBox.shrink();
+                      return _Section(
+                        title: 'Цена',
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: <Widget>[
+                            for (int i = 0; i < matched.length; i++) ...<Widget>[
+                              if (i > 0) SizedBox(height: 2.h),
+                              _PriceLine(service: matched[i]),
+                            ],
+                          ],
+                        ),
+                      );
+                    },
+                  ),
                   if (widget.photos.isNotEmpty)
                     _Section(
                       title: 'Фото',
@@ -620,7 +677,7 @@ class _CustomerHeader extends StatelessWidget {
                       behavior: HitTestBehavior.opaque,
                       onTap: onReviewsTap,
                       child: Text(
-                        '15 отзывов',
+                        '15 ${reviewsWord(15)}',
                         style: TextStyle(
                           fontFamily: 'Roboto',
                           fontSize: 16.sp,
@@ -745,5 +802,62 @@ class _OutlinedChip extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+/// Строка блока «Стоимость услуг» на странице заказа после мэтча:
+/// «Экскаватор — 3 500 ₽/час, 17 000 ₽/день». Если одна из цен не
+/// задана (0) — выводим только доступную половину.
+class _PriceLine extends StatelessWidget {
+  const _PriceLine({required this.service});
+  final ExecutorServiceOffer service;
+
+  static String _fmtThousands(int value) {
+    final String s = value.toString();
+    final StringBuffer out = StringBuffer();
+    for (int i = 0; i < s.length; i++) {
+      final int rest = s.length - i;
+      if (i > 0 && rest % 3 == 0) out.write(' ');
+      out.write(s[i]);
+    }
+    return out.toString();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final TextStyle base = TextStyle(
+      fontFamily: 'Roboto',
+      fontSize: 14.sp,
+      fontWeight: FontWeight.w400,
+      height: 1.4,
+      color: AppColors.textPrimary,
+    );
+    final TextStyle priceDigits = base.copyWith(
+      fontSize: 16.sp,
+      fontWeight: FontWeight.w600,
+      color: AppColors.primary,
+    );
+    final TextStyle priceUnit = base.copyWith(
+      fontSize: 16.sp,
+      fontWeight: FontWeight.w600,
+      color: AppColors.primary,
+    );
+    final List<TextSpan> spans = <TextSpan>[
+      TextSpan(text: '${service.equipment} — '),
+    ];
+    final bool hasHour = service.pricePerHour > 0;
+    final bool hasDay = service.pricePerDay > 0;
+    if (hasHour) {
+      spans.add(TextSpan(
+          text: _fmtThousands(service.pricePerHour), style: priceDigits));
+      spans.add(TextSpan(text: ' ₽/час', style: priceUnit));
+    }
+    if (hasHour && hasDay) spans.add(const TextSpan(text: '   '));
+    if (hasDay) {
+      spans.add(TextSpan(
+          text: _fmtThousands(service.pricePerDay), style: priceDigits));
+      spans.add(TextSpan(text: ' ₽/день', style: priceUnit));
+    }
+    return Text.rich(TextSpan(children: spans), style: base);
   }
 }

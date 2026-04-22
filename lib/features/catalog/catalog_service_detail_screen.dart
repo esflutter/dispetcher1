@@ -9,6 +9,7 @@ import 'package:dispatcher_1/core/widgets/photo_gallery_screen.dart';
 import 'package:dispatcher_1/core/widgets/primary_button.dart';
 import 'package:dispatcher_1/features/catalog/select_order_for_executor_screen.dart';
 import 'package:dispatcher_1/features/catalog/widgets/catalog_search_bar.dart';
+import 'package:dispatcher_1/features/executor_card/executor_card_screen.dart';
 import 'package:dispatcher_1/features/orders/create_order_screen.dart';
 import 'package:dispatcher_1/features/orders/orders_store.dart';
 
@@ -101,6 +102,11 @@ class _CatalogServiceDetailScreenState
       OfferSubmissions.isOffered(widget.executorOrderId);
 
   Future<void> _onRespondTap() async {
+    // Без своей карточки заказчика предлагать заказы нельзя.
+    if (!ExecutorCardScreen.cardCreated) {
+      await showCreateCustomerCardDialog(context);
+      return;
+    }
     if (MyOrdersStore.offerable.isEmpty) {
       await showDialog<void>(
         context: context,

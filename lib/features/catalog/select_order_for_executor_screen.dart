@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
 import 'package:dispatcher_1/core/widgets/primary_button.dart';
+import 'package:dispatcher_1/features/catalog/order_feed_screen.dart';
 import 'package:dispatcher_1/features/catalog/widgets/catalog_search_bar.dart';
 import 'package:dispatcher_1/features/catalog/widgets/respond_bottom_sheet.dart';
 import 'package:dispatcher_1/features/orders/orders_store.dart';
@@ -73,10 +74,21 @@ class _SelectOrderForExecutorScreenState
   }
 
   /// Список заказов, которые заказчик может предложить этому
-  /// исполнителю: опубликованные без выбранного исполнителя.
-  /// Сортируем от новых к старым — единообразно с «Мои заказы».
+  /// исполнителю: опубликованные без выбранного исполнителя, И хотя
+  /// бы по одному виду спецтехники совпадающие с тем, что есть у
+  /// исполнителя в каталоге. Смысл — не предлагать исполнителю работу,
+  /// которую он физически не может выполнить. Сортируем от новых к
+  /// старым — единообразно с «Мои заказы».
   List<OrderMock> get _items {
-    final List<OrderMock> list = List<OrderMock>.of(MyOrdersStore.offerable);
+    final ExecutorMock? exec = ExecutorMock.byId(widget.executorOrderId);
+    final Set<String> executorEq = exec == null
+        ? const <String>{}
+        : exec.equipment.toSet();
+    final List<OrderMock> list = MyOrdersStore.offerable
+        .where((OrderMock o) =>
+            executorEq.isEmpty ||
+            o.equipment.any((String e) => executorEq.contains(e)))
+        .toList();
     list.sort(
         (OrderMock a, OrderMock b) => b.publishedAt.compareTo(a.publishedAt));
     return list;

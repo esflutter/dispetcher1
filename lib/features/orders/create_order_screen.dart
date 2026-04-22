@@ -379,9 +379,9 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
 
   /// Собирает черновик заказа из всех заполненных полей — для предпросмотра.
   OrderDraft _buildDraft() {
-    final int n = DateTime.now().millisecondsSinceEpoch % 1000000;
+    final int n = DateTime.now().millisecondsSinceEpoch % 100000000;
     return OrderDraft(
-      number: '№${n.toString().padLeft(6, '0')}',
+      number: '№${n.toString().padLeft(8, '0')}',
       title: _titleCtrl.text.trim(),
       description: _descCtrl.text.trim(),
       rentDate: _formatRentDateTime(),
