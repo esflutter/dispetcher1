@@ -17,7 +17,7 @@ class MyOrderCard extends StatelessWidget {
     required this.equipment,
     required this.rentDate,
     required this.address,
-    required this.publishedAgo,
+    required this.timeAgo,
     this.statusCount,
     this.customerName,
     this.customerPhone,
@@ -36,7 +36,7 @@ class MyOrderCard extends StatelessWidget {
   final List<String> equipment;
   final String rentDate;
   final String address;
-  final String publishedAgo;
+  final String timeAgo;
   final String? customerName;
   final String? customerPhone;
   final String? customerEmail;
@@ -78,7 +78,7 @@ class MyOrderCard extends StatelessWidget {
                   ),
                 ),
                 SizedBox(width: 8.w),
-                Text(publishedAgo, style: tagStyle),
+                Text(timeAgo, style: tagStyle),
               ],
             ),
             SizedBox(height: 8.h),

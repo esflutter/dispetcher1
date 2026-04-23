@@ -39,6 +39,7 @@ class OrderDetailScreen extends StatefulWidget {
     this.selectMode = false,
     this.onSelectExecutor,
     this.executor,
+    this.offerSent = false,
   });
 
   final String orderId;
@@ -59,6 +60,10 @@ class OrderDetailScreen extends StatefulWidget {
   /// Колбэк при нажатии на «Выбрать исполнителя» (только при
   /// [selectMode] `== true`).
   final VoidCallback? onSelectExecutor;
+
+  /// Открыт из статуса «Ждёт подтверждения» — отклик уже отправлен
+  /// этому исполнителю. Кнопка показывается неактивной.
+  final bool offerSent;
 
   @override
   State<OrderDetailScreen> createState() => _OrderDetailScreenState();
@@ -225,6 +230,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                       _CustomerHeader(
                         name: executorName,
                         rating: executorRating,
+                        onReviewsTap: () => context.push('/profile/reviews'),
                       ),
                       SizedBox(height: 20.h),
                       _SectionTitle('Местоположение'),
@@ -311,18 +317,23 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                 16.w,
                 16.h + MediaQuery.of(context).padding.bottom),
             child: PrimaryButton(
-              label: widget.selectMode
-                  ? 'Выбрать исполнителя'
-                  : (_alreadyOffered
-                      ? 'Предложение уже отправлено'
-                      : 'Предложить заказ'),
-              enabled: widget.selectMode ||
-                  (!AccountBlock.isBlocked && !_alreadyOffered),
-              onPressed: widget.selectMode
-                  ? widget.onSelectExecutor
-                  : ((AccountBlock.isBlocked || _alreadyOffered)
-                      ? null
-                      : _onRespondTap),
+              label: widget.offerSent
+                  ? 'Отклик уже отправлен'
+                  : (widget.selectMode
+                      ? 'Выбрать исполнителя'
+                      : (_alreadyOffered
+                          ? 'Предложение уже отправлено'
+                          : 'Предложить заказ')),
+              enabled: !widget.offerSent &&
+                  (widget.selectMode ||
+                      (!AccountBlock.isBlocked && !_alreadyOffered)),
+              onPressed: widget.offerSent
+                  ? null
+                  : (widget.selectMode
+                      ? widget.onSelectExecutor
+                      : ((AccountBlock.isBlocked || _alreadyOffered)
+                          ? null
+                          : _onRespondTap)),
             ),
           ),
         ],
@@ -332,10 +343,15 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
 }
 
 class _CustomerHeader extends StatelessWidget {
-  const _CustomerHeader({required this.name, required this.rating});
+  const _CustomerHeader({
+    required this.name,
+    required this.rating,
+    this.onReviewsTap,
+  });
 
   final String name;
   final double rating;
+  final VoidCallback? onReviewsTap;
 
   @override
   Widget build(BuildContext context) {
@@ -365,12 +381,16 @@ class _CustomerHeader extends StatelessWidget {
                     Text(rating.toString().replaceAll('.', ','),
                         style: AppTextStyles.body),
                     SizedBox(width: 16.w),
-                    Text('15 ${reviewsWord(15)}',
-                        style: AppTextStyles.body.copyWith(
-                          color: AppColors.textPrimary,
-                          decoration: TextDecoration.underline,
-                          decorationColor: AppColors.textPrimary,
-                        )),
+                    GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: onReviewsTap,
+                      child: Text('15 ${reviewsWord(15)}',
+                          style: AppTextStyles.body.copyWith(
+                            color: AppColors.textPrimary,
+                            decoration: TextDecoration.underline,
+                            decorationColor: AppColors.textPrimary,
+                          )),
+                    ),
                   ],
                 ),
               ],

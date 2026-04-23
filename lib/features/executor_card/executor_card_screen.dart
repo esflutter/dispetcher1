@@ -331,7 +331,19 @@ Future<void> showCreateCustomerCardDialog(BuildContext context) {
                 ctx.push('/executor-card/edit');
               },
             ),
-            SizedBox(height: 12.h),
+            SizedBox(height: 20.h),
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => Navigator.of(ctx).pop(),
+              child: Center(
+                child: Text(
+                  'Вернуться',
+                  style: AppTextStyles.bodyMedium
+                      .copyWith(color: AppColors.textPrimary),
+                ),
+              ),
+            ),
+            SizedBox(height: 8.h),
           ],
         ),
       ),

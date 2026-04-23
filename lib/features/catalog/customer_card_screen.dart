@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:go_router/go_router.dart';
 
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_spacing.dart';
@@ -72,9 +73,16 @@ class CustomerCardScreen extends StatelessWidget {
                     SizedBox(height: AppSpacing.md),
                     Text('Александр Иванов', style: AppTextStyles.h3),
                     SizedBox(height: AppSpacing.xxs),
-                    Text('15 ${reviewsWord(15)}',
-                        style: AppTextStyles.caption
-                            .copyWith(color: AppColors.textTertiary)),
+                    GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () => context.push('/profile/reviews'),
+                      child: Text('15 ${reviewsWord(15)}',
+                          style: AppTextStyles.caption.copyWith(
+                            color: AppColors.textTertiary,
+                            decoration: TextDecoration.underline,
+                            decorationColor: AppColors.textTertiary,
+                          )),
+                    ),
                   ],
                 ),
               ),

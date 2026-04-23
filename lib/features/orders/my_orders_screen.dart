@@ -33,6 +33,7 @@ class MyOrdersScreen extends StatefulWidget {
 class _MyOrdersScreenState extends State<MyOrdersScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tab;
+  final ScrollController _waitingScrollCtrl = ScrollController();
 
   // Все моки и мутации теперь живут в [MyOrdersStore]. Экран просто
   // подписывается на его revision и перерисовывается при изменении.
@@ -59,8 +60,8 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
   /// Возвращает копию — исходный список не мутируется.
   List<OrderMock> _sortedByDate(List<OrderMock> list) {
     final List<OrderMock> copy = List<OrderMock>.of(list);
-    copy.sort(
-        (OrderMock a, OrderMock b) => b.publishedAt.compareTo(a.publishedAt));
+    copy.sort((OrderMock a, OrderMock b) =>
+        b.statusUpdatedAt.compareTo(a.statusUpdatedAt));
     return copy;
   }
 
@@ -86,6 +87,7 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
     AccountBlock.notifier.removeListener(_onBlockChanged);
     MyOrdersStore.revision.removeListener(_onStoreChanged);
     _tab.dispose();
+    _waitingScrollCtrl.dispose();
     super.dispose();
   }
 
@@ -131,7 +133,23 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
           IconButton(
             onPressed: _blocked
                 ? null
-                : () => DailyOrderLimit.openCreateOrAlert(context),
+                : () async {
+                    final int before = MyOrdersStore.newOrders.length;
+                    await DailyOrderLimit.openCreateOrAlert(context);
+                    if (!mounted) return;
+                    if (MyOrdersStore.newOrders.length > before) {
+                      _tab.animateTo(0);
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        if (_waitingScrollCtrl.hasClients) {
+                          _waitingScrollCtrl.animateTo(
+                            0,
+                            duration: const Duration(milliseconds: 300),
+                            curve: Curves.easeOut,
+                          );
+                        }
+                      });
+                    }
+                  },
             icon: Icon(Icons.add, size: 32.r, color: Colors.white),
             tooltip: 'Создать заказ',
           ),
@@ -165,7 +183,7 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
           child: TabBarView(
             controller: _tab,
             children: <Widget>[
-              _buildList(_newOrdersList),
+              _buildList(_newOrdersList, scrollCtrl: _waitingScrollCtrl),
               _buildList(_inWorkList),
               _buildList(_archiveList),
             ],
@@ -175,7 +193,7 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
     );
   }
 
-  Widget _buildList(List<OrderMock> items) {
+  Widget _buildList(List<OrderMock> items, {ScrollController? scrollCtrl}) {
     if (items.isEmpty) {
       return _EmptyOrders(
         onGoToCatalog: _blocked ? null : widget.onGoToCatalog,
@@ -187,6 +205,7 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
       removeTop: true,
       removeBottom: true,
       child: ListView.builder(
+        controller: scrollCtrl,
         padding: EdgeInsets.zero,
         itemCount: items.length,
         itemBuilder: (BuildContext context, int i) {
@@ -208,7 +227,7 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
                 equipment: o.equipment,
                 rentDate: o.rentDate,
                 address: o.address,
-                publishedAgo: o.publishedAgo,
+                timeAgo: o.timeAgo,
                 customerName: o.customerName,
                 customerPhone: o.customerPhone,
                 onTap: () => _openOrderDetail(context, o),
@@ -226,27 +245,14 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
     );
   }
 
-  /// Обработчик «Выбрать другого исполнителя» для статуса
-  /// `awaitingExecutor`. Сначала закрываем открытый экран (превью или
-  /// детали), затем дергаем стор: если есть другие отклики — открываем
-  /// список откликнувшихся; если нет — переключаемся на вкладку
-  /// «Каталог», чтобы заказчик сам нашёл исполнителя.
-  void _handlePickAnotherFromAwaiting(
-    BuildContext screenCtx,
-    OrderMock o,
-  ) {
+  /// «Выбрать другого исполнителя» / «Перейти в каталог»:
+  /// закрываем текущий экран и переключаемся на вкладку «Каталог».
+  /// Никакого состояния не сохраняем и статус заказа не меняем —
+  /// пользователь сам найдёт нужного исполнителя и вручную выберет,
+  /// к какому заказу отправить предложение.
+  void _handlePickAnotherFromAwaiting(BuildContext screenCtx, OrderMock o) {
     Navigator.of(screenCtx).maybePop();
-    final MyOrderStatus newStatus =
-        MyOrdersStore.pickAnotherFromAwaiting(o);
-    final OrderMock updated = MyOrdersStore.newOrders.firstWhere(
-      (OrderMock x) => x.id == o.id,
-      orElse: () => o.copyWith(status: newStatus),
-    );
-    if (newStatus == MyOrderStatus.waiting) {
-      widget.onGoToCatalog?.call();
-    } else {
-      _openOrderDetail(context, updated);
-    }
+    widget.onGoToCatalog?.call();
   }
 
   /// Открывает подробности заказа. Для заказов, созданных заказчиком
@@ -346,9 +352,10 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
           equipment: o.equipment,
           rentDate: o.rentDate,
           address: o.address,
-          publishedAgo: o.publishedAgo,
+          timeAgo: o.timeAgo,
           description: o.description,
           photos: o.photos,
+          orderNumber: o.displayNumber,
           customerName: o.customerName ?? CropResult.namePlaceholder,
           customerPhone: o.customerPhone ?? '+7 999 123-45-67',
           customerEmail: o.customerEmail,
@@ -387,9 +394,10 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
           equipment: o.equipment,
           rentDate: o.rentDate,
           address: o.address,
-          publishedAgo: o.publishedAgo,
+          timeAgo: o.timeAgo,
           description: o.description,
           photos: o.photos,
+          orderNumber: o.displayNumber,
           customerName: o.customerName ?? CropResult.namePlaceholder,
           customerPhone: o.customerPhone ?? '+7 999 123-45-67',
           customerEmail: o.customerEmail,

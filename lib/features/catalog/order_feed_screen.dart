@@ -511,6 +511,7 @@ class ExecutorMock {
     required this.categories,
     required this.pricePerHour,
     required this.pricePerDay,
+    this.phone = '',
     this.services = const <ExecutorServiceOffer>[],
     this.about = '',
   });
@@ -523,6 +524,7 @@ class ExecutorMock {
   final List<String> categories;
   final int pricePerHour;
   final int pricePerDay;
+  final String phone;
   final List<ExecutorServiceOffer> services;
   final String about;
 
@@ -530,6 +532,7 @@ class ExecutorMock {
     ExecutorMock(
       id: '1',
       name: 'Александр Иванов',
+      phone: '+7 999 111-22-33',
       rating: 4.5,
       experience: '8 лет',
       legalStatus: 'Юр. лицо',
@@ -606,6 +609,7 @@ class ExecutorMock {
     ExecutorMock(
       id: '2',
       name: 'Сергей Петров',
+      phone: '+7 999 333-44-55',
       rating: 4.8,
       experience: '10 лет',
       legalStatus: 'ИП',
@@ -642,16 +646,17 @@ class ExecutorMock {
     ExecutorMock(
       id: '3',
       name: 'Дмитрий Сидоров',
+      phone: '+7 999 222-33-44',
       rating: 4.2,
       experience: '3 года',
       legalStatus: 'Самозанятый',
-      equipment: <String>['Экскаватор', 'Автокран', 'Манипулятор'],
+      equipment: <String>['Миниэкскаватор', 'Автокран', 'Манипулятор'],
       categories: <String>['Земляные работы', 'Строительные работы'],
       pricePerHour: 2500,
       pricePerDay: 15000,
       services: <ExecutorServiceOffer>[
         ExecutorServiceOffer(
-          equipment: 'Экскаватор',
+          equipment: 'Миниэкскаватор',
           title: 'Миниэкскаватор для небольших участков',
           description:
               'Миниэкскаватор на узких участках: дачи, огороды, узкие проезды. Копка траншей под коммуникации, ямы под столбы.',
@@ -685,6 +690,7 @@ class ExecutorMock {
     ExecutorMock(
       id: '4',
       name: 'Андрей Козлов',
+      phone: '+7 999 444-55-66',
       rating: 4.9,
       experience: '12 лет',
       legalStatus: 'Юр. лицо',
@@ -715,11 +721,62 @@ class ExecutorMock {
         ),
       ],
     ),
+    ExecutorMock(
+      id: '5',
+      name: 'Максим Орлов',
+      phone: '+7 999 555-66-77',
+      rating: 4.3,
+      experience: '4 года',
+      legalStatus: 'ИП',
+      equipment: <String>['Минипогрузчик', 'Миниэкскаватор'],
+      categories: <String>['Земляные работы', 'Погрузочно-разгрузочные работы'],
+      pricePerHour: 2000,
+      pricePerDay: 12000,
+      services: <ExecutorServiceOffer>[
+        ExecutorServiceOffer(
+          equipment: 'Минипогрузчик',
+          title: 'Минипогрузчик для стеснённых условий',
+          description:
+              'Компактный погрузчик для работ в ограниченном пространстве: '
+              'дворы, узкие проходы, подвалы. Сгребание и перемещение грунта, '
+              'мусора, сыпучих материалов.',
+          pricePerHour: 2000,
+          pricePerDay: 12000,
+          minHours: 3,
+          categories: <String>[
+            'Погрузочно-разгрузочные работы',
+            'Земляные работы',
+          ],
+        ),
+        ExecutorServiceOffer(
+          equipment: 'Миниэкскаватор',
+          title: 'Миниэкскаватор 1.5 т для малых участков',
+          description:
+              'Миниэкскаватор для дачных и частных участков: копка под '
+              'коммуникации, ямы под столбы и сваи, траншеи под дренаж. '
+              'Проходит в узкие ворота.',
+          pricePerHour: 2200,
+          pricePerDay: 13000,
+          minHours: 3,
+          categories: <String>['Земляные работы'],
+        ),
+      ],
+      about: 'Работаю с компактной техникой для стеснённых условий. '
+          'Есть прицеп для перевозки — выезжаю в день обращения.',
+    ),
   ];
 
   static ExecutorMock? byId(String id) {
     for (final ExecutorMock e in all) {
       if (e.id == id) return e;
+    }
+    return null;
+  }
+
+  static ExecutorMock? byName(String name) {
+    final String q = name.trim().toLowerCase();
+    for (final ExecutorMock e in all) {
+      if (e.name.toLowerCase() == q) return e;
     }
     return null;
   }

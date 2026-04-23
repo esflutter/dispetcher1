@@ -13,8 +13,8 @@ class OrderMock {
     required this.equipment,
     required this.rentDate,
     required this.address,
-    required this.publishedAgo,
     required this.publishedAt,
+    DateTime? statusUpdatedAt,
     this.customerName,
     this.customerPhone,
     this.customerEmail,
@@ -26,7 +26,7 @@ class OrderMock {
     this.reviewLeft = false,
     this.respondersCount,
     this.prevStatus,
-  });
+  }) : statusUpdatedAt = statusUpdatedAt ?? publishedAt;
 
   final String id;
   final MyOrderStatus status;
@@ -34,13 +34,74 @@ class OrderMock {
   final List<String> equipment;
   final String rentDate;
   final String address;
-  final String publishedAgo;
-
-  /// Момент публикации заказа — используется для сортировки списка
-  /// «от новых к старым». Отображаемый человеку текст лежит отдельно
-  /// в [publishedAgo], чтобы не перевычислять форматирование на каждую
-  /// перерисовку.
   final DateTime publishedAt;
+
+  /// Момент последнего изменения статуса заказа. При каждом изменении
+  /// статуса через [copyWith] сбрасывается в [DateTime.now()]. Именно
+  /// это поле используется в [timeAgo], чтобы отсчёт «сколько времени
+  /// назад» шёл не от публикации, а от последнего действия.
+  final DateTime statusUpdatedAt;
+
+  String get timeAgo {
+    final DateTime now = DateTime.now();
+    final Duration diff = now.difference(statusUpdatedAt);
+    if (diff.inSeconds < 60) return 'Только что';
+    if (diff.inMinutes < 60) {
+      final int m = diff.inMinutes;
+      return '$m ${_pluralMin(m)} назад';
+    }
+    if (diff.inHours < 24) {
+      final int h = diff.inHours;
+      return '$h ${_pluralH(h)} назад';
+    }
+    final DateTime today = DateTime(now.year, now.month, now.day);
+    final DateTime upDay =
+        DateTime(statusUpdatedAt.year, statusUpdatedAt.month, statusUpdatedAt.day);
+    if (upDay == today.subtract(const Duration(days: 1))) {
+      final String hh = statusUpdatedAt.hour.toString().padLeft(2, '0');
+      final String mm = statusUpdatedAt.minute.toString().padLeft(2, '0');
+      return 'Вчера в $hh:$mm';
+    }
+    final int d = today.difference(upDay).inDays;
+    return '$d ${_pluralD(d)} назад';
+  }
+
+  /// Номер заказа для отображения. Для заказов, созданных пользователем,
+  /// возвращает [number]. Для моковых генерирует номер из [id]-префикса,
+  /// чтобы каждый мок имел уникальный и реалистичный номер.
+  String get displayNumber {
+    if (number != null) return number!;
+    final String pfx = id.isNotEmpty ? id[0] : 'n';
+    final String digits = id.replaceAll(RegExp(r'\D'), '');
+    final int base =
+        pfx == 'a' ? 81220000 : pfx == 'r' ? 81210000 : 81230000;
+    final int n = base + (int.tryParse(digits) ?? 0);
+    return '№$n';
+  }
+
+  static String _pluralH(int n) {
+    if (n % 10 == 1 && n % 100 != 11) return 'час';
+    if (n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20)) {
+      return 'часа';
+    }
+    return 'часов';
+  }
+
+  static String _pluralD(int n) {
+    if (n % 10 == 1 && n % 100 != 11) return 'день';
+    if (n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20)) {
+      return 'дня';
+    }
+    return 'дней';
+  }
+
+  static String _pluralMin(int n) {
+    if (n % 10 == 1 && n % 100 != 11) return 'минуту';
+    if (n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20)) {
+      return 'минуты';
+    }
+    return 'минут';
+  }
 
   final String? customerName;
   final String? customerPhone;
@@ -96,12 +157,13 @@ class OrderMock {
       equipment: equipment,
       rentDate: rentDate,
       address: address,
-      publishedAgo: publishedAgo,
       publishedAt: publishedAt,
-      // [clearContacts] принудительно обнуляет контактные поля,
-      // независимо от того, что передали в customerName/phone/email.
-      // Нужен, когда заказ возвращается в «Откликов пока нет» — чтобы
-      // данные ранее предложенного исполнителя не тянулись за заказом.
+      // Сбрасываем таймер при каждой реальной смене статуса — чтобы
+      // timeAgo отсчитывался от последнего действия, а не от публикации.
+      statusUpdatedAt: (status != null && status != this.status)
+          ? DateTime.now()
+          : statusUpdatedAt,
+      // [clearContacts] принудительно обнуляет контактные поля.
       customerName:
           clearContacts ? null : (customerName ?? this.customerName),
       customerPhone:
@@ -193,11 +255,10 @@ class MyOrdersStore {
   /// при первом обращении к стору, чтобы относительные метки
   /// («2 часа назад», «Вчера в 14:30») не разъезжались.
   static final DateTime _now = DateTime.now();
-  static DateTime _today(int h, int m) =>
-      DateTime(_now.year, _now.month, _now.day, h, m);
   static DateTime _yesterday(int h, int m) =>
       DateTime(_now.year, _now.month, _now.day - 1, h, m);
   static DateTime _hoursAgo(int h) => _now.subtract(Duration(hours: h));
+  static DateTime _minutesAgo(int m) => _now.subtract(Duration(minutes: m));
   static DateTime _daysAgo(int d) => _now.subtract(Duration(days: d));
 
   /// «Ожидает»: заказ опубликован, исполнитель ещё не выбран.
@@ -209,7 +270,6 @@ class MyOrdersStore {
       equipment: const <String>['Экскаватор'],
       rentDate: '15 июня · 09:00–18:00',
       address: 'Московская область, Москва, Улица1, д 144',
-      publishedAgo: '2 часа назад',
       publishedAt: _hoursAgo(2),
       description:
           'Нужно проложить траншею под кабель связи на частном участке. '
@@ -223,8 +283,7 @@ class MyOrdersStore {
       equipment: const <String>['Автокран', 'Экскаватор'],
       rentDate: '15 июня · 09:00–18:00',
       address: 'Московская область, Москва, Улица1, д 144',
-      publishedAgo: 'Сегодня в 11:30',
-      publishedAt: _today(11, 30),
+      publishedAt: _hoursAgo(2),
       respondersCount: 3,
       description:
           'Требуется разработать площадку под стройку складского ангара. '
@@ -244,8 +303,7 @@ class MyOrdersStore {
       ],
       rentDate: '15 июня · 09:00–18:00',
       address: 'Московская область, Москва, Улица1, д 144',
-      publishedAgo: 'Сегодня в 11:30',
-      publishedAt: _today(11, 30),
+      publishedAt: _hoursAgo(3),
       respondersCount: 1,
       description:
           'Котлован под ленточный фундамент дома 10×12 м, глубина 1,5 м. '
@@ -259,7 +317,6 @@ class MyOrdersStore {
       equipment: const <String>['Экскаватор', 'Самосвал'],
       rentDate: '20 июня · 08:00–17:00',
       address: 'Московская область, Красногорск, ул. Ленина, 10',
-      publishedAgo: 'Вчера в 09:00',
       publishedAt: _yesterday(9, 0),
       respondersCount: 2,
       description:
@@ -273,8 +330,9 @@ class MyOrdersStore {
       equipment: const <String>['Буровая установка'],
       rentDate: '25 июня · 10:00–16:00',
       address: 'Московская область, Химки, ул. Строителей, 5',
-      publishedAgo: 'Сегодня в 08:15',
-      publishedAt: _today(8, 15),
+      publishedAt: _hoursAgo(4),
+      customerName: 'Александр Иванов',
+      customerPhone: '+7 999 111-22-33',
       description:
           'Нужно пробурить 4 скважины диаметром 300 мм под винтовые сваи, '
           'глубина до 2 м. Грунт — глина с небольшими вкраплениями '
@@ -287,8 +345,7 @@ class MyOrdersStore {
       equipment: const <String>['Манипулятор'],
       rentDate: '28 июня · 08:00–20:00',
       address: 'Московская область, Балашиха, ул. Заречная, 12',
-      publishedAgo: 'Сегодня в 07:40',
-      publishedAt: _today(7, 40),
+      publishedAt: _hoursAgo(5),
       description:
           'Установка бетонного забора по периметру участка — 80 погонных '
           'метров, 20 секций. Нужна помощь манипулятора для монтажа плит.',
@@ -301,7 +358,6 @@ class MyOrdersStore {
       equipment: const <String>['Самосвал', 'Манипулятор'],
       rentDate: '16 июня · 08:00–14:00',
       address: 'Москва, ул. Профсоюзная, д 102',
-      publishedAgo: '1 час назад',
       publishedAt: _hoursAgo(1),
       description:
           'Доставка кирпича и ЖБИ-панелей на объект. Груз в паллетах, '
@@ -315,7 +371,6 @@ class MyOrdersStore {
       equipment: const <String>['Автовышка', 'Манипулятор'],
       rentDate: '17 июня · 09:00–18:00',
       address: 'Московская область, Мытищи, ул. Мира, д 30',
-      publishedAgo: '3 часа назад',
       publishedAt: _hoursAgo(3),
       description:
           'Монтаж 6 опор освещения во дворе жилого комплекса. Опоры '
@@ -329,7 +384,6 @@ class MyOrdersStore {
       equipment: const <String>['Погрузчик', 'Самосвал'],
       rentDate: '18 июня · 06:00–12:00',
       address: 'Москва, ул. Ленинский пр-т, д 65',
-      publishedAgo: '5 часов назад',
       publishedAt: _hoursAgo(5),
       description:
           'Уборка снега и вывоз с открытого паркинга ТЦ. Площадь около '
@@ -343,7 +397,6 @@ class MyOrdersStore {
       equipment: const <String>['Экскаватор-погрузчик', 'Самосвал'],
       rentDate: '19 июня · 08:00–17:00',
       address: 'Московская область, Одинцово, ул. Садовая, д 18',
-      publishedAgo: 'Вчера в 16:40',
       publishedAt: _yesterday(16, 40),
       description:
           'Участок 15 соток, зарос кустарником и мелкими деревьями. '
@@ -357,7 +410,6 @@ class MyOrdersStore {
       equipment: const <String>['Миниэкскаватор'],
       rentDate: '22 июня · 10:00–15:00',
       address: 'Московская область, Подольск, ул. Кирова, д 88',
-      publishedAgo: '2 дня назад',
       publishedAt: _daysAgo(2),
       description:
           'Яма под трёхкамерный септик объёмом 3 м³. Глубина 2,2 м, '
@@ -371,7 +423,6 @@ class MyOrdersStore {
       equipment: const <String>['Бетононасос', 'Автокран'],
       rentDate: '24 июня · 08:00–18:00',
       address: 'Москва, ул. Таганская, д 24',
-      publishedAgo: '3 дня назад',
       publishedAt: _daysAgo(3),
       description:
           'Заливка монолитных перекрытий на 6 этаже жилого дома. Объём '
@@ -385,7 +436,6 @@ class MyOrdersStore {
       equipment: const <String>['Эвакуатор'],
       rentDate: '26 июня · 09:00–12:00',
       address: 'Московская область, Красногорск, ул. Речная, д 7',
-      publishedAgo: '4 дня назад',
       publishedAt: _daysAgo(4),
       description:
           'Нужно перевезти сломанный мини-погрузчик со стройплощадки '
@@ -399,7 +449,6 @@ class MyOrdersStore {
       equipment: const <String>['Минипогрузчик', 'Миниэкскаватор'],
       rentDate: '30 июня · 08:00–16:00',
       address: 'Москва, ул. Новослободская, д 45',
-      publishedAgo: 'Вчера в 10:15',
       publishedAt: _yesterday(10, 15),
       respondersCount: 2,
       description:
@@ -415,8 +464,9 @@ class MyOrdersStore {
       equipment: const <String>['Миниэкскаватор'],
       rentDate: '21 июня · 09:00–15:00',
       address: 'Московская область, Химки, ул. Ленина, д 5',
-      publishedAgo: '2 часа назад',
       publishedAt: _hoursAgo(2),
+      customerName: 'Дмитрий Сидоров',
+      customerPhone: '+7 999 222-33-44',
       description:
           'Дренажная траншея по периметру дома — длина 40 м, глубина '
           '0,8 м. Укладка труб на песок с обратной засыпкой. Грунт — '
@@ -433,8 +483,8 @@ class MyOrdersStore {
       equipment: const <String>['Экскаватор'],
       rentDate: '15 июня · 09:00–18:00',
       address: 'Московская область, Москва, Улица1, д 144',
-      publishedAgo: '2 часа назад',
-      publishedAt: _hoursAgo(2),
+      publishedAt: _hoursAgo(3),
+      statusUpdatedAt: _minutesAgo(45),
       customerName: 'Александр Иванов',
       customerPhone: '+7 999 123-45-67',
       customerEmail: 'ivanov.a@example.ru',
@@ -455,11 +505,11 @@ class MyOrdersStore {
       ],
       rentDate: '15 июня · 09:00–18:00',
       address: 'Московская область, Москва, Улица1, д 144',
-      publishedAgo: 'Сегодня в 11:30',
-      publishedAt: _today(11, 30),
-      customerName: 'Александр Иванов',
-      customerPhone: '+7 999 765-43-21',
-      customerEmail: 'ivanov.a@example.ru',
+      publishedAt: _hoursAgo(5),
+      statusUpdatedAt: _hoursAgo(2),
+      customerName: 'Сергей Петров',
+      customerPhone: '+7 999 333-44-55',
+      customerEmail: 'petrov.s@example.ru',
       description:
           'Подготовка котлована 8×10 м под ленточный фундамент. Дополнительно '
           'нужен автокран на 1–2 часа для разгрузки арматурных каркасов.',
@@ -471,8 +521,8 @@ class MyOrdersStore {
       equipment: const <String>['Экскаватор'],
       rentDate: '15 июня · 09:00–18:00',
       address: 'Московская область, Москва, Улица1, д 144',
-      publishedAgo: 'Вчера в 14:30',
-      publishedAt: _yesterday(14, 30),
+      publishedAt: _daysAgo(2),
+      statusUpdatedAt: _yesterday(16, 20),
       customerName: 'Александр Иванов',
       customerPhone: '+7 999 123-45-67',
       description:
@@ -490,7 +540,6 @@ class MyOrdersStore {
       equipment: const <String>['Автокран', 'Экскаватор'],
       rentDate: '15 июня · 09:00–18:00',
       address: 'Московская область, Москва, Улица1, д 144',
-      publishedAgo: '2 часа назад',
       publishedAt: _hoursAgo(2),
       description:
           'Подготовка площадки под склад: снятие плодородного слоя, '
@@ -509,7 +558,6 @@ class MyOrdersStore {
       ],
       rentDate: '15 июня · 09:00–18:00',
       address: 'Московская область, Москва, Улица1, д 144',
-      publishedAgo: 'Вчера в 14:30',
       publishedAt: _yesterday(14, 30),
       description:
           'Котлован 12×15 м под фундамент двухэтажного коттеджа. '
@@ -528,7 +576,6 @@ class MyOrdersStore {
       ],
       rentDate: '15 июня · 09:00–18:00',
       address: 'Московская область, Москва, Улица1, д 144',
-      publishedAgo: '3 дня назад',
       publishedAt: _daysAgo(3),
       description:
           'Разработка котлована под пристройку к жилому дому, '
@@ -548,16 +595,19 @@ class MyOrdersStore {
             .where((OrderMock o) => o.status == MyOrderStatus.completed),
       ];
 
-  /// Заказы, которые можно предложить исполнителю из каталога. Только
-  /// статус `waiting` («Откликов пока нет»). Исключены:
-  ///   * `awaitingExecutor` — уже предложен конкретному исполнителю;
-  ///   * `waitingChoose` / `executorDeclined` — там есть отклики,
-  ///     заказчик должен выбрать из откликнувшихся, а не звать ещё;
-  ///   * `executorDeclinedWaiting` — это отдельный «пост-отказ»
-  ///     поток, заказчик возвращается в каталог сам, а не предлагает
-  ///     этот заказ другому исполнителю через экран «Предложить».
+  /// Заказы, которые можно предложить исполнителю из каталога:
+  ///   * `waiting` — откликов пока нет;
+  ///   * `awaitingExecutor` — уже предложен кому-то, но заказчик
+  ///     вправе предложить тому же или другому исполнителю ещё раз;
+  ///   * `executorDeclinedWaiting` — предыдущий отказался, снова
+  ///     ищем через каталог.
+  /// Исключены `waitingChoose` / `executorDeclined` — там есть
+  /// отклики, заказчик выбирает из них, а не ищет сам в каталоге.
   static List<OrderMock> get offerable => newOrders
-      .where((OrderMock o) => o.status == MyOrderStatus.waiting)
+      .where((OrderMock o) =>
+          o.status == MyOrderStatus.waiting ||
+          o.status == MyOrderStatus.awaitingExecutor ||
+          o.status == MyOrderStatus.executorDeclinedWaiting)
       .toList();
 
   /// Добавляет только что созданный пользователем заказ в начало

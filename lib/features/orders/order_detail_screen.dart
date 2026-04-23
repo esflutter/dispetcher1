@@ -16,6 +16,7 @@ import 'package:dispatcher_1/features/catalog/order_detail_screen.dart'
 import 'package:dispatcher_1/features/catalog/order_feed_screen.dart'
     show ExecutorMock, ExecutorServiceOffer;
 import 'package:dispatcher_1/features/catalog/widgets/catalog_search_bar.dart';
+import 'package:dispatcher_1/features/catalog/widgets/order_card.dart';
 import 'package:dispatcher_1/features/orders/review_screen.dart';
 import 'package:dispatcher_1/features/orders/widgets/order_alerts.dart';
 import 'package:dispatcher_1/features/orders/widgets/order_status_pill.dart';
@@ -60,7 +61,7 @@ class MyOrderDetailScreen extends StatefulWidget {
     this.customerName = 'Иванов Александр',
     this.customerPhone = '+7 999 123-45-67',
     this.customerEmail,
-    this.publishedAgo = 'Вчера в 14:30',
+    this.timeAgo = 'Вчера в 14:30',
     this.orderNumber = '№12345678',
     this.workDescription = const <String>[
       'Разработка грунта — 40 м³',
@@ -89,7 +90,7 @@ class MyOrderDetailScreen extends StatefulWidget {
   final String customerName;
   final String customerPhone;
   final String? customerEmail;
-  final String publishedAgo;
+  final String timeAgo;
   final String orderNumber;
   final List<String> workDescription;
 
@@ -185,7 +186,9 @@ class _MyOrderDetailScreenState extends State<MyOrderDetailScreen> {
   /// активен (executor выбран, но ещё не закрыт). У завершённых
   /// заказов блок исполнителя не нужен — заказ исторический, звонить
   /// и писать смысла нет.
-  bool get _showExecutor => _state == MyOrderDetailState.confirmed;
+  bool get _showExecutor =>
+      _state == MyOrderDetailState.confirmed ||
+      _state == MyOrderDetailState.completed;
 
   bool get _showPhone => _showExecutor;
 
@@ -195,11 +198,14 @@ class _MyOrderDetailScreenState extends State<MyOrderDetailScreen> {
   /// отсутствовать — тогда каталог-экран покажет стандартное
   /// содержимое по дефолтному id.
   void _openExecutorProfile() {
+    final ExecutorMock? exec = ExecutorMock.byName(widget.customerName);
     Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
         builder: (_) => catalog.OrderDetailScreen(
-          orderId: widget.orderNumber,
+          orderId: exec?.id ?? widget.orderNumber,
+          executor: exec,
           multipleEquipment: widget.equipment.length > 1,
+          offerSent: widget.waitingStatus == MyOrderStatus.awaitingExecutor,
         ),
       ),
     );
@@ -300,7 +306,9 @@ class _MyOrderDetailScreenState extends State<MyOrderDetailScreen> {
                     _CustomerHeader(
                       name: widget.customerName,
                       onTap: _openExecutorProfile,
-                      onCall: () => _dialPhone(widget.customerPhone),
+                      onCall: _state == MyOrderDetailState.confirmed
+                          ? () => _dialPhone(widget.customerPhone)
+                          : null,
                       onReviewsTap: _openExecutorReviews,
                     ),
                   ],
@@ -356,7 +364,7 @@ class _MyOrderDetailScreenState extends State<MyOrderDetailScreen> {
                   ),
                   SizedBox(height: 7.h),
                   Text(
-                    widget.publishedAgo,
+                    widget.timeAgo,
                     style: AppTextStyles.caption
                         .copyWith(color: AppColors.textTertiary),
                   ),
@@ -422,65 +430,58 @@ class _MyOrderDetailScreenState extends State<MyOrderDetailScreen> {
                       ],
                     ),
                   ),
-                  // Блок «Цена» — показывается всегда. В confirmed
-                  // статусе берём цены конкретного исполнителя, с
-                  // которым состоялся мэтч (лукап в каталоге по имени).
-                  // В остальных статусах (когда исполнитель ещё не
-                  // назначен) показываем минимальную цену по каталогу
-                  // для каждого требуемого вида техники — как
-                  // ориентир стоимости.
-                  Builder(
-                    builder: (BuildContext _) {
-                      ExecutorMock? exec;
-                      for (final ExecutorMock e in ExecutorMock.all) {
-                        if (e.name == widget.customerName) {
-                          exec = e;
-                          break;
+                  // Блок «Цена» — только в статусах «Свяжитесь с
+                  // исполнителем» (confirmed) и «Завершён» (completed).
+                  // Цены берём из карточки мэтчнутого исполнителя
+                  // (лукап по имени: customerName здесь — партнёр по
+                  // мэтчу, т. е. исполнитель). В остальных статусах
+                  // исполнитель не назначен — цены нет.
+                  if (_state == MyOrderDetailState.confirmed ||
+                      _state == MyOrderDetailState.completed)
+                    Builder(
+                      builder: (BuildContext _) {
+                        ExecutorMock? exec;
+                        for (final ExecutorMock e in ExecutorMock.all) {
+                          if (e.name == widget.customerName) {
+                            exec = e;
+                            break;
+                          }
                         }
-                      }
-                      final Set<String> neededEq = widget.equipment.toSet();
-                      List<ExecutorServiceOffer> matched;
-                      if (exec != null) {
-                        matched = exec.services
+                        if (exec == null) return const SizedBox.shrink();
+                        final Set<String> neededEq = widget.equipment.toSet();
+                        final List<ExecutorServiceOffer> matched = exec.services
                             .where((ExecutorServiceOffer s) =>
                                 neededEq.contains(s.equipment))
                             .toList();
-                      } else {
-                        matched = <ExecutorServiceOffer>[];
-                        for (final String eq in widget.equipment) {
-                          ExecutorServiceOffer? cheapest;
-                          for (final ExecutorMock e in ExecutorMock.all) {
-                            for (final ExecutorServiceOffer s in e.services) {
-                              if (s.equipment != eq) continue;
-                              if (cheapest == null ||
-                                  s.pricePerHour < cheapest.pricePerHour) {
-                                cheapest = s;
-                              }
-                            }
-                          }
-                          if (cheapest != null) matched.add(cheapest);
-                        }
-                      }
-                      if (matched.isEmpty) return const SizedBox.shrink();
-                      return _Section(
-                        title: 'Цена',
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: <Widget>[
-                            for (int i = 0; i < matched.length; i++) ...<Widget>[
-                              if (i > 0) SizedBox(height: 2.h),
-                              _PriceLine(service: matched[i]),
+                        if (matched.isEmpty) return const SizedBox.shrink();
+                        return _Section(
+                          title: 'Цена',
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: <Widget>[
+                              for (int i = 0; i < matched.length; i++) ...<Widget>[
+                                if (i > 0) SizedBox(height: 2.h),
+                                _PriceLine(service: matched[i]),
+                              ],
                             ],
-                          ],
-                        ),
-                      );
-                    },
-                  ),
+                          ),
+                        );
+                      },
+                    ),
                   if (widget.photos.isNotEmpty)
                     _Section(
                       title: 'Фото',
                       child: _PhotosGrid(photos: widget.photos),
                     ),
+                  if (widget.waitingStatus ==
+                      MyOrderStatus.awaitingExecutor) ...<Widget>[
+                    SizedBox(height: 4.h),
+                    _AwaitingExecutorCard(
+                      name: widget.customerName,
+                      orderEquipment: widget.equipment,
+                      onTap: _openExecutorProfile,
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -800,6 +801,45 @@ class _OutlinedChip extends StatelessWidget {
           height: 1.3,
           color: AppColors.textPrimary,
         ),
+      ),
+    );
+  }
+}
+
+/// Карточка единственного исполнителя в статусе «Ждёт подтверждения».
+/// Внешне аналогична карточкам в SelectExecutorScreen, но одна.
+class _AwaitingExecutorCard extends StatelessWidget {
+  const _AwaitingExecutorCard({
+    required this.name,
+    required this.orderEquipment,
+    required this.onTap,
+  });
+
+  final String name;
+  final List<String> orderEquipment;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final ExecutorMock? exec = ExecutorMock.byName(name);
+    final Set<String> orderEq = orderEquipment.toSet();
+    final List<ExecutorServiceOffer>? matching = exec?.services
+        .where((ExecutorServiceOffer s) => orderEq.contains(s.equipment))
+        .toList();
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.fieldFill,
+        borderRadius: BorderRadius.circular(14.r),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: OrderCard(
+        name: name,
+        rating: exec?.rating ?? 4.5,
+        equipment: exec?.equipment ?? <String>[],
+        categories: exec?.categories ?? <String>[],
+        matchingServices: matching?.isEmpty ?? true ? null : matching,
+        highlightEquipment: orderEq,
+        onTap: onTap,
       ),
     );
   }

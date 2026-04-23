@@ -89,8 +89,8 @@ class _SelectOrderForExecutorScreenState
             executorEq.isEmpty ||
             o.equipment.any((String e) => executorEq.contains(e)))
         .toList();
-    list.sort(
-        (OrderMock a, OrderMock b) => b.publishedAt.compareTo(a.publishedAt));
+    list.sort((OrderMock a, OrderMock b) =>
+        b.statusUpdatedAt.compareTo(a.statusUpdatedAt));
     return list;
   }
 
@@ -107,11 +107,13 @@ class _SelectOrderForExecutorScreenState
       builder: (_) => const RespondModalDialog(),
     );
     OfferSubmissions.mark(widget.executorOrderId);
-    // После подтверждения переводим заказ в «Ждёт подтверждения от
-    // исполнителя» (awaitingExecutor) — именно этот статус отражает
-    // «предложил конкретному исполнителю, ждём его решения».
     if (selected != null) {
-      MyOrdersStore.proposeToExecutor(selected);
+      final ExecutorMock? exec = ExecutorMock.byId(widget.executorOrderId);
+      MyOrdersStore.proposeToExecutor(
+        selected,
+        name: exec?.name,
+        phone: exec?.phone,
+      );
     }
     if (mounted) Navigator.of(context).pop();
   }

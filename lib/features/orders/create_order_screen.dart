@@ -407,7 +407,6 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
       equipment: draft.machinery,
       rentDate: draft.rentDate,
       address: draft.address,
-      publishedAgo: 'Только что',
       publishedAt: DateTime.now(),
       number: draft.number,
       description: draft.description,
@@ -673,7 +672,10 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
                             controller: _works[i].volumeCtrl,
                             hint: 'Объём работы',
                             keyboardType: TextInputType.number,
-                            maxLength: 9,
+                            maxLength: 6,
+                            extraFormatters: <TextInputFormatter>[
+                              FilteringTextInputFormatter.digitsOnly,
+                            ],
                             fontSize: 14.sp,
                             height: 40.h,
                           ),
@@ -856,6 +858,7 @@ class _TintField extends StatelessWidget {
     this.maxLines = 1,
     this.keyboardType,
     this.maxLength,
+    this.extraFormatters,
     this.fontSize,
     this.height,
   });
@@ -865,6 +868,7 @@ class _TintField extends StatelessWidget {
   final int? maxLines;
   final TextInputType? keyboardType;
   final int? maxLength;
+  final List<TextInputFormatter>? extraFormatters;
   final double? fontSize;
   final double? height;
 
@@ -884,9 +888,10 @@ class _TintField extends StatelessWidget {
       minLines: minLines,
       maxLines: maxLines,
       keyboardType: keyboardType,
-      inputFormatters: maxLength != null
-          ? <TextInputFormatter>[LengthLimitingTextInputFormatter(maxLength)]
-          : null,
+      inputFormatters: <TextInputFormatter>[
+        if (maxLength != null) LengthLimitingTextInputFormatter(maxLength),
+        if (extraFormatters != null) ...extraFormatters!,
+      ],
       style: _textStyle,
       decoration: InputDecoration(
         hintText: hint,
