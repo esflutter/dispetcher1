@@ -1,5 +1,9 @@
 import 'package:flutter/foundation.dart';
 
+import 'package:dispatcher_1/core/catalog/format.dart';
+import 'package:dispatcher_1/core/customer_orders/customer_orders_service.dart';
+import 'package:dispatcher_1/core/customer_orders/models.dart';
+
 import 'package:dispatcher_1/features/orders/widgets/order_status_pill.dart';
 
 /// Данные карточки заказа заказчика. Внутренний публичный тип,
@@ -18,6 +22,8 @@ class OrderMock {
     this.customerName,
     this.customerPhone,
     this.customerEmail,
+    this.matchId,
+    this.executorId,
     this.number,
     this.description = '',
     this.categories = const <String>[],
@@ -111,6 +117,16 @@ class OrderMock {
   /// контактами только если заполнен — email опциональное поле.
   final String? customerEmail;
 
+  /// `order_matches.id` выбранного мэтча. Нужен экрану деталей, чтобы
+  /// проверить актуальный статус в БД и подгрузить контакты, когда
+  /// исполнитель подтвердит.
+  final String? matchId;
+
+  /// `profiles.id` выбранного исполнителя. Используется как ключ для
+  /// SELECT-а из `profiles_private` (RLS пропустит только после
+  /// `accepted`).
+  final String? executorId;
+
   /// Дополнительные поля, заполняемые из формы создания заказа заказчиком.
   /// У моковых заказов в списке «Мои заказы» они остаются пустыми — экран
   /// подробностей тогда скроет соответствующие блоки.
@@ -148,6 +164,8 @@ class OrderMock {
     String? customerName,
     String? customerPhone,
     String? customerEmail,
+    String? matchId,
+    String? executorId,
     bool clearContacts = false,
   }) {
     return OrderMock(
@@ -170,6 +188,8 @@ class OrderMock {
           clearContacts ? null : (customerPhone ?? this.customerPhone),
       customerEmail:
           clearContacts ? null : (customerEmail ?? this.customerEmail),
+      matchId: clearContacts ? null : (matchId ?? this.matchId),
+      executorId: clearContacts ? null : (executorId ?? this.executorId),
       number: number,
       description: description,
       categories: categories,
@@ -251,337 +271,24 @@ class MyOrdersStore {
 
   static final ValueNotifier<int> revision = ValueNotifier<int>(0);
 
-  /// База отсчёта для моковых дат публикации. Захватывается один раз
-  /// при первом обращении к стору, чтобы относительные метки
-  /// («2 часа назад», «Вчера в 14:30») не разъезжались.
-  static final DateTime _now = DateTime.now();
-  static DateTime _yesterday(int h, int m) =>
-      DateTime(_now.year, _now.month, _now.day - 1, h, m);
-  static DateTime _hoursAgo(int h) => _now.subtract(Duration(hours: h));
-  static DateTime _minutesAgo(int m) => _now.subtract(Duration(minutes: m));
-  static DateTime _daysAgo(int d) => _now.subtract(Duration(days: d));
+  /// Флаг одноразовой подмены initial-моков реальными данными из БД.
+  /// Вызов [loadFromDb] первый раз чистит хардкодные списки и подгружает
+  /// свои заказы текущего `auth.uid()`. Повторные вызовы просто обновляют
+  /// [newOrders] без повторной очистки (initial моков уже нет).
+  static bool _dbSeeded = false;
 
   /// «Ожидает»: заказ опубликован, исполнитель ещё не выбран.
-  static final List<OrderMock> newOrders = <OrderMock>[
-    OrderMock(
-      id: 'n1',
-      status: MyOrderStatus.waiting,
-      title: 'Нужен экскаватор для копки траншеи',
-      equipment: const <String>['Экскаватор'],
-      rentDate: '15 июня · 09:00–18:00',
-      address: 'Московская область, Москва, Улица1, д 144',
-      publishedAt: _hoursAgo(2),
-      description:
-          'Нужно проложить траншею под кабель связи на частном участке. '
-          'Глубина примерно 0,8 м, длина около 30 м. Грунт суглинок, '
-          'без корней. Подъезд свободный.',
-    ),
-    OrderMock(
-      id: 'n2',
-      status: MyOrderStatus.waitingChoose,
-      title: 'Земляные работы',
-      equipment: const <String>['Автокран', 'Экскаватор'],
-      rentDate: '15 июня · 09:00–18:00',
-      address: 'Московская область, Москва, Улица1, д 144',
-      publishedAt: _hoursAgo(2),
-      respondersCount: 3,
-      description:
-          'Требуется разработать площадку под стройку складского ангара. '
-          'Снятие растительного слоя и планировка, нужна помощь автокрана '
-          'для разгрузки ЖБИ-плит.',
-    ),
-    OrderMock(
-      id: 'n3',
-      status: MyOrderStatus.waitingChoose,
-      title: 'Разработка котлована под фундамент',
-      equipment: const <String>[
-        'Экскаватор',
-        'Автокран',
-        'Эвакуатор',
-        'Манипулятор',
-        'Автовышка',
-      ],
-      rentDate: '15 июня · 09:00–18:00',
-      address: 'Московская область, Москва, Улица1, д 144',
-      publishedAt: _hoursAgo(3),
-      respondersCount: 1,
-      description:
-          'Котлован под ленточный фундамент дома 10×12 м, глубина 1,5 м. '
-          'Вывоз грунта на площадку в 5 км. Рядом трасса, подъезд '
-          'технике свободный.',
-    ),
-    OrderMock(
-      id: 'n4',
-      status: MyOrderStatus.executorDeclined,
-      title: 'Демонтаж строения',
-      equipment: const <String>['Экскаватор', 'Самосвал'],
-      rentDate: '20 июня · 08:00–17:00',
-      address: 'Московская область, Красногорск, ул. Ленина, 10',
-      publishedAt: _yesterday(9, 0),
-      respondersCount: 2,
-      description:
-          'Снос старого кирпичного гаража 6×4 м с последующим вывозом '
-          'строительного мусора. Электричество отключено, газа нет.',
-    ),
-    OrderMock(
-      id: 'n5',
-      status: MyOrderStatus.awaitingExecutor,
-      title: 'Бурение скважин',
-      equipment: const <String>['Буровая установка'],
-      rentDate: '25 июня · 10:00–16:00',
-      address: 'Московская область, Химки, ул. Строителей, 5',
-      publishedAt: _hoursAgo(4),
-      customerName: 'Александр Иванов',
-      customerPhone: '+7 999 111-22-33',
-      description:
-          'Нужно пробурить 4 скважины диаметром 300 мм под винтовые сваи, '
-          'глубина до 2 м. Грунт — глина с небольшими вкраплениями '
-          'щебня.',
-    ),
-    OrderMock(
-      id: 'n6',
-      status: MyOrderStatus.executorDeclinedWaiting,
-      title: 'Устройство ограждения территории',
-      equipment: const <String>['Манипулятор'],
-      rentDate: '28 июня · 08:00–20:00',
-      address: 'Московская область, Балашиха, ул. Заречная, 12',
-      publishedAt: _hoursAgo(5),
-      description:
-          'Установка бетонного забора по периметру участка — 80 погонных '
-          'метров, 20 секций. Нужна помощь манипулятора для монтажа плит.',
-    ),
-    // ───── Больше заказов в статусе «Откликов пока нет» ─────
-    OrderMock(
-      id: 'n7',
-      status: MyOrderStatus.waiting,
-      title: 'Перевозка стройматериалов на объект',
-      equipment: const <String>['Самосвал', 'Манипулятор'],
-      rentDate: '16 июня · 08:00–14:00',
-      address: 'Москва, ул. Профсоюзная, д 102',
-      publishedAt: _hoursAgo(1),
-      description:
-          'Доставка кирпича и ЖБИ-панелей на объект. Груз в паллетах, '
-          'общий вес около 12 тонн. Разгрузка с помощью манипулятора на '
-          'площадке рядом с будущим домом.',
-    ),
-    OrderMock(
-      id: 'n8',
-      status: MyOrderStatus.waiting,
-      title: 'Установка столбов освещения во дворе',
-      equipment: const <String>['Автовышка', 'Манипулятор'],
-      rentDate: '17 июня · 09:00–18:00',
-      address: 'Московская область, Мытищи, ул. Мира, д 30',
-      publishedAt: _hoursAgo(3),
-      description:
-          'Монтаж 6 опор освещения во дворе жилого комплекса. Опоры '
-          'металлические, высота 8 м. Понадобится автовышка для подвеса '
-          'светильников и манипулятор для установки столбов в грунт.',
-    ),
-    OrderMock(
-      id: 'n9',
-      status: MyOrderStatus.waiting,
-      title: 'Вывоз снега с паркинга',
-      equipment: const <String>['Погрузчик', 'Самосвал'],
-      rentDate: '18 июня · 06:00–12:00',
-      address: 'Москва, ул. Ленинский пр-т, д 65',
-      publishedAt: _hoursAgo(5),
-      description:
-          'Уборка снега и вывоз с открытого паркинга ТЦ. Площадь около '
-          '2000 м². Работы ночью, до открытия ТЦ. Нужен фронтальный '
-          'погрузчик и самосвал для вывоза на снегоплавильный пункт.',
-    ),
-    OrderMock(
-      id: 'n10',
-      status: MyOrderStatus.waiting,
-      title: 'Расчистка заброшенного участка',
-      equipment: const <String>['Экскаватор-погрузчик', 'Самосвал'],
-      rentDate: '19 июня · 08:00–17:00',
-      address: 'Московская область, Одинцово, ул. Садовая, д 18',
-      publishedAt: _yesterday(16, 40),
-      description:
-          'Участок 15 соток, зарос кустарником и мелкими деревьями. '
-          'Нужно корчевать, собрать мусор и вывезти. Доступ к участку '
-          'свободный, подъезд по грунтовой дороге.',
-    ),
-    OrderMock(
-      id: 'n11',
-      status: MyOrderStatus.waiting,
-      title: 'Рытьё ямы под септик',
-      equipment: const <String>['Миниэкскаватор'],
-      rentDate: '22 июня · 10:00–15:00',
-      address: 'Московская область, Подольск, ул. Кирова, д 88',
-      publishedAt: _daysAgo(2),
-      description:
-          'Яма под трёхкамерный септик объёмом 3 м³. Глубина 2,2 м, '
-          'размер 2×2,5 м. Грунт суглинок. Подъезд узкий — нужна '
-          'компактная техника.',
-    ),
-    OrderMock(
-      id: 'n12',
-      status: MyOrderStatus.waiting,
-      title: 'Подача бетона на верхние этажи',
-      equipment: const <String>['Бетононасос', 'Автокран'],
-      rentDate: '24 июня · 08:00–18:00',
-      address: 'Москва, ул. Таганская, д 24',
-      publishedAt: _daysAgo(3),
-      description:
-          'Заливка монолитных перекрытий на 6 этаже жилого дома. Объём '
-          'бетона около 35 м³. Нужен бетононасос со стрелой не менее '
-          '30 м, плюс автокран для приёмки миксеров.',
-    ),
-    OrderMock(
-      id: 'n13',
-      status: MyOrderStatus.waiting,
-      title: 'Эвакуация спецтехники с объекта',
-      equipment: const <String>['Эвакуатор'],
-      rentDate: '26 июня · 09:00–12:00',
-      address: 'Московская область, Красногорск, ул. Речная, д 7',
-      publishedAt: _daysAgo(4),
-      description:
-          'Нужно перевезти сломанный мини-погрузчик со стройплощадки '
-          'в сервис. Вес около 3 тонн, габариты компактные.',
-    ),
-    // ───── Ещё один «Выберите исполнителя» (больше откликов) ─────
-    OrderMock(
-      id: 'n14',
-      status: MyOrderStatus.waitingChoose,
-      title: 'Работы в ограниченном пространстве',
-      equipment: const <String>['Минипогрузчик', 'Миниэкскаватор'],
-      rentDate: '30 июня · 08:00–16:00',
-      address: 'Москва, ул. Новослободская, д 45',
-      publishedAt: _yesterday(10, 15),
-      respondersCount: 2,
-      description:
-          'Работы во внутреннем дворе жилого дома — проезд 3 м, нужна '
-          'только компактная техника. Перемещение грунта после замены '
-          'коммуникаций, засыпка и планировка.',
-    ),
-    // ───── «Ждём ответа исполнителя» ─────
-    OrderMock(
-      id: 'n15',
-      status: MyOrderStatus.awaitingExecutor,
-      title: 'Копка траншеи под дренаж',
-      equipment: const <String>['Миниэкскаватор'],
-      rentDate: '21 июня · 09:00–15:00',
-      address: 'Московская область, Химки, ул. Ленина, д 5',
-      publishedAt: _hoursAgo(2),
-      customerName: 'Дмитрий Сидоров',
-      customerPhone: '+7 999 222-33-44',
-      description:
-          'Дренажная траншея по периметру дома — длина 40 м, глубина '
-          '0,8 м. Укладка труб на песок с обратной засыпкой. Грунт — '
-          'супесь, без камней.',
-    ),
-  ];
+  /// Заполняется из БД через [loadFromDb]; в стартовом состоянии пуст.
+  static final List<OrderMock> newOrders = <OrderMock>[];
 
-  /// «В работе» + «Архив» после completed.
-  static final List<OrderMock> accepted = <OrderMock>[
-    OrderMock(
-      id: 'a1',
-      status: MyOrderStatus.accepted,
-      title: 'Нужен экскаватор для копки траншеи',
-      equipment: const <String>['Экскаватор'],
-      rentDate: '15 июня · 09:00–18:00',
-      address: 'Московская область, Москва, Улица1, д 144',
-      publishedAt: _hoursAgo(3),
-      statusUpdatedAt: _minutesAgo(45),
-      customerName: 'Александр Иванов',
-      customerPhone: '+7 999 123-45-67',
-      customerEmail: 'ivanov.a@example.ru',
-      description:
-          'Копка траншеи под водопровод длиной 25 м, глубина 1,2 м. '
-          'Грунт — суглинок, без камней. Въезд техники со стороны улицы.',
-    ),
-    OrderMock(
-      id: 'a2',
-      status: MyOrderStatus.accepted,
-      title: 'Разработка котлована под фундамент',
-      equipment: const <String>[
-        'Экскаватор',
-        'Автокран',
-        'Эвакуатор',
-        'Манипулятор',
-        'Автовышка',
-      ],
-      rentDate: '15 июня · 09:00–18:00',
-      address: 'Московская область, Москва, Улица1, д 144',
-      publishedAt: _hoursAgo(5),
-      statusUpdatedAt: _hoursAgo(2),
-      customerName: 'Сергей Петров',
-      customerPhone: '+7 999 333-44-55',
-      customerEmail: 'petrov.s@example.ru',
-      description:
-          'Подготовка котлована 8×10 м под ленточный фундамент. Дополнительно '
-          'нужен автокран на 1–2 часа для разгрузки арматурных каркасов.',
-    ),
-    OrderMock(
-      id: 'a3',
-      status: MyOrderStatus.completed,
-      title: 'Нужен экскаватор для копки траншеи',
-      equipment: const <String>['Экскаватор'],
-      rentDate: '15 июня · 09:00–18:00',
-      address: 'Московская область, Москва, Улица1, д 144',
-      publishedAt: _daysAgo(2),
-      statusUpdatedAt: _yesterday(16, 20),
-      customerName: 'Александр Иванов',
-      customerPhone: '+7 999 123-45-67',
-      description:
-          'Траншея под дренаж вдоль забора, длина 18 м, глубина 0,7 м. '
-          'Отвал грунта рядом с траншеей — вывоз не требуется.',
-    ),
-  ];
 
-  /// «Архив» (отклонённые/отменённые/не нашёлся).
-  static final List<OrderMock> rejected = <OrderMock>[
-    OrderMock(
-      id: 'r1',
-      status: MyOrderStatus.rejectedOther,
-      title: 'Земляные работы',
-      equipment: const <String>['Автокран', 'Экскаватор'],
-      rentDate: '15 июня · 09:00–18:00',
-      address: 'Московская область, Москва, Улица1, д 144',
-      publishedAt: _hoursAgo(2),
-      description:
-          'Подготовка площадки под склад: снятие плодородного слоя, '
-          'планировка, монтаж водоотвода. Автокран для разгрузки труб.',
-    ),
-    OrderMock(
-      id: 'r2',
-      status: MyOrderStatus.rejectedDeclined,
-      title: 'Разработка котлована под фундамент',
-      equipment: const <String>[
-        'Экскаватор',
-        'Автокран',
-        'Эвакуатор',
-        'Манипулятор',
-        'Автовышка',
-      ],
-      rentDate: '15 июня · 09:00–18:00',
-      address: 'Московская область, Москва, Улица1, д 144',
-      publishedAt: _yesterday(14, 30),
-      description:
-          'Котлован 12×15 м под фундамент двухэтажного коттеджа. '
-          'Глубина 2,0 м. Вывоз грунта — 30 м³ на полигон в 10 км.',
-    ),
-    OrderMock(
-      id: 'r3',
-      status: MyOrderStatus.rejectedDeclined,
-      title: 'Разработка котлована под фундамент',
-      equipment: const <String>[
-        'Экскаватор',
-        'Автокран',
-        'Эвакуатор',
-        'Манипулятор',
-        'Автовышка',
-      ],
-      rentDate: '15 июня · 09:00–18:00',
-      address: 'Московская область, Москва, Улица1, д 144',
-      publishedAt: _daysAgo(3),
-      description:
-          'Разработка котлована под пристройку к жилому дому, '
-          'размеры 6×8 м, глубина 1,4 м. Доступ ограничен — узкие ворота.',
-    ),
-  ];
+  /// «В работе» + «Архив» после completed. Заполняется из БД через
+  /// [loadFromDb]; в стартовом состоянии пуст.
+  static final List<OrderMock> accepted = <OrderMock>[];
+
+  /// «Архив» (отклонённые/отменённые/не нашёлся). Заполняется из БД
+  /// через [loadFromDb]; в стартовом состоянии пуст.
+  static final List<OrderMock> rejected = <OrderMock>[];
 
   /// Все заказы во вкладке «В работе»: `accepted` кроме `completed`.
   static List<OrderMock> get inWork => accepted
@@ -624,7 +331,62 @@ class MyOrdersStore {
     newOrders.clear();
     accepted.clear();
     rejected.clear();
+    _dbSeeded = false;
     _bump();
+  }
+
+  /// Одноразово вычищает initial-моки и подгружает реальные заказы
+  /// текущего заказчика из БД. Повторные вызовы просто обновляют
+  /// `newOrders` без повторной очистки (initial уже ушли).
+  static Future<void> loadFromDb() async {
+    if (!_dbSeeded) {
+      newOrders.clear();
+      accepted.clear();
+      rejected.clear();
+      _dbSeeded = true;
+    }
+    try {
+      final List<CustomerOrderListItem> rows =
+          await CustomerOrdersService.instance.listMine();
+      // Оставляем только заказы, которых ещё нет в локальном списке —
+      // `addCreated` мог положить туда свежесозданный заказ до того,
+      // как экран успел перезапросить БД.
+      final Set<String> knownIds = <String>{
+        for (final OrderMock o in newOrders) o.id,
+        for (final OrderMock o in accepted) o.id,
+        for (final OrderMock o in rejected) o.id,
+      };
+      for (final CustomerOrderListItem r in rows) {
+        if (knownIds.contains(r.id)) continue;
+        final MyOrderStatus uiStatus;
+        if (r.status == 'cancelled') {
+          uiStatus = MyOrderStatus.rejectedDeclined;
+        } else if (r.respondersCount > 0) {
+          uiStatus = MyOrderStatus.waitingChoose;
+        } else {
+          uiStatus = MyOrderStatus.waiting;
+        }
+        final OrderMock mock = OrderMock(
+          id: r.id,
+          status: uiStatus,
+          title: r.title,
+          equipment: r.machineryTitles,
+          rentDate: formatRentDate(r.toFormatAdapter()),
+          address: r.address,
+          publishedAt: r.publishedAt,
+          number: '№${r.displayNumber.toString().padLeft(8, '0')}',
+          respondersCount: r.respondersCount,
+        );
+        if (r.status == 'published') {
+          newOrders.add(mock);
+        } else {
+          rejected.add(mock);
+        }
+      }
+      _bump();
+    } catch (_) {
+      // БД упала — оставляем то, что есть в памяти.
+    }
   }
 
   /// Переводит заказ в статус `accepted` («Свяжитесь с исполнителем»)
@@ -636,6 +398,8 @@ class MyOrdersStore {
     OrderMock o, {
     String? name,
     String? phone,
+    String? matchId,
+    String? executorId,
   }) {
     newOrders.remove(o);
     accepted.remove(o);
@@ -645,6 +409,8 @@ class MyOrdersStore {
         status: MyOrderStatus.accepted,
         customerName: name,
         customerPhone: phone,
+        matchId: matchId,
+        executorId: executorId,
       ),
     );
     _bump();
@@ -692,6 +458,8 @@ class MyOrdersStore {
     OrderMock o, {
     String? name,
     String? phone,
+    String? matchId,
+    String? executorId,
   }) {
     final int idx = newOrders.indexWhere((OrderMock x) => x.id == o.id);
     if (idx < 0) return;
@@ -699,6 +467,8 @@ class MyOrdersStore {
       status: MyOrderStatus.awaitingExecutor,
       customerName: name,
       customerPhone: phone,
+      matchId: matchId,
+      executorId: executorId,
     );
     _bump();
   }

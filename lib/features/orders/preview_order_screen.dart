@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
 import 'package:dispatcher_1/core/utils/photo_source.dart';
+import 'package:dispatcher_1/core/widgets/clickable_address.dart';
 import 'package:dispatcher_1/core/widgets/dark_sub_app_bar.dart';
 import 'package:dispatcher_1/core/widgets/primary_button.dart';
 import 'package:dispatcher_1/features/catalog/widgets/catalog_search_bar.dart';
@@ -121,13 +122,10 @@ class CreateOrderPreviewScreen extends StatelessWidget {
 
     addSection(
       'Адрес',
-      Text(
+      ClickableAddress(
         draft.address,
-        style: AppTextStyles.body.copyWith(
-          fontSize: 14.sp,
-          height: 1.4,
-          decoration: TextDecoration.underline,
-        ),
+        baseStyle:
+            AppTextStyles.body.copyWith(fontSize: 14.sp, height: 1.4),
       ),
     );
 

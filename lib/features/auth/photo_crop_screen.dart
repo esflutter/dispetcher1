@@ -22,10 +22,15 @@ class CropResult {
   static CropResult? saved;
 
   /// Имя пользователя, введённое при регистрации.
-  static String userName = 'Александр Иванов';
+  static String userName = '';
 
-  /// Телефон пользователя, введённый при регистрации.
-  static String userPhone = '+7 999 123-45-67';
+  /// Телефон пользователя в UI-формате `+7 XXX XXX-XX-XX` — для показа
+  /// в профиле и других экранах.
+  static String userPhone = '';
+
+  /// Тот же номер в E.164 `+7XXXXXXXXXX` — ожидают Supabase и база.
+  /// Заполняется одновременно с [userPhone] в `phone_input_screen`.
+  static String userPhoneE164 = '';
 
   /// Email пользователя. Необязательное поле, по умолчанию пустое.
   /// Пользователь может заполнить/изменить его в «Редактирование
@@ -54,8 +59,9 @@ class CropResult {
   /// не осталось предыдущих имени/email/аватара.
   static void clearAuthData() {
     saved = null;
-    userName = 'Александр Иванов';
-    userPhone = '+7 999 123-45-67';
+    userName = '';
+    userPhone = '';
+    userPhoneE164 = '';
     userEmail = '';
   }
 }

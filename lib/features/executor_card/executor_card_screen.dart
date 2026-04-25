@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:dispatcher_1/core/customer_orders/customer_orders_service.dart';
+import 'package:dispatcher_1/core/customer_orders/models.dart';
+import 'package:dispatcher_1/core/profile/profile_service.dart';
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_spacing.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
@@ -32,6 +35,38 @@ class _ExecutorCardScreenState extends State<ExecutorCardScreen> {
   void initState() {
     super.initState();
     AccountBlock.notifier.addListener(_refresh);
+    _loadFromDb();
+  }
+
+  Future<void> _loadFromDb() async {
+    try {
+      final MyProfile? p = await ProfileService.instance.loadMine();
+      if (p == null || !mounted) return;
+      // Карточку считаем созданной, если хотя бы одно из полей о себе
+      // заполнено в БД (about или legal_status).
+      final bool filled = (p.about != null && p.about!.trim().isNotEmpty) ||
+          (p.legalStatus != null && p.legalStatus!.trim().isNotEmpty);
+      ExecutorCardData.about = p.about;
+      ExecutorCardData.status = _legalLabel(p.legalStatus);
+      ExecutorCardScreen.cardCreated = filled;
+      if (filled) AccountBlock.setUntil(p.blockedUntil);
+      if (mounted) setState(() {});
+    } catch (_) {/* silent */}
+  }
+
+  String? _legalLabel(String? code) {
+    switch (code) {
+      case 'individual':
+        return 'Физ. лицо';
+      case 'self_employed':
+        return 'Самозанятый';
+      case 'ip':
+        return 'ИП';
+      case 'legal_entity':
+        return 'Юр. лицо';
+      default:
+        return null;
+    }
   }
 
   @override
@@ -175,13 +210,22 @@ class ExecutorCardData {
   }
 }
 
-class _FilledCard extends StatelessWidget {
+class _FilledCard extends StatefulWidget {
   const _FilledCard();
 
-  /// Для владельца карточки незаполненные поля «О себе» и «Статус»
-  /// показываем прочерком — чтобы было видно, что блок есть и его
-  /// можно заполнить. В публичном просмотре (экран со стороны
-  /// исполнителя) такие пустые блоки скрываются.
+  @override
+  State<_FilledCard> createState() => _FilledCardState();
+}
+
+class _FilledCardState extends State<_FilledCard> {
+  late Future<List<CustomerOrderListItem>> _ordersFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _ordersFuture = CustomerOrdersService.instance.listMine();
+  }
+
   String _val(String? v) => (v != null && v.trim().isNotEmpty) ? v : '—';
 
   @override
@@ -208,6 +252,100 @@ class _FilledCard extends StatelessWidget {
           _SectionTitle('Статус'),
           SizedBox(height: 4.h),
           Text(_val(ExecutorCardData.status), style: AppTextStyles.body),
+          SizedBox(height: 20.h),
+          _SectionTitle('Мои заказы'),
+          SizedBox(height: 8.h),
+          FutureBuilder<List<CustomerOrderListItem>>(
+            future: _ordersFuture,
+            builder: (BuildContext context,
+                AsyncSnapshot<List<CustomerOrderListItem>> snap) {
+              if (snap.connectionState != ConnectionState.done) {
+                return Padding(
+                  padding: EdgeInsets.symmetric(vertical: 16.h),
+                  child: const Center(child: CircularProgressIndicator()),
+                );
+              }
+              final List<CustomerOrderListItem> orders = (snap.data ??
+                      const <CustomerOrderListItem>[])
+                  .where((CustomerOrderListItem o) => o.status == 'published')
+                  .toList();
+              if (orders.isEmpty) {
+                return Text(
+                  'Опубликованных заказов пока нет',
+                  style: AppTextStyles.body
+                      .copyWith(color: AppColors.textTertiary),
+                );
+              }
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: <Widget>[
+                  for (int i = 0; i < orders.length; i++) ...<Widget>[
+                    _OrderRow(item: orders[i]),
+                    if (i < orders.length - 1) SizedBox(height: 10.h),
+                  ],
+                ],
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _OrderRow extends StatelessWidget {
+  const _OrderRow({required this.item});
+  final CustomerOrderListItem item;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: EdgeInsets.all(12.w),
+      decoration: BoxDecoration(
+        color: AppColors.fieldFill,
+        borderRadius: BorderRadius.circular(12.r),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            '№${item.displayNumber.toString().padLeft(8, '0')}',
+            style: AppTextStyles.caption
+                .copyWith(color: AppColors.textTertiary),
+          ),
+          SizedBox(height: 2.h),
+          Text(item.title,
+              style: AppTextStyles.bodyMedium
+                  .copyWith(fontWeight: FontWeight.w600)),
+          SizedBox(height: 4.h),
+          Text(item.address,
+              style: AppTextStyles.body
+                  .copyWith(color: AppColors.textSecondary)),
+          if (item.machineryTitles.isNotEmpty) ...<Widget>[
+            SizedBox(height: 6.h),
+            Wrap(
+              spacing: 6.w,
+              runSpacing: 4.h,
+              children: item.machineryTitles
+                  .map((String t) => Container(
+                        padding: EdgeInsets.symmetric(
+                            horizontal: 8.w, vertical: 2.h),
+                        decoration: BoxDecoration(
+                          color: AppColors.surface,
+                          border: Border.all(
+                              color: AppColors.primary, width: 1),
+                          borderRadius: BorderRadius.circular(100.r),
+                        ),
+                        child: Text(t,
+                            style: TextStyle(
+                              fontFamily: 'Roboto',
+                              fontSize: 12.sp,
+                              color: AppColors.textPrimary,
+                            )),
+                      ))
+                  .toList(),
+            ),
+          ],
         ],
       ),
     );

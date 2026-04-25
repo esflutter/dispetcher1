@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:dispatcher_1/core/profile/profile_service.dart';
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_spacing.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
@@ -14,7 +15,7 @@ import 'widgets/blocked_pill.dart';
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({
     super.key,
-    this.fullName = 'Александр Иванов',
+    this.fullName = '',
     this.photoUrl,
   });
 
@@ -26,11 +27,27 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
+  double? _dbRating;
+  int? _dbReviewCount;
+
   @override
   void initState() {
     super.initState();
     AccountBlock.notifier.addListener(_refresh);
     ReviewsData.revision.addListener(_refresh);
+    _loadFromDb();
+  }
+
+  Future<void> _loadFromDb() async {
+    try {
+      final MyProfile? p = await ProfileService.instance.loadMine();
+      if (p == null || !mounted) return;
+      CropResult.userName = p.name;
+      setState(() {
+        _dbRating = p.ratingAsCustomer;
+        _dbReviewCount = p.reviewCountAsCustomer;
+      });
+    } catch (_) {/* silent */}
   }
 
   @override
@@ -52,8 +69,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     final String fullName = CropResult.displayName;
-    final double rating = ReviewsData.aggregate;
-    final int reviewsCount = ReviewsData.count;
+    final double rating = _dbRating ?? ReviewsData.aggregate;
+    final int reviewsCount = _dbReviewCount ?? ReviewsData.count;
     final bool isBlocked = AccountBlock.isBlocked;
     return Scaffold(
       backgroundColor: AppColors.background,

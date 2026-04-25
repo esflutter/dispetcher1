@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:dispatcher_1/core/customer_orders/customer_orders_service.dart';
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
 import 'package:dispatcher_1/core/widgets/primary_button.dart';
-import 'package:dispatcher_1/features/catalog/order_feed_screen.dart';
 import 'package:dispatcher_1/features/catalog/widgets/catalog_search_bar.dart';
 import 'package:dispatcher_1/features/catalog/widgets/respond_bottom_sheet.dart';
 import 'package:dispatcher_1/features/orders/orders_store.dart';
@@ -40,10 +40,22 @@ class OfferSubmissions {
 class SelectOrderForExecutorScreen extends StatefulWidget {
   const SelectOrderForExecutorScreen({
     super.key,
-    required this.executorOrderId,
+    required this.executorId,
+    required this.executorName,
+    this.executorMachinery = const <String>[],
   });
 
-  final String executorOrderId;
+  /// UUID исполнителя в `profiles`. Используется как `executor_id` при
+  /// INSERT-е в `order_matches`.
+  final String executorId;
+
+  /// Имя исполнителя — нужно только для локального обновления стора,
+  /// чтобы карточка моего заказа сразу подсветила выбранного.
+  final String executorName;
+
+  /// Названия техники, которой владеет исполнитель в каталоге. Если
+  /// список пуст — фильтр по совпадению техники не применяется.
+  final List<String> executorMachinery;
 
   @override
   State<SelectOrderForExecutorScreen> createState() =>
@@ -53,6 +65,7 @@ class SelectOrderForExecutorScreen extends StatefulWidget {
 class _SelectOrderForExecutorScreenState
     extends State<SelectOrderForExecutorScreen> {
   String? _selectedId;
+  bool _busy = false;
 
   @override
   void initState() {
@@ -80,10 +93,7 @@ class _SelectOrderForExecutorScreenState
   /// которую он физически не может выполнить. Сортируем от новых к
   /// старым — единообразно с «Мои заказы».
   List<OrderMock> get _items {
-    final ExecutorMock? exec = ExecutorMock.byId(widget.executorOrderId);
-    final Set<String> executorEq = exec == null
-        ? const <String>{}
-        : exec.equipment.toSet();
+    final Set<String> executorEq = widget.executorMachinery.toSet();
     final List<OrderMock> list = MyOrdersStore.offerable
         .where((OrderMock o) =>
             executorEq.isEmpty ||
@@ -95,26 +105,45 @@ class _SelectOrderForExecutorScreenState
   }
 
   Future<void> _onRespond() async {
+    if (_busy) return;
     final OrderMock? selected = _selectedId == null
         ? null
         : _items.firstWhere(
             (OrderMock o) => o.id == _selectedId,
             orElse: () => _items.first,
           );
+    if (selected == null) return;
+    setState(() => _busy = true);
+
+    final ({String matchId, String serviceId}) result;
+    try {
+      result =
+          await CustomerOrdersService.instance.proposeOrderToExecutor(
+        orderId: selected.id,
+        executorId: widget.executorId,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _busy = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Не удалось предложить заказ: $e')),
+      );
+      return;
+    }
+    if (!mounted) return;
     await showDialog<void>(
       context: context,
       barrierColor: Colors.black.withValues(alpha: 0.35),
       builder: (_) => const RespondModalDialog(),
     );
-    OfferSubmissions.mark(widget.executorOrderId);
-    if (selected != null) {
-      final ExecutorMock? exec = ExecutorMock.byId(widget.executorOrderId);
-      MyOrdersStore.proposeToExecutor(
-        selected,
-        name: exec?.name,
-        phone: exec?.phone,
-      );
-    }
+    OfferSubmissions.mark(widget.executorId);
+    MyOrdersStore.proposeToExecutor(
+      selected,
+      name: widget.executorName,
+      phone: '',
+      matchId: result.matchId,
+      executorId: widget.executorId,
+    );
     if (mounted) Navigator.of(context).pop();
   }
 
@@ -204,8 +233,9 @@ class _SelectOrderForExecutorScreenState
             ),
             child: PrimaryButton(
               label: 'Предложить заказ',
-              enabled: _selectedId != null,
-              onPressed: _selectedId == null ? null : _onRespond,
+              enabled: _selectedId != null && !_busy,
+              onPressed:
+                  (_selectedId == null || _busy) ? null : _onRespond,
             ),
           ),
         ],

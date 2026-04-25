@@ -73,8 +73,10 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
     _tab = TabController(length: 3, vsync: this);
     AccountBlock.notifier.addListener(_onBlockChanged);
     MyOrdersStore.revision.addListener(_onStoreChanged);
-    // Если профиль уже заблокирован к моменту открытия экрана — сразу
-    // убираем активные заказы в архив, чтобы состояние было согласованным.
+    // Подгружаем свои заказы из БД. Первый вызов также почистит
+    // initial-моки; повторные — просто дольют новые записи.
+    MyOrdersStore.loadFromDb();
+    DailyOrderLimit.primeFromSettings();
     if (AccountBlock.isBlocked) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         MyOrdersStore.archiveActiveOrdersOnBlock();
@@ -276,14 +278,28 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
                   o, MyOrderStatus.rejectedDeclined);
               Navigator.of(ctx).maybePop();
             },
-            onExecutorSelected: (String _, String name, String phone) {
-              MyOrdersStore.moveToAccepted(o, name: name, phone: phone);
+            onExecutorSelected:
+                (String matchId, String name, String executorId) {
+              // Локально сразу показываем как "в работе". Реальный статус
+              // в БД — `awaiting_executor` (ждём подтверждения от
+              // исполнителя). UI `moveToAccepted` пока используем чтобы
+              // не усложнять цепочку обновлений экрана. Контакты
+              // подтянутся в `MyOrderDetailScreen` после того, как
+              // исполнитель подтвердит и RLS пропустит запрос к
+              // `profiles_private`.
+              MyOrdersStore.moveToAccepted(o,
+                  name: name,
+                  phone: '',
+                  matchId: matchId,
+                  executorId: executorId);
               final OrderMock updated = MyOrdersStore.accepted.firstWhere(
                 (OrderMock x) => x.id == o.id,
                 orElse: () => o.copyWith(
                   status: MyOrderStatus.accepted,
                   customerName: name,
-                  customerPhone: phone,
+                  customerPhone: '',
+                  matchId: matchId,
+                  executorId: executorId,
                 ),
               );
               if (mounted) _tab.animateTo(1);
@@ -357,8 +373,10 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
           photos: o.photos,
           orderNumber: o.displayNumber,
           customerName: o.customerName ?? CropResult.namePlaceholder,
-          customerPhone: o.customerPhone ?? '+7 999 123-45-67',
+          customerPhone: o.customerPhone ?? '',
           customerEmail: o.customerEmail,
+          matchId: o.matchId,
+          executorId: o.executorId,
           state: _detailStateForCard(o.status),
           rejectedStatus: o.status,
           waitingStatus: o.status,
@@ -399,8 +417,10 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
           photos: o.photos,
           orderNumber: o.displayNumber,
           customerName: o.customerName ?? CropResult.namePlaceholder,
-          customerPhone: o.customerPhone ?? '+7 999 123-45-67',
+          customerPhone: o.customerPhone ?? '',
           customerEmail: o.customerEmail,
+          matchId: o.matchId,
+          executorId: o.executorId,
           state: _detailStateForCard(o.status),
           rejectedStatus: o.status,
           waitingStatus: o.status,

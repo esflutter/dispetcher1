@@ -4,6 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+import 'package:dispatcher_1/core/customer_orders/customer_orders_service.dart';
+import 'package:dispatcher_1/core/customer_orders/models.dart' as co;
+import 'package:dispatcher_1/core/settings/settings_service.dart';
+import 'package:dispatcher_1/core/storage/storage_service.dart';
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
 import 'package:dispatcher_1/core/utils/photo_source.dart';
@@ -15,15 +21,26 @@ import 'package:dispatcher_1/features/orders/widgets/order_status_pill.dart';
 import 'package:dispatcher_1/features/support/chat_screen.dart';
 
 /// Антиспам-лимит: не более [maxPerDay] заказов в сутки на пользователя.
-/// Счётчик сбрасывается автоматически при смене календарной даты.
-/// Состояние только в памяти — достаточно для клиентской валидации в моке.
+/// Значение лимита читается один раз из `public.settings`
+/// (`order.daily_limit`) и кэшируется. Счётчик сбрасывается автоматически
+/// при смене календарной даты. Серверная защита — триггер
+/// `enforce_daily_order_limit` (Moscow TZ).
 class DailyOrderLimit {
   DailyOrderLimit._();
 
-  static const int maxPerDay = 30;
+  /// Дефолт на случай, если settings ещё не подгружен или БД недоступна.
+  static int maxPerDay = 30;
 
   static int _count = 0;
   static DateTime? _date;
+
+  /// Подгружает актуальное значение из таблицы `settings` (выполнять
+  /// один раз — например при инициализации MyOrdersScreen).
+  static Future<void> primeFromSettings() async {
+    try {
+      maxPerDay = await SettingsService.instance.orderDailyLimit();
+    } catch (_) {/* остаётся дефолт 30 */}
+  }
 
   static void _rolloverIfNeeded() {
     final DateTime now = DateTime.now();
@@ -364,10 +381,78 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
       ),
     );
     if (!mounted || published != true) return;
+
+    try {
+      final co.OrderDraft dbDraft = await _buildDbDraft();
+      await CustomerOrdersService.instance.createOrder(dbDraft);
+    } on PostgrestException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Не удалось опубликовать: ${e.message}')),
+      );
+      return;
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Не удалось опубликовать: $e')),
+      );
+      return;
+    }
+
     DailyOrderLimit.increment();
+    // MyOrdersStore — локальный кэш UI. Экран "Мои заказы" заказчика теперь
+    // читает из БД, но оставляем добавление, чтобы список мгновенно
+    // обновился, если пользователь туда переключится до перечитывания.
     MyOrdersStore.addCreated(_buildOrderMock(draft));
+    if (!mounted) return;
     Navigator.of(context).maybePop();
   }
+
+  /// Собирает черновик в формате, пригодном для INSERT в `public.orders`.
+  /// Асинхронный — загружает фото в Storage до формирования payload'а.
+  Future<co.OrderDraft> _buildDbDraft() async {
+    final List<String> uploadedPaths = <String>[];
+    for (final String path in _photos) {
+      if (path.startsWith('assets/') || path.startsWith('http')) {
+        uploadedPaths.add(path);
+        continue;
+      }
+      try {
+        final String storagePath =
+            await StorageService.instance.uploadOrderPhoto(File(path));
+        uploadedPaths.add(storagePath);
+      } catch (_) {/* пропускаем неудачную загрузку */}
+    }
+    return co.OrderDraft(
+      title: _titleCtrl.text.trim(),
+      description: _descCtrl.text.trim().isEmpty
+          ? null
+          : _descCtrl.text.trim(),
+      categoryTitles: _selCat.toList(),
+      machineryTitles: _selMach.toList(),
+      works: _works.where(_isWorkFilled).map((_WorkItem w) {
+        final String volStr = w.volumeCtrl.text.trim().replaceAll(',', '.');
+        return co.WorkDraft(
+          name: w.nameCtrl.text.trim(),
+          volume: double.tryParse(volStr),
+          unit: w.unit,
+        );
+      }).toList(),
+      address: _address ?? '',
+      dateFrom: _dateFrom!,
+      dateTo: _exactDate ? null : _dateTo,
+      exactDate: _exactDate,
+      timeFrom: (_wholeDay || _timeFrom == null)
+          ? null
+          : _fmtHm(_timeFrom!),
+      timeTo: (_wholeDay || _timeTo == null) ? null : _fmtHm(_timeTo!),
+      wholeDay: _wholeDay,
+      photos: uploadedPaths,
+    );
+  }
+
+  String _fmtHm(TimeOfDay t) =>
+      '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
 
   void _onAutoFillTap() {
     Navigator.of(context).push<void>(

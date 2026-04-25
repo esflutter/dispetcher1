@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:dispatcher_1/core/profile/profile_service.dart';
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_spacing.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
@@ -327,10 +328,35 @@ class _EditExecutorCardScreenState extends State<EditExecutorCardScreen> {
               padding: EdgeInsets.fromLTRB(16.w, 12.h, 16.w, 16.h),
               child: PrimaryButton(
                 label: 'Сохранить',
-                onPressed: () {
+                onPressed: () async {
                   ExecutorCardData.status = _selectedStatus;
                   ExecutorCardData.about = _about.text;
                   ExecutorCardScreen.cardCreated = true;
+
+                  // UPDATE profiles: about, legal_status. У заказчика
+                  // отдельной таблицы карточки нет — всё в profiles.
+                  final String? legalStatus = switch (_selectedStatus) {
+                    'Физ. лицо' => 'individual',
+                    'Самозанятый' => 'self_employed',
+                    'ИП' => 'ip',
+                    'Юр. лицо' => 'legal_entity',
+                    _ => null,
+                  };
+                  try {
+                    await ProfileService.instance.update(
+                      about: _about.text.trim().isEmpty
+                          ? null
+                          : _about.text.trim(),
+                      legalStatus: legalStatus,
+                    );
+                  } catch (e) {
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Не удалось сохранить: $e')),
+                    );
+                    return;
+                  }
+                  if (!context.mounted) return;
                   Navigator.of(context).pop();
                 },
               ),

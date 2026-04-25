@@ -5,18 +5,15 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import 'package:dispatcher_1/core/customer_orders/customer_orders_service.dart';
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
 import 'package:dispatcher_1/core/utils/photo_source.dart';
 import 'package:dispatcher_1/core/utils/plural.dart';
+import 'package:dispatcher_1/core/widgets/clickable_address.dart';
 import 'package:dispatcher_1/core/widgets/primary_button.dart';
 import 'package:dispatcher_1/features/auth/photo_crop_screen.dart';
-import 'package:dispatcher_1/features/catalog/order_detail_screen.dart'
-    as catalog;
-import 'package:dispatcher_1/features/catalog/order_feed_screen.dart'
-    show ExecutorMock, ExecutorServiceOffer;
 import 'package:dispatcher_1/features/catalog/widgets/catalog_search_bar.dart';
-import 'package:dispatcher_1/features/catalog/widgets/order_card.dart';
 import 'package:dispatcher_1/features/orders/review_screen.dart';
 import 'package:dispatcher_1/features/orders/widgets/order_alerts.dart';
 import 'package:dispatcher_1/features/orders/widgets/order_status_pill.dart';
@@ -58,8 +55,8 @@ class MyOrderDetailScreen extends StatefulWidget {
     ],
     this.rentDate = '15 июня · 09:00–18:00',
     this.address = 'Московская область, Москва, Улица1, д 144',
-    this.customerName = 'Иванов Александр',
-    this.customerPhone = '+7 999 123-45-67',
+    this.customerName = '',
+    this.customerPhone = '',
     this.customerEmail,
     this.timeAgo = 'Вчера в 14:30',
     this.orderNumber = '№12345678',
@@ -79,6 +76,11 @@ class MyOrderDetailScreen extends StatefulWidget {
     this.onReviewLeft,
     this.onPickAnother,
     this.onOpenCatalog,
+    this.matchId,
+    this.executorId,
+    this.agreedPricePerHour,
+    this.agreedPricePerDay,
+    this.serviceMachineryTitle,
   });
 
   final MyOrderDetailState state;
@@ -149,6 +151,24 @@ class MyOrderDetailScreen extends StatefulWidget {
   /// Родитель закрывает экран и переключает bottom-nav на «Каталог».
   final VoidCallback? onOpenCatalog;
 
+  /// id мэтча в `order_matches`. Нужен чтобы при открытии экрана
+  /// проверить актуальный статус и перейти в `confirmed`, если
+  /// исполнитель уже подтвердил.
+  final String? matchId;
+
+  /// id исполнителя в `profiles`. По нему делается SELECT из
+  /// `profiles_private` (RLS пропустит только при `accepted`/`completed`).
+  final String? executorId;
+
+  /// Снапшот цены, зафиксированный триггером в `order_matches.agreed_*`
+  /// при создании мэтча. Та цена, которая была у услуги исполнителя в
+  /// момент отклика/предложения. Последующие правки услуги её не меняют.
+  final double? agreedPricePerHour;
+  final double? agreedPricePerDay;
+
+  /// Техника услуги, по которой шёл мэтч. Подпись к строке «Цена».
+  final String? serviceMachineryTitle;
+
   @override
   State<MyOrderDetailScreen> createState() => _MyOrderDetailScreenState();
 }
@@ -158,12 +178,83 @@ class _MyOrderDetailScreenState extends State<MyOrderDetailScreen> {
   late MyOrderStatus _rejectedStatus;
   late bool _reviewLeft;
 
+  /// Подгружаемые из БД контакты исполнителя — RLS на `profiles_private`
+  /// пропустит только участника `accepted`/`completed` мэтча. До
+  /// загрузки используем то, что пришло в `widget.customerPhone`
+  /// (обычно пусто, т.к. контакты появляются именно после accepted).
+  String? _dbExecutorPhone;
+  String? _dbExecutorEmail;
+
   @override
   void initState() {
     super.initState();
     _state = widget.state;
     _rejectedStatus = widget.rejectedStatus;
     _reviewLeft = widget.reviewLeft;
+    _syncFromDb();
+  }
+
+  /// Спрашивает у БД актуальный статус мэтча и при `accepted`/`completed`
+  /// переключает экран в соответствующее состояние и тянет контакты.
+  /// Без [matchId] и [executorId] ничего не делает (моковые заказы).
+  Future<void> _syncFromDb() async {
+    final String? matchId = widget.matchId;
+    final String? executorId = widget.executorId;
+    if (matchId == null || executorId == null) return;
+    if (_state == MyOrderDetailState.confirmed ||
+        _state == MyOrderDetailState.completed) {
+      await _loadContacts(executorId);
+      return;
+    }
+    final String? status =
+        await CustomerOrdersService.instance.getMatchStatus(matchId);
+    if (!mounted || status == null) return;
+    if (status == 'accepted') {
+      setState(() => _state = MyOrderDetailState.confirmed);
+      await _loadContacts(executorId);
+    } else if (status == 'completed') {
+      setState(() => _state = MyOrderDetailState.completed);
+      await _loadContacts(executorId);
+    }
+  }
+
+  Future<void> _loadContacts(String executorId) async {
+    final ({String? phone, String? email})? c = await CustomerOrdersService
+        .instance
+        .getExecutorContacts(executorId);
+    if (c == null || !mounted) return;
+    setState(() {
+      _dbExecutorPhone = c.phone;
+      _dbExecutorEmail = c.email;
+    });
+  }
+
+  String get _effectivePhone =>
+      (_dbExecutorPhone != null && _dbExecutorPhone!.isNotEmpty)
+          ? _dbExecutorPhone!
+          : widget.customerPhone;
+
+  String? get _effectiveEmail =>
+      (_dbExecutorEmail != null && _dbExecutorEmail!.isNotEmpty)
+          ? _dbExecutorEmail
+          : widget.customerEmail;
+
+  bool get _hasAgreedPrice =>
+      (widget.agreedPricePerHour != null &&
+              widget.agreedPricePerHour! > 0) ||
+      (widget.agreedPricePerDay != null && widget.agreedPricePerDay! > 0);
+
+  String _fmtAgreedPrice(double? v) {
+    if (v == null || v <= 0) return '';
+    final int i = v.round();
+    final String s = i.toString();
+    final StringBuffer b = StringBuffer();
+    final int n = s.length;
+    for (int k = 0; k < n; k++) {
+      if (k > 0 && (n - k) % 3 == 0) b.write(' ');
+      b.write(s[k]);
+    }
+    return b.toString();
   }
 
   MyOrderStatus get _pillStatus {
@@ -192,23 +283,12 @@ class _MyOrderDetailScreenState extends State<MyOrderDetailScreen> {
 
   bool get _showPhone => _showExecutor;
 
-  /// Открывает полную карточку исполнителя из каталога. Режим
-  /// просмотра — без `selectMode`, поэтому кнопка «Выбрать
-  /// исполнителя» там не появится. id-шник у мокового заказа может
-  /// отсутствовать — тогда каталог-экран покажет стандартное
-  /// содержимое по дефолтному id.
+  /// Открывает БД-подключённую карточку исполнителя (видна заказчику).
+  /// Если у заказа нет [executorId] (мок-данные), кнопка не нажимается.
   void _openExecutorProfile() {
-    final ExecutorMock? exec = ExecutorMock.byName(widget.customerName);
-    Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(
-        builder: (_) => catalog.OrderDetailScreen(
-          orderId: exec?.id ?? widget.orderNumber,
-          executor: exec,
-          multipleEquipment: widget.equipment.length > 1,
-          offerSent: widget.waitingStatus == MyOrderStatus.awaitingExecutor,
-        ),
-      ),
-    );
+    final String? executorId = widget.executorId;
+    if (executorId == null || executorId.isEmpty) return;
+    context.push('/catalog/executor/$executorId');
   }
 
   /// Открывает экран отзывов исполнителя по тапу «15 отзывов».
@@ -307,7 +387,7 @@ class _MyOrderDetailScreenState extends State<MyOrderDetailScreen> {
                       name: widget.customerName,
                       onTap: _openExecutorProfile,
                       onCall: _state == MyOrderDetailState.confirmed
-                          ? () => _dialPhone(widget.customerPhone)
+                          ? () => _dialPhone(_effectivePhone)
                           : null,
                       onReviewsTap: _openExecutorReviews,
                     ),
@@ -326,12 +406,12 @@ class _MyOrderDetailScreenState extends State<MyOrderDetailScreen> {
                     ),
                     SizedBox(height: 4.h),
                     Text(
-                      widget.customerPhone,
+                      _effectivePhone,
                       style: AppTextStyles.subBody
                           .copyWith(fontWeight: FontWeight.w400),
                     ),
-                    if (widget.customerEmail != null &&
-                        widget.customerEmail!.trim().isNotEmpty) ...<Widget>[
+                    if (_effectiveEmail != null &&
+                        _effectiveEmail!.trim().isNotEmpty) ...<Widget>[
                       SizedBox(height: 12.h),
                       Text(
                         'Электронная почта',
@@ -345,7 +425,7 @@ class _MyOrderDetailScreenState extends State<MyOrderDetailScreen> {
                       ),
                       SizedBox(height: 4.h),
                       Text(
-                        widget.customerEmail!,
+                        _effectiveEmail!,
                         style: AppTextStyles.subBody
                             .copyWith(fontWeight: FontWeight.w400),
                       ),
@@ -379,12 +459,10 @@ class _MyOrderDetailScreenState extends State<MyOrderDetailScreen> {
                   ),
                   _Section(
                     title: 'Адрес',
-                    child: Text(
+                    child: ClickableAddress(
                       widget.address,
-                      style: AppTextStyles.subBody.copyWith(
-                        fontWeight: FontWeight.w400,
-                        decoration: TextDecoration.underline,
-                      ),
+                      baseStyle: AppTextStyles.subBody
+                          .copyWith(fontWeight: FontWeight.w400),
                     ),
                   ),
                   if (widget.description.trim().isNotEmpty)
@@ -430,43 +508,23 @@ class _MyOrderDetailScreenState extends State<MyOrderDetailScreen> {
                       ],
                     ),
                   ),
-                  // Блок «Цена» — только в статусах «Свяжитесь с
-                  // исполнителем» (confirmed) и «Завершён» (completed).
-                  // Цены берём из карточки мэтчнутого исполнителя
-                  // (лукап по имени: customerName здесь — партнёр по
-                  // мэтчу, т. е. исполнитель). В остальных статусах
-                  // исполнитель не назначен — цены нет.
-                  if (_state == MyOrderDetailState.confirmed ||
-                      _state == MyOrderDetailState.completed)
-                    Builder(
-                      builder: (BuildContext _) {
-                        ExecutorMock? exec;
-                        for (final ExecutorMock e in ExecutorMock.all) {
-                          if (e.name == widget.customerName) {
-                            exec = e;
-                            break;
-                          }
-                        }
-                        if (exec == null) return const SizedBox.shrink();
-                        final Set<String> neededEq = widget.equipment.toSet();
-                        final List<ExecutorServiceOffer> matched = exec.services
-                            .where((ExecutorServiceOffer s) =>
-                                neededEq.contains(s.equipment))
-                            .toList();
-                        if (matched.isEmpty) return const SizedBox.shrink();
-                        return _Section(
-                          title: 'Цена',
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: <Widget>[
-                              for (int i = 0; i < matched.length; i++) ...<Widget>[
-                                if (i > 0) SizedBox(height: 2.h),
-                                _PriceLine(service: matched[i]),
-                              ],
-                            ],
-                          ),
-                        );
-                      },
+                  // Блок «Цена» (снапшот из `order_matches.agreed_*`)
+                  // показывается, когда мэтч уже состоялся. Источник
+                  // правды — поля [agreedPricePerHour]/[agreedPricePerDay]/
+                  // [serviceMachineryTitle], которые передаются сверху
+                  // после загрузки матча из БД.
+                  if ((_state == MyOrderDetailState.confirmed ||
+                          _state == MyOrderDetailState.completed) &&
+                      _hasAgreedPrice)
+                    _Section(
+                      title: 'Цена',
+                      child: _PriceLine(
+                        equipment: widget.serviceMachineryTitle ?? '',
+                        pricePerHour:
+                            _fmtAgreedPrice(widget.agreedPricePerHour),
+                        pricePerDay:
+                            _fmtAgreedPrice(widget.agreedPricePerDay),
+                      ),
                     ),
                   if (widget.photos.isNotEmpty)
                     _Section(
@@ -478,7 +536,6 @@ class _MyOrderDetailScreenState extends State<MyOrderDetailScreen> {
                     SizedBox(height: 4.h),
                     _AwaitingExecutorCard(
                       name: widget.customerName,
-                      orderEquipment: widget.equipment,
                       onTap: _openExecutorProfile,
                     ),
                   ],
@@ -807,61 +864,63 @@ class _OutlinedChip extends StatelessWidget {
 }
 
 /// Карточка единственного исполнителя в статусе «Ждёт подтверждения».
-/// Внешне аналогична карточкам в SelectExecutorScreen, но одна.
+/// Подробности техники/услуг подгружаются из БД на экране карточки
+/// исполнителя по тапу. Здесь — только имя и переход в карточку.
 class _AwaitingExecutorCard extends StatelessWidget {
   const _AwaitingExecutorCard({
     required this.name,
-    required this.orderEquipment,
     required this.onTap,
   });
 
   final String name;
-  final List<String> orderEquipment;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final ExecutorMock? exec = ExecutorMock.byName(name);
-    final Set<String> orderEq = orderEquipment.toSet();
-    final List<ExecutorServiceOffer>? matching = exec?.services
-        .where((ExecutorServiceOffer s) => orderEq.contains(s.equipment))
-        .toList();
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.fieldFill,
-        borderRadius: BorderRadius.circular(14.r),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: OrderCard(
-        name: name,
-        rating: exec?.rating ?? 4.5,
-        equipment: exec?.equipment ?? <String>[],
-        categories: exec?.categories ?? <String>[],
-        matchingServices: matching?.isEmpty ?? true ? null : matching,
-        highlightEquipment: orderEq,
-        onTap: onTap,
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Container(
+        decoration: BoxDecoration(
+          color: AppColors.fieldFill,
+          borderRadius: BorderRadius.circular(14.r),
+        ),
+        padding: EdgeInsets.all(16.w),
+        child: Row(
+          children: <Widget>[
+            CircleAvatar(
+              radius: 20.r,
+              backgroundColor: AppColors.primaryTint,
+              child: Text(
+                name.isEmpty ? '?' : name[0].toUpperCase(),
+                style: AppTextStyles.titleS,
+              ),
+            ),
+            SizedBox(width: 12.w),
+            Expanded(
+              child: Text(name, style: AppTextStyles.bodyMedium),
+            ),
+            Icon(Icons.chevron_right_rounded,
+                color: AppColors.textTertiary, size: 24.r),
+          ],
+        ),
       ),
     );
   }
 }
 
-/// Строка блока «Стоимость услуг» на странице заказа после мэтча:
-/// «Экскаватор — 3 500 ₽/час, 17 000 ₽/день». Если одна из цен не
-/// задана (0) — выводим только доступную половину.
+/// Строка блока «Цена» на странице заказа после мэтча. Источник —
+/// снапшот из `order_matches.agreed_*`: пробрасывается готовыми
+/// строками, потому что форматирование уже сделано в _fmtAgreedPrice.
 class _PriceLine extends StatelessWidget {
-  const _PriceLine({required this.service});
-  final ExecutorServiceOffer service;
-
-  static String _fmtThousands(int value) {
-    final String s = value.toString();
-    final StringBuffer out = StringBuffer();
-    for (int i = 0; i < s.length; i++) {
-      final int rest = s.length - i;
-      if (i > 0 && rest % 3 == 0) out.write(' ');
-      out.write(s[i]);
-    }
-    return out.toString();
-  }
+  const _PriceLine({
+    required this.equipment,
+    required this.pricePerHour,
+    required this.pricePerDay,
+  });
+  final String equipment;
+  final String pricePerHour;
+  final String pricePerDay;
 
   @override
   Widget build(BuildContext context) {
@@ -872,30 +931,23 @@ class _PriceLine extends StatelessWidget {
       height: 1.4,
       color: AppColors.textPrimary,
     );
-    final TextStyle priceDigits = base.copyWith(
-      fontSize: 16.sp,
-      fontWeight: FontWeight.w600,
-      color: AppColors.primary,
-    );
     final TextStyle priceUnit = base.copyWith(
       fontSize: 16.sp,
       fontWeight: FontWeight.w600,
       color: AppColors.primary,
     );
+    final bool hasHour = pricePerHour.isNotEmpty;
+    final bool hasDay = pricePerDay.isNotEmpty;
     final List<TextSpan> spans = <TextSpan>[
-      TextSpan(text: '${service.equipment} — '),
+      if (equipment.isNotEmpty) TextSpan(text: '$equipment — '),
     ];
-    final bool hasHour = service.pricePerHour > 0;
-    final bool hasDay = service.pricePerDay > 0;
     if (hasHour) {
-      spans.add(TextSpan(
-          text: _fmtThousands(service.pricePerHour), style: priceDigits));
+      spans.add(TextSpan(text: pricePerHour, style: priceUnit));
       spans.add(TextSpan(text: ' ₽/час', style: priceUnit));
     }
     if (hasHour && hasDay) spans.add(const TextSpan(text: '   '));
     if (hasDay) {
-      spans.add(TextSpan(
-          text: _fmtThousands(service.pricePerDay), style: priceDigits));
+      spans.add(TextSpan(text: pricePerDay, style: priceUnit));
       spans.add(TextSpan(text: ' ₽/день', style: priceUnit));
     }
     return Text.rich(TextSpan(children: spans), style: base);

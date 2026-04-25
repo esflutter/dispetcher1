@@ -1,11 +1,14 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:dispatcher_1/core/catalog/catalog_service.dart';
+import 'package:dispatcher_1/core/catalog/models.dart';
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
 import 'package:dispatcher_1/features/catalog/catalog_filter_screen.dart';
-import 'package:dispatcher_1/features/catalog/order_detail_screen.dart';
 import 'package:dispatcher_1/features/catalog/widgets/catalog_search_bar.dart';
 import 'package:dispatcher_1/features/catalog/widgets/order_card.dart';
 import 'package:dispatcher_1/features/shell/main_shell.dart';
@@ -35,22 +38,69 @@ class OrderFeedScreen extends StatefulWidget {
 class _OrderFeedScreenState extends State<OrderFeedScreen> {
   final TextEditingController _searchCtrl = TextEditingController();
   String _query = '';
+  Timer? _debounce;
+  late Future<List<ExecutorCardListItem>> _future;
 
   @override
   void initState() {
     super.initState();
     AppliedFilter.revision.addListener(_onFilterChanged);
+    _future = _fetch();
   }
 
   @override
   void dispose() {
     AppliedFilter.revision.removeListener(_onFilterChanged);
+    _debounce?.cancel();
     _searchCtrl.dispose();
     super.dispose();
   }
 
+  Future<List<ExecutorCardListItem>> _fetch() {
+    return CatalogService.instance.listPublishedExecutors(
+      machineryTitles: AppliedFilter.equipment,
+      categoryTitles: AppliedFilter.categories,
+      search: _query.trim().isEmpty ? null : _query,
+    );
+  }
+
   void _onFilterChanged() {
-    if (mounted) setState(() {});
+    if (mounted) setState(() => _future = _fetch());
+  }
+
+  void _onSearchChanged(String v) {
+    setState(() => _query = v);
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 300), () {
+      if (mounted) setState(() => _future = _fetch());
+    });
+  }
+
+  /// Локальные фильтры по цене (в сервисе их нет) + сортировка.
+  List<ExecutorCardListItem> _applyLocalFilters(
+      List<ExecutorCardListItem> input) {
+    Iterable<ExecutorCardListItem> res = input;
+
+    final int? maxHour = _parseIntOrNull(AppliedFilter.priceHour);
+    if (maxHour != null) {
+      res = res.where((ExecutorCardListItem e) =>
+          e.minPricePerHour != null && e.minPricePerHour! <= maxHour);
+    }
+    final int? maxDay = _parseIntOrNull(AppliedFilter.priceDay);
+    if (maxDay != null) {
+      res = res.where((ExecutorCardListItem e) =>
+          e.minPricePerDay != null && e.minPricePerDay! <= maxDay);
+    }
+
+    final List<ExecutorCardListItem> out = res.toList();
+    if (AppliedFilter.sortByPriceAsc) {
+      out.sort((ExecutorCardListItem a, ExecutorCardListItem b) {
+        final double av = a.minPricePerHour ?? double.infinity;
+        final double bv = b.minPricePerHour ?? double.infinity;
+        return av.compareTo(bv);
+      });
+    }
+    return out;
   }
 
   /// True только если реально отрисуется хотя бы один chip. Значения,
@@ -77,55 +127,6 @@ class _OrderFeedScreenState extends State<OrderFeedScreen> {
     }
     if (AppliedFilter.radiusKm != null) return true;
     return false;
-  }
-
-  List<ExecutorMock> get _visibleOrders {
-    final String q = _query.trim().toLowerCase();
-    Iterable<ExecutorMock> res = ExecutorMock.all;
-
-    // Фильтр по категориям — хотя бы одна из выбранных категорий
-    // должна присутствовать у исполнителя.
-    if (AppliedFilter.categories.isNotEmpty) {
-      res = res.where((ExecutorMock o) =>
-          o.categories.any(AppliedFilter.categories.contains));
-    }
-
-    // Фильтр по спецтехнике — аналогично.
-    if (AppliedFilter.equipment.isNotEmpty) {
-      res = res.where((ExecutorMock o) =>
-          o.equipment.any(AppliedFilter.equipment.contains));
-    }
-
-    // Максимальные цены — заказчик задаёт потолок бюджета, поэтому
-    // оставляем только тех, у кого цена не превышает указанную.
-    final int? maxHour = _parseIntOrNull(AppliedFilter.priceHour);
-    if (maxHour != null) {
-      res = res.where((ExecutorMock o) => o.pricePerHour <= maxHour);
-    }
-    final int? maxDay = _parseIntOrNull(AppliedFilter.priceDay);
-    if (maxDay != null) {
-      res = res.where((ExecutorMock o) => o.pricePerDay <= maxDay);
-    }
-
-    if (q.isNotEmpty) {
-      res = res.where((ExecutorMock o) {
-        if (o.name.toLowerCase().contains(q)) return true;
-        for (final String e in o.equipment) {
-          if (e.toLowerCase().contains(q)) return true;
-        }
-        for (final String c in o.categories) {
-          if (c.toLowerCase().contains(q)) return true;
-        }
-        return false;
-      });
-    }
-
-    final List<ExecutorMock> out = res.toList();
-    if (AppliedFilter.sortByPriceAsc) {
-      out.sort((ExecutorMock a, ExecutorMock b) =>
-          a.pricePerHour.compareTo(b.pricePerHour));
-    }
-    return out;
   }
 
   void _openFilter() {
@@ -194,66 +195,71 @@ class _OrderFeedScreenState extends State<OrderFeedScreen> {
               controller: _searchCtrl,
               hintText: 'Поиск',
               onFilterTap: _openFilter,
-              onChanged: (String v) => setState(() => _query = v),
+              onChanged: _onSearchChanged,
               showFilterBadge: _hasActiveFilter,
             ),
           ),
           if (_hasActiveFilter)
             _AppliedFilterChips(onChanged: () => setState(() {})),
           Expanded(
-            child: _visibleOrders.isEmpty
-                ? const _EmptyExecutorsState()
-                : MediaQuery.removePadding(
-                    context: context,
-                    removeTop: true,
-                    child: ListView.separated(
-                      // Когда фильтры применены — чип выше уже даёт
-                      // вертикальный отступ снизу; иначе добавляем свой.
-                      padding: EdgeInsets.fromLTRB(
-                          16.w, _hasActiveFilter ? 0 : 16.h, 16.w, 16.h),
-                      itemCount: _visibleOrders.length,
-                      separatorBuilder: (_, _) => SizedBox(height: 16.h),
-                      itemBuilder: (BuildContext context, int i) {
-                        final ExecutorMock o = _visibleOrders[i];
-                        // Активен фильтр по спецтехнике — показываем только
-                        // подходящие услуги исполнителя с ценами. Те виды
-                        // техники, которых у него нет, просто не попадают
-                        // в список.
-                        final Set<String> eqFilter = AppliedFilter.equipment;
-                        final List<ExecutorServiceOffer>? matching =
-                            eqFilter.isEmpty
-                                ? null
-                                : o.services
-                                    .where((ExecutorServiceOffer s) =>
-                                        eqFilter.contains(s.equipment))
-                                    .toList();
-                        return Container(
-                          decoration: BoxDecoration(
-                            color: AppColors.fieldFill,
-                            borderRadius: BorderRadius.circular(14.r),
-                          ),
-                          clipBehavior: Clip.antiAlias,
-                          child: OrderCard(
-                            name: o.name,
-                            rating: o.rating,
-                            equipment: o.equipment,
-                            categories: o.categories,
-                            matchingServices: matching,
-                            highlightEquipment: AppliedFilter.equipment,
-                            highlightCategories: AppliedFilter.categories,
-                            onTap: () => Navigator.of(context).push(
-                              MaterialPageRoute<void>(
-                                builder: (_) => OrderDetailScreen(
-                                  orderId: o.id,
-                                  multipleEquipment: o.equipment.length > 1,
-                                ),
-                              ),
-                            ),
-                          ),
-                        );
-                      },
+            child: FutureBuilder<List<ExecutorCardListItem>>(
+              future: _future,
+              builder: (BuildContext context,
+                  AsyncSnapshot<List<ExecutorCardListItem>> snap) {
+                if (snap.connectionState != ConnectionState.done) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                if (snap.hasError) {
+                  return Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(16.w),
+                      child: TextButton(
+                        onPressed: () =>
+                            setState(() => _future = _fetch()),
+                        child: const Text('Не удалось загрузить'),
+                      ),
                     ),
+                  );
+                }
+                final List<ExecutorCardListItem> orders = _applyLocalFilters(
+                    snap.data ?? const <ExecutorCardListItem>[]);
+                if (orders.isEmpty) {
+                  return const _EmptyExecutorsState();
+                }
+                return MediaQuery.removePadding(
+                  context: context,
+                  removeTop: true,
+                  child: ListView.separated(
+                    // Когда фильтры применены — чип выше уже даёт
+                    // вертикальный отступ снизу; иначе добавляем свой.
+                    padding: EdgeInsets.fromLTRB(
+                        16.w, _hasActiveFilter ? 0 : 16.h, 16.w, 16.h),
+                    itemCount: orders.length,
+                    separatorBuilder: (_, _) => SizedBox(height: 16.h),
+                    itemBuilder: (BuildContext context, int i) {
+                      final ExecutorCardListItem e = orders[i];
+                      return Container(
+                        decoration: BoxDecoration(
+                          color: AppColors.fieldFill,
+                          borderRadius: BorderRadius.circular(14.r),
+                        ),
+                        clipBehavior: Clip.antiAlias,
+                        child: OrderCard(
+                          name: e.name,
+                          rating: e.ratingAsExecutor,
+                          equipment: e.machineryTitles,
+                          categories: e.categoryTitles,
+                          highlightEquipment: AppliedFilter.equipment,
+                          highlightCategories: AppliedFilter.categories,
+                          onTap: () =>
+                              context.push('/catalog/executor/${e.userId}'),
+                        ),
+                      );
+                    },
                   ),
+                );
+              },
+            ),
           ),
         ],
       ),
@@ -477,307 +483,3 @@ class _FilterChip extends StatelessWidget {
   }
 }
 
-/// Одна услуга исполнителя: тип спецтехники, название, описание,
-/// цена за час и за день, минимальный заказ в часах, категории работ.
-/// Используется и в поиске (при фильтре по технике карточка показывает
-/// только подходящие услуги с ценами), и на экране деталей исполнителя.
-class ExecutorServiceOffer {
-  const ExecutorServiceOffer({
-    required this.equipment,
-    required this.title,
-    required this.description,
-    required this.pricePerHour,
-    required this.pricePerDay,
-    required this.minHours,
-    this.categories = const <String>[],
-  });
-  final String equipment;
-  final String title;
-  final String description;
-  final int pricePerHour;
-  final int pricePerDay;
-  final int minHours;
-  final List<String> categories;
-}
-
-class ExecutorMock {
-  const ExecutorMock({
-    required this.id,
-    required this.name,
-    required this.rating,
-    required this.experience,
-    required this.legalStatus,
-    required this.equipment,
-    required this.categories,
-    required this.pricePerHour,
-    required this.pricePerDay,
-    this.phone = '',
-    this.services = const <ExecutorServiceOffer>[],
-    this.about = '',
-  });
-  final String id;
-  final String name;
-  final double rating;
-  final String experience;
-  final String legalStatus;
-  final List<String> equipment;
-  final List<String> categories;
-  final int pricePerHour;
-  final int pricePerDay;
-  final String phone;
-  final List<ExecutorServiceOffer> services;
-  final String about;
-
-  static const List<ExecutorMock> all = <ExecutorMock>[
-    ExecutorMock(
-      id: '1',
-      name: 'Александр Иванов',
-      phone: '+7 999 111-22-33',
-      rating: 4.5,
-      experience: '8 лет',
-      legalStatus: 'Юр. лицо',
-      equipment: <String>[
-        'Экскаватор',
-        'Автокран',
-        'Эвакуатор',
-        'Автовышка',
-        'Манипулятор',
-      ],
-      categories: <String>[
-        'Строительные работы',
-        'Дорожные работы',
-        'Буровые работы',
-        'Высотные работы',
-      ],
-      pricePerHour: 2000,
-      pricePerDay: 14000,
-      services: <ExecutorServiceOffer>[
-        ExecutorServiceOffer(
-          equipment: 'Экскаватор',
-          title: 'Экскаватор для копки траншеи',
-          description:
-              'Экскаватор для земляных работ. Копка траншей, разработка котлованов, выравнивание участка. Работаю аккуратно, соблюдаю сроки. Возможен выезд в ближайшие районы.',
-          pricePerHour: 3500,
-          pricePerDay: 17000,
-          minHours: 4,
-          categories: <String>['Земляные работы', 'Погрузочно-разгрузочные работы'],
-        ),
-        ExecutorServiceOffer(
-          equipment: 'Автокран',
-          title: 'Автокран для подъёма материалов',
-          description:
-              'Автокран грузоподъёмностью 25 тонн. Подъём и перемещение материалов на стройплощадке, монтажные работы. Оператор с допуском.',
-          pricePerHour: 4000,
-          pricePerDay: 18000,
-          minHours: 3,
-          categories: <String>['Строительные работы', 'Погрузочно-разгрузочные работы'],
-        ),
-        ExecutorServiceOffer(
-          equipment: 'Эвакуатор',
-          title: 'Эвакуатор для легковых и коммерческих авто',
-          description:
-              'Эвакуация автомобилей массой до 3.5 тонн. Работаю круглосуточно, выезжаю по городу и области.',
-          pricePerHour: 2000,
-          pricePerDay: 14000,
-          minHours: 2,
-          categories: <String>['Перевозка материалов'],
-        ),
-        ExecutorServiceOffer(
-          equipment: 'Автовышка',
-          title: 'Автовышка для работ на высоте',
-          description:
-              'Работы на высоте до 18 метров: монтаж, обслуживание, обрезка деревьев. Техника исправна, работаю аккуратно.',
-          pricePerHour: 2500,
-          pricePerDay: 15000,
-          minHours: 2,
-          categories: <String>['Высотные работы'],
-        ),
-        ExecutorServiceOffer(
-          equipment: 'Манипулятор',
-          title: 'Манипулятор со стрелой 8 тонн',
-          description:
-              'Манипулятор грузоподъёмностью 8 тонн со стрелой. Доставка и разгрузка ЖБИ, плит, поддонов, бытовок. Оператор с допуском.',
-          pricePerHour: 3000,
-          pricePerDay: 16000,
-          minHours: 3,
-          categories: <String>['Перевозка материалов', 'Строительные работы'],
-        ),
-      ],
-      about:
-          'Опыт работы более 5 лет. Своя техника в хорошем состоянии, работаю без простоев. Готов выезжать в ближайшие районы.',
-    ),
-    ExecutorMock(
-      id: '2',
-      name: 'Сергей Петров',
-      phone: '+7 999 333-44-55',
-      rating: 4.8,
-      experience: '10 лет',
-      legalStatus: 'ИП',
-      equipment: <String>['Автокран', 'Экскаватор'],
-      categories: <String>[
-        'Строительные работы',
-        'Погрузочно-разгрузочные работы',
-      ],
-      pricePerHour: 3500,
-      pricePerDay: 17000,
-      services: <ExecutorServiceOffer>[
-        ExecutorServiceOffer(
-          equipment: 'Автокран',
-          title: 'Автокран 40 тонн',
-          description:
-              'Автокран грузоподъёмностью 40 тонн, стрела до 34 метров. Монтаж тяжёлых конструкций, разгрузка фур. Опытный оператор.',
-          pricePerHour: 4000,
-          pricePerDay: 18000,
-          minHours: 4,
-          categories: <String>['Строительные работы', 'Погрузочно-разгрузочные работы'],
-        ),
-        ExecutorServiceOffer(
-          equipment: 'Экскаватор',
-          title: 'Экскаватор гусеничный',
-          description:
-              'Гусеничный экскаватор для тяжёлых земляных работ. Разработка котлованов, снятие плодородного слоя, обратная засыпка.',
-          pricePerHour: 3500,
-          pricePerDay: 17000,
-          minHours: 4,
-          categories: <String>['Строительные работы', 'Земляные работы'],
-        ),
-      ],
-    ),
-    ExecutorMock(
-      id: '3',
-      name: 'Дмитрий Сидоров',
-      phone: '+7 999 222-33-44',
-      rating: 4.2,
-      experience: '3 года',
-      legalStatus: 'Самозанятый',
-      equipment: <String>['Миниэкскаватор', 'Автокран', 'Манипулятор'],
-      categories: <String>['Земляные работы', 'Строительные работы'],
-      pricePerHour: 2500,
-      pricePerDay: 15000,
-      services: <ExecutorServiceOffer>[
-        ExecutorServiceOffer(
-          equipment: 'Миниэкскаватор',
-          title: 'Миниэкскаватор для небольших участков',
-          description:
-              'Миниэкскаватор на узких участках: дачи, огороды, узкие проезды. Копка траншей под коммуникации, ямы под столбы.',
-          pricePerHour: 2500,
-          pricePerDay: 15000,
-          minHours: 3,
-          categories: <String>['Земляные работы'],
-        ),
-        ExecutorServiceOffer(
-          equipment: 'Автокран',
-          title: 'Автокран 14 тонн',
-          description:
-              'Автокран 14 тонн, компактный, подходит для городских условий. Разгрузка материалов, монтаж небольших конструкций.',
-          pricePerHour: 3000,
-          pricePerDay: 16000,
-          minHours: 3,
-          categories: <String>['Строительные работы'],
-        ),
-        ExecutorServiceOffer(
-          equipment: 'Манипулятор',
-          title: 'Манипулятор 5 тонн',
-          description:
-              'Манипулятор грузоподъёмностью 5 тонн со стрелой. Доставка и разгрузка стройматериалов: плиты, кирпич, поддоны.',
-          pricePerHour: 3000,
-          pricePerDay: 16000,
-          minHours: 2,
-          categories: <String>['Строительные работы', 'Перевозка материалов'],
-        ),
-      ],
-    ),
-    ExecutorMock(
-      id: '4',
-      name: 'Андрей Козлов',
-      phone: '+7 999 444-55-66',
-      rating: 4.9,
-      experience: '12 лет',
-      legalStatus: 'Юр. лицо',
-      equipment: <String>['Самосвал', 'Погрузчик'],
-      categories: <String>['Перевозка материалов', 'Земляные работы'],
-      pricePerHour: 3000,
-      pricePerDay: 16000,
-      services: <ExecutorServiceOffer>[
-        ExecutorServiceOffer(
-          equipment: 'Самосвал',
-          title: 'Самосвал для вывоза грунта',
-          description:
-              'Вывоз грунта, мусора и сыпучих материалов. Работаю быстро, без задержек. Возможен выезд в ближайшие районы.',
-          pricePerHour: 3500,
-          pricePerDay: 17000,
-          minHours: 3,
-          categories: <String>['Перевозка материалов', 'Земляные работы'],
-        ),
-        ExecutorServiceOffer(
-          equipment: 'Погрузчик',
-          title: 'Фронтальный погрузчик',
-          description:
-              'Погрузка сыпучих материалов, перемещение грузов по стройплощадке, уборка снега. Ковш 2 м³.',
-          pricePerHour: 3000,
-          pricePerDay: 16000,
-          minHours: 3,
-          categories: <String>['Погрузочно-разгрузочные работы'],
-        ),
-      ],
-    ),
-    ExecutorMock(
-      id: '5',
-      name: 'Максим Орлов',
-      phone: '+7 999 555-66-77',
-      rating: 4.3,
-      experience: '4 года',
-      legalStatus: 'ИП',
-      equipment: <String>['Минипогрузчик', 'Миниэкскаватор'],
-      categories: <String>['Земляные работы', 'Погрузочно-разгрузочные работы'],
-      pricePerHour: 2000,
-      pricePerDay: 12000,
-      services: <ExecutorServiceOffer>[
-        ExecutorServiceOffer(
-          equipment: 'Минипогрузчик',
-          title: 'Минипогрузчик для стеснённых условий',
-          description:
-              'Компактный погрузчик для работ в ограниченном пространстве: '
-              'дворы, узкие проходы, подвалы. Сгребание и перемещение грунта, '
-              'мусора, сыпучих материалов.',
-          pricePerHour: 2000,
-          pricePerDay: 12000,
-          minHours: 3,
-          categories: <String>[
-            'Погрузочно-разгрузочные работы',
-            'Земляные работы',
-          ],
-        ),
-        ExecutorServiceOffer(
-          equipment: 'Миниэкскаватор',
-          title: 'Миниэкскаватор 1.5 т для малых участков',
-          description:
-              'Миниэкскаватор для дачных и частных участков: копка под '
-              'коммуникации, ямы под столбы и сваи, траншеи под дренаж. '
-              'Проходит в узкие ворота.',
-          pricePerHour: 2200,
-          pricePerDay: 13000,
-          minHours: 3,
-          categories: <String>['Земляные работы'],
-        ),
-      ],
-      about: 'Работаю с компактной техникой для стеснённых условий. '
-          'Есть прицеп для перевозки — выезжаю в день обращения.',
-    ),
-  ];
-
-  static ExecutorMock? byId(String id) {
-    for (final ExecutorMock e in all) {
-      if (e.id == id) return e;
-    }
-    return null;
-  }
-
-  static ExecutorMock? byName(String name) {
-    final String q = name.trim().toLowerCase();
-    for (final ExecutorMock e in all) {
-      if (e.name.toLowerCase() == q) return e;
-    }
-    return null;
-  }
-}

@@ -6,9 +6,8 @@ import '../features/auth/phone_input_screen.dart';
 import '../features/auth/registration_screen.dart';
 import '../features/catalog/catalog_categories_screen.dart';
 import '../features/catalog/catalog_filter_screen.dart';
-import '../features/catalog/customer_card_screen.dart';
+import '../features/catalog/executor_card_view_screen.dart';
 import '../features/catalog/no_internet_screen.dart';
-import '../features/catalog/order_detail_screen.dart' as catalog_detail;
 import '../features/catalog/order_feed_screen.dart';
 import '../features/executor_card/edit_executor_card_screen.dart';
 import '../features/executor_card/executor_card_screen.dart';
@@ -52,17 +51,11 @@ final GoRouter appRouter = GoRouter(
         categoryTitle: (state.extra as String?) ?? 'Категория',
       ),
     ),
-    GoRoute(
-      path: '/catalog/order/:id',
-      builder: (_, state) => catalog_detail.OrderDetailScreen(
-        orderId: state.pathParameters['id'] ?? '',
-      ),
-    ),
     GoRoute(path: '/catalog/filter', builder: (_, _) => const CatalogFilterScreen()),
     GoRoute(
-      path: '/catalog/customer/:id',
-      builder: (_, state) => CustomerCardScreen(
-        customerId: state.pathParameters['id'] ?? '',
+      path: '/catalog/executor/:id',
+      builder: (_, state) => ExecutorCardViewScreen(
+        executorId: state.pathParameters['id'] ?? '',
       ),
     ),
     GoRoute(path: '/catalog/no-internet', builder: (_, _) => const NoInternetScreen()),

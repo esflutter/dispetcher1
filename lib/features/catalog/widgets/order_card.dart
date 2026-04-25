@@ -3,16 +3,11 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
-import 'package:dispatcher_1/features/catalog/order_feed_screen.dart';
 
 /// Карточка исполнителя в ленте каталога. Слева круглый аватар, справа —
 /// имя со звездой и рейтингом. Ниже — секции «Спецтехника» и
 /// «Категории услуг». Опыт работы и юридический статус показываются
 /// только на экране деталей, чтобы не загромождать карточку поиска.
-///
-/// Если передан непустой [matchingServices] — вместо двух стандартных
-/// блоков показываем список конкретных услуг (техника + цена/час +
-/// мин. часы) по активному фильтру спецтехники.
 class OrderCard extends StatelessWidget {
   const OrderCard({
     super.key,
@@ -20,10 +15,9 @@ class OrderCard extends StatelessWidget {
     required this.rating,
     required this.equipment,
     required this.categories,
-    this.matchingServices,
     this.highlightEquipment = const <String>{},
     this.highlightCategories = const <String>{},
-    this.avatarAsset,
+    this.avatarUrl,
     this.onTap,
   });
 
@@ -31,31 +25,10 @@ class OrderCard extends StatelessWidget {
   final double rating;
   final List<String> equipment;
   final List<String> categories;
-  final List<ExecutorServiceOffer>? matchingServices;
   final Set<String> highlightEquipment;
   final Set<String> highlightCategories;
-  final String? avatarAsset;
+  final String? avatarUrl;
   final VoidCallback? onTap;
-
-  static String _fmtThousands(int value) {
-    final String s = value.toString();
-    final StringBuffer out = StringBuffer();
-    for (int i = 0; i < s.length; i++) {
-      final int rest = s.length - i;
-      if (i > 0 && rest % 3 == 0) out.write(' ');
-      out.write(s[i]);
-    }
-    return out.toString();
-  }
-
-  /// Словоформа «час» после предлога «от» (родительный падеж).
-  /// «От 1 часа», «от 2/3/4/5 часов» — после «от» всегда родительный.
-  static String _hoursWord(int n) {
-    final int mod100 = n % 100;
-    if (mod100 >= 11 && mod100 <= 14) return 'часов';
-    if (n % 10 == 1) return 'часа';
-    return 'часов';
-  }
 
   List<TextSpan> _buildSpans(List<String> items, Set<String> highlight) {
     final List<TextSpan> spans = <TextSpan>[];
@@ -84,12 +57,15 @@ class OrderCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.center,
               children: <Widget>[
                 ClipOval(
-                  child: Image.asset(
-                    avatarAsset ?? 'assets/images/catalog/avatar_placeholder.webp',
-                    width: 48.r,
-                    height: 48.r,
-                    fit: BoxFit.cover,
-                  ),
+                  child: (avatarUrl != null && avatarUrl!.trim().isNotEmpty)
+                      ? Image.network(
+                          avatarUrl!,
+                          width: 48.r,
+                          height: 48.r,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, _, _) => _placeholderAvatar(),
+                        )
+                      : _placeholderAvatar(),
                 ),
                 SizedBox(width: 12.w),
                 Expanded(
@@ -136,15 +112,23 @@ class OrderCard extends StatelessWidget {
               ],
             ),
             SizedBox(height: 12.h),
-            if (matchingServices != null && matchingServices!.isNotEmpty)
-              _buildServicesBlock()
-            else
-              _buildDefaultBlocks(),
+            _buildDefaultBlocks(),
           ],
         ),
       ),
     );
   }
+
+  Widget _placeholderAvatar() => Container(
+        width: 48.r,
+        height: 48.r,
+        color: AppColors.primaryTint,
+        alignment: Alignment.center,
+        child: Text(
+          name.isEmpty ? '?' : name[0].toUpperCase(),
+          style: AppTextStyles.titleS,
+        ),
+      );
 
   Widget _buildDefaultBlocks() {
     return Column(
@@ -194,41 +178,4 @@ class OrderCard extends StatelessWidget {
     );
   }
 
-  Widget _buildServicesBlock() {
-    final List<ExecutorServiceOffer> list = matchingServices!;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        for (int i = 0; i < list.length; i++) ...<Widget>[
-          if (i > 0) SizedBox(height: 6.h),
-          Text.rich(
-            TextSpan(
-              children: <TextSpan>[
-                TextSpan(text: '${list[i].equipment} — '),
-                TextSpan(
-                  text: '${_fmtThousands(list[i].pricePerHour)} ₽/час',
-                  style: TextStyle(
-                    color: AppColors.primary,
-                    fontSize: 18.sp,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                TextSpan(
-                  text:
-                      ', от ${list[i].minHours} ${_hoursWord(list[i].minHours)}',
-                ),
-              ],
-            ),
-            style: TextStyle(
-              fontFamily: 'Roboto',
-              fontSize: 16.sp,
-              fontWeight: FontWeight.w400,
-              color: AppColors.textPrimary,
-              height: 1.4,
-            ),
-          ),
-        ],
-      ],
-    );
-  }
 }
