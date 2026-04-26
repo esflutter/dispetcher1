@@ -325,7 +325,8 @@ class CatalogService {
           'user_id, location_address, radius_km, '
           'profile:profiles!executor_cards_user_id_fkey('
           'id, name, avatar_url, legal_status, experience_years, about, '
-          'rating_as_executor, review_count_as_executor)',
+          'rating_as_executor, review_count_as_executor, '
+          'verification_status, blocked_until)',
         )
         .eq('is_published', true);
 
@@ -336,8 +337,26 @@ class CatalogService {
       q = q.ilike('profile.name', '%$esc%');
     }
 
-    final List<Map<String, dynamic>> cards =
+    List<Map<String, dynamic>> cards =
         await q.order('updated_at', ascending: false).limit(limit);
+
+    // В каталоге показываем только верифицированных и не заблокированных
+    // исполнителей. PostgREST не умеет фильтровать по полям embedded
+    // ресурса в одном запросе так же, как по основному, — фильтруем
+    // на клиенте. Карточек в одной выдаче мало (обычно ≤ limit=50).
+    final DateTime now = DateTime.now().toUtc();
+    cards = cards.where((Map<String, dynamic> c) {
+      final Map<String, dynamic>? p =
+          c['profile'] as Map<String, dynamic>?;
+      if (p == null) return false;
+      if ((p['verification_status'] as String?) != 'approved') return false;
+      final String? blockedRaw = p['blocked_until'] as String?;
+      if (blockedRaw != null) {
+        final DateTime? until = DateTime.tryParse(blockedRaw);
+        if (until != null && until.isAfter(now)) return false;
+      }
+      return true;
+    }).toList();
 
     if (cards.isEmpty) return <ExecutorCardListItem>[];
 
@@ -525,12 +544,22 @@ class CatalogService {
           'user_id, location_address, radius_km, '
           'profile:profiles!executor_cards_user_id_fkey('
           'id, name, avatar_url, legal_status, experience_years, about, '
-          'rating_as_executor, review_count_as_executor)',
+          'rating_as_executor, review_count_as_executor, '
+          'verification_status, blocked_until)',
         )
         .eq('user_id', userId)
         .eq('is_published', true)
         .maybeSingle();
     if (card == null) return null;
+    final Map<String, dynamic>? prof =
+        card['profile'] as Map<String, dynamic>?;
+    if (prof == null) return null;
+    if ((prof['verification_status'] as String?) != 'approved') return null;
+    final String? blockedRaw = prof['blocked_until'] as String?;
+    if (blockedRaw != null) {
+      final DateTime? until = DateTime.tryParse(blockedRaw);
+      if (until != null && until.isAfter(DateTime.now().toUtc())) return null;
+    }
 
     final List<Map<String, dynamic>> services = await _client
         .from('services')

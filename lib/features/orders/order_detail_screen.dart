@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
@@ -889,19 +887,13 @@ class _PhotosGrid extends StatelessWidget {
       children: photos
           .map((String p) => ClipRRect(
                 borderRadius: BorderRadius.circular(10.r),
-                child: isAssetPath(p)
-                    ? Image.asset(
-                        p,
-                        width: 72.r,
-                        height: 72.r,
-                        fit: BoxFit.cover,
-                      )
-                    : Image.file(
-                        File(p),
-                        width: 72.r,
-                        height: 72.r,
-                        fit: BoxFit.cover,
-                      ),
+                child: photoSmartImage(
+                  p,
+                  bucket: 'order-photos',
+                  width: 72.r,
+                  height: 72.r,
+                  fit: BoxFit.cover,
+                ),
               ))
           .toList(),
     );

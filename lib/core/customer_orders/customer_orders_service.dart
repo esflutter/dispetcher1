@@ -1,7 +1,10 @@
+import 'dart:io';
+
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:dispatcher_1/core/catalog/catalog_service.dart';
 import 'package:dispatcher_1/core/catalog/models.dart';
+import 'package:dispatcher_1/core/storage/storage_service.dart';
 
 import 'models.dart';
 
@@ -16,9 +19,17 @@ class CustomerOrdersService {
   /// INSERT в `public.orders`. Триггер `set_published_at` проставит
   /// `published_at=now()` на статусе `published`. Возвращает id нового
   /// заказа.
+  ///
+  /// Фото заливаем после INSERT, потому что путь в `order-photos` обязан
+  /// содержать `order_id` (RLS на чтении для исполнителя проверяет
+  /// `foldername[2] = order_id`). Сначала вставляем заказ с пустым
+  /// `photos`, получаем id, заливаем фото с нужным префиксом и UPDATE-ом
+  /// дописываем массив путей. Если в процессе залива упадёт сеть —
+  /// заказ всё равно опубликован, просто без фото.
   Future<String> createOrder(
     OrderDraft d, {
     bool publishNow = true,
+    List<File> photoFiles = const <File>[],
   }) async {
     final User? user = _client.auth.currentUser;
     if (user == null) {
@@ -52,7 +63,7 @@ class CustomerOrdersService {
       'category_ids': categoryIds,
       'machinery_ids': machineryIds,
       'works': d.works.map((WorkDraft w) => w.toJson()).toList(),
-      'photos': d.photos,
+      'photos': const <String>[],
       'address': d.address,
       'latitude': d.latitude,
       'longitude': d.longitude,
@@ -70,7 +81,28 @@ class CustomerOrdersService {
         .insert(payload)
         .select('id')
         .single();
-    return row['id'] as String;
+    final String orderId = row['id'] as String;
+
+    if (photoFiles.isNotEmpty) {
+      final List<String> uploaded = <String>[];
+      for (final File f in photoFiles) {
+        try {
+          final String path = await StorageService.instance
+              .uploadOrderPhoto(f, orderId: orderId);
+          uploaded.add(path);
+        } catch (_) {
+          // Конкретное фото не залилось — пропускаем; остальные пробуем.
+        }
+      }
+      if (uploaded.isNotEmpty) {
+        await _client
+            .from('orders')
+            .update(<String, dynamic>{'photos': uploaded})
+            .eq('id', orderId);
+      }
+    }
+
+    return orderId;
   }
 
   /// Свои заказы + счётчик активных (не-терминальных) откликов.
@@ -86,8 +118,9 @@ class CustomerOrdersService {
     final List<Map<String, dynamic>> rows = await _client
         .from('orders')
         .select(
-          'id, display_number, title, address, date_from, date_to, '
-          'time_from, time_to, exact_date, whole_day, machinery_ids, '
+          'id, display_number, title, description, address, '
+          'date_from, date_to, time_from, time_to, exact_date, whole_day, '
+          'machinery_ids, works, photos, '
           'published_at, created_at, status',
         )
         .eq('customer_id', user.id)
@@ -157,10 +190,22 @@ class CustomerOrdersService {
           ? DateTime.parse(r['created_at'] as String)
           : DateTime.parse(r['published_at'] as String);
       final _BestMatch? best = bestByOrder[r['id']];
+      final List<dynamic>? worksRaw = r['works'] as List<dynamic>?;
+      final List<String> worksList = worksRaw == null
+          ? const <String>[]
+          : worksRaw
+              .map((dynamic w) => _formatWorkLine(w as Map<String, dynamic>))
+              .where((String s) => s.isNotEmpty)
+              .toList();
+      final List<dynamic>? photosRaw = r['photos'] as List<dynamic>?;
+      final List<String> photos = photosRaw == null
+          ? const <String>[]
+          : photosRaw.map((dynamic p) => p as String).toList();
       return CustomerOrderListItem(
         id: r['id'] as String,
         displayNumber: r['display_number'] as int,
         title: r['title'] as String,
+        description: (r['description'] as String?) ?? '',
         address: r['address'] as String,
         dateFrom: DateTime.parse(r['date_from'] as String),
         dateTo: r['date_to'] == null
@@ -174,6 +219,8 @@ class CustomerOrdersService {
             .map((int id) => machineryById[id] ?? '')
             .where((String t) => t.isNotEmpty)
             .toList(),
+        works: worksList,
+        photos: photos,
         publishedAt: published,
         status: r['status'] as String,
         respondersCount: activeCounts[r['id']] ?? 0,
@@ -185,6 +232,27 @@ class CustomerOrdersService {
         bestMatchExecutorReviewCount: best?.executorReviewCount ?? 0,
       );
     }).toList();
+  }
+
+  /// Превращает один элемент `orders.works` (`{name, volume?, unit?}`)
+  /// в строку для отображения. Юниты из БД хранятся как ASCII (`m`/`m2`/
+  /// `m3`), на UI показываем кириллические эквиваленты.
+  static String _formatWorkLine(Map<String, dynamic> w) {
+    final String name = (w['name'] as String?)?.trim() ?? '';
+    if (name.isEmpty) return '';
+    final num? volume = w['volume'] as num?;
+    final String? unit = w['unit'] as String?;
+    if (volume == null) return name;
+    final String unitUi = switch (unit) {
+      'm' => 'м',
+      'm2' => 'м²',
+      'm3' => 'м³',
+      _ => '',
+    };
+    final String volStr = volume == volume.toInt()
+        ? volume.toInt().toString()
+        : volume.toString();
+    return '$name — $volStr $unitUi'.trim();
   }
 
   // Чем больше число — тем «важнее» статус для UI-вкладки.
@@ -263,11 +331,18 @@ class CustomerOrdersService {
   /// Остальные отклики на тот же заказ триггер БД автоматически не
   /// закрывает — клиент может это сделать отдельным UPDATE либо
   /// дождаться, пока исполнитель подтвердит.
+  ///
+  /// `.select().single()` обязательная: если строка не нашлась
+  /// (RLS отказал, мэтч удалён, или его статус уже терминальный
+  /// и FSM-триггер откатил UPDATE) — `single()` бросит исключение,
+  /// и UI не «съест» молчаливый no-op.
   Future<void> proposeToExecutor(String matchId) async {
     await _client
         .from('order_matches')
         .update(<String, dynamic>{'status': 'awaiting_executor'})
-        .eq('id', matchId);
+        .eq('id', matchId)
+        .select('id')
+        .single();
   }
 
   /// Заказчик отклонил отклик (`awaiting_customer` → `rejected_by_customer`).
@@ -275,7 +350,9 @@ class CustomerOrdersService {
     await _client
         .from('order_matches')
         .update(<String, dynamic>{'status': 'rejected_by_customer'})
-        .eq('id', matchId);
+        .eq('id', matchId)
+        .select('id')
+        .single();
   }
 
   /// Предложить заказ конкретному исполнителю из каталога.

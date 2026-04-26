@@ -62,6 +62,7 @@ class CustomerOrderListItem {
     required this.id,
     required this.displayNumber,
     required this.title,
+    this.description = '',
     required this.address,
     required this.dateFrom,
     required this.dateTo,
@@ -70,6 +71,8 @@ class CustomerOrderListItem {
     required this.exactDate,
     required this.wholeDay,
     required this.machineryTitles,
+    this.works = const <String>[],
+    this.photos = const <String>[],
     required this.publishedAt,
     required this.status,
     required this.respondersCount,
@@ -84,6 +87,7 @@ class CustomerOrderListItem {
   final String id;
   final int displayNumber;
   final String title;
+  final String description;
   final String address;
   final DateTime dateFrom;
   final DateTime? dateTo;
@@ -92,6 +96,12 @@ class CustomerOrderListItem {
   final bool exactDate;
   final bool wholeDay;
   final List<String> machineryTitles;
+  /// Готовые к отображению строки работ («Демонтаж — 5 м³»). Берём из
+  /// `orders.works` jsonb-массива при чтении.
+  final List<String> works;
+  /// Пути к фото в приватном бакете `order-photos`. Для отображения
+  /// нужен `getSignedUrl` — см. `SignedStorageImage`.
+  final List<String> photos;
   final DateTime publishedAt;
   final String status; // 'published' | 'archived' | 'cancelled' | 'draft'
   final int respondersCount;

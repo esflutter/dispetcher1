@@ -11,7 +11,6 @@ import 'package:dispatcher_1/core/catalog/models.dart' as cat;
 import 'package:dispatcher_1/core/customer_orders/customer_orders_service.dart';
 import 'package:dispatcher_1/core/customer_orders/models.dart' as co;
 import 'package:dispatcher_1/core/settings/settings_service.dart';
-import 'package:dispatcher_1/core/storage/storage_service.dart';
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
 import 'package:dispatcher_1/core/utils/photo_source.dart';
@@ -397,8 +396,18 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
 
     final String dbId;
     try {
-      final co.OrderDraft dbDraft = await _buildDbDraft();
-      dbId = await CustomerOrdersService.instance.createOrder(dbDraft);
+      final co.OrderDraft dbDraft = _buildDbDraft();
+      // Фото уйдут в storage уже после INSERT-а заказа: путь должен
+      // содержать `order_id`, иначе RLS-политика на чтение для исполнителя
+      // не пропустит. Локальные ассет-моки/уже загруженные http-URL не
+      // отдаём — в БД они нам не нужны.
+      final List<File> photoFiles = _photos
+          .where((String p) =>
+              !p.startsWith('assets/') && !p.startsWith('http'))
+          .map(File.new)
+          .toList();
+      dbId = await CustomerOrdersService.instance
+          .createOrder(dbDraft, photoFiles: photoFiles);
     } on PostgrestException catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -423,20 +432,9 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
   }
 
   /// Собирает черновик в формате, пригодном для INSERT в `public.orders`.
-  /// Асинхронный — загружает фото в Storage до формирования payload'а.
-  Future<co.OrderDraft> _buildDbDraft() async {
-    final List<String> uploadedPaths = <String>[];
-    for (final String path in _photos) {
-      if (path.startsWith('assets/') || path.startsWith('http')) {
-        uploadedPaths.add(path);
-        continue;
-      }
-      try {
-        final String storagePath =
-            await StorageService.instance.uploadOrderPhoto(File(path));
-        uploadedPaths.add(storagePath);
-      } catch (_) {/* пропускаем неудачную загрузку */}
-    }
+  /// Поле `photos` оставляем пустым — фото заливаются уже после INSERT-а
+  /// внутри `CustomerOrdersService.createOrder` (нужен `order_id` в пути).
+  co.OrderDraft _buildDbDraft() {
     return co.OrderDraft(
       title: _titleCtrl.text.trim(),
       description: _descCtrl.text.trim().isEmpty
@@ -461,7 +459,7 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
           : _fmtHm(_timeFrom!),
       timeTo: (_wholeDay || _timeTo == null) ? null : _fmtHm(_timeTo!),
       wholeDay: _wholeDay,
-      photos: uploadedPaths,
+      photos: const <String>[],
     );
   }
 
