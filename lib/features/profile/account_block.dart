@@ -14,19 +14,7 @@ class ReviewRecord {
 class ReviewsData {
   ReviewsData._();
 
-  static final List<ReviewRecord> _reviews = <ReviewRecord>[
-    // Начальный набор: средний рейтинг 4,5 при 10 отзывах.
-    ReviewRecord(rating: 5),
-    ReviewRecord(rating: 5),
-    ReviewRecord(rating: 5),
-    ReviewRecord(rating: 5),
-    ReviewRecord(rating: 5),
-    ReviewRecord(rating: 5),
-    ReviewRecord(rating: 4),
-    ReviewRecord(rating: 4),
-    ReviewRecord(rating: 4),
-    ReviewRecord(rating: 3),
-  ];
+  static final List<ReviewRecord> _reviews = <ReviewRecord>[];
 
   /// Любое изменение списка отзывов инкрементит revision —
   /// UI-слой слушает и перерисовывается.
@@ -56,22 +44,9 @@ class ReviewsData {
     }
   }
 
-  /// Сбросить отзывы к дефолтному набору (для тестов/демо).
+  /// Полный сброс — после logout/удаления аккаунта.
   static void resetToDefault() {
-    _reviews
-      ..clear()
-      ..addAll(<ReviewRecord>[
-        ReviewRecord(rating: 5),
-        ReviewRecord(rating: 5),
-        ReviewRecord(rating: 5),
-        ReviewRecord(rating: 5),
-        ReviewRecord(rating: 5),
-        ReviewRecord(rating: 5),
-        ReviewRecord(rating: 4),
-        ReviewRecord(rating: 4),
-        ReviewRecord(rating: 4),
-        ReviewRecord(rating: 3),
-      ]);
+    _reviews.clear();
     revision.value = revision.value + 1;
   }
 }

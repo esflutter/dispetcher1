@@ -14,8 +14,6 @@ import '../features/executor_card/executor_card_screen.dart';
 import '../features/onboarding/onboarding_screen.dart';
 import '../features/onboarding/splash_screen.dart';
 import '../features/orders/my_orders_screen.dart';
-import '../features/orders/order_detail_screen.dart' as my_order_detail;
-import '../features/orders/review_screen.dart';
 import '../features/profile/edit_profile_screen.dart';
 import '../features/profile/profile_screen.dart';
 import '../features/profile/reviews_screen.dart';
@@ -60,19 +58,11 @@ final GoRouter appRouter = GoRouter(
     ),
     GoRoute(path: '/catalog/no-internet', builder: (_, _) => const NoInternetScreen()),
 
-    // Заказы исполнителя
+    // Заказы. Только список — детали и review открываются через
+    // `Navigator.push(MaterialPageRoute)`, чтобы получать конкретные
+    // данные заказа через параметры конструктора. Декларативные роуты
+    // `/orders/:id` без передачи orderId-параметра не имеют смысла.
     GoRoute(path: '/orders', builder: (_, _) => const MyOrdersScreen()),
-    GoRoute(
-      path: '/orders/:id',
-      builder: (_, state) => my_order_detail.MyOrderDetailScreen(
-        state: (state.extra as my_order_detail.MyOrderDetailState?) ??
-            my_order_detail.MyOrderDetailState.confirmed,
-      ),
-    ),
-    GoRoute(
-      path: '/orders/:id/review',
-      builder: (_, _) => const ReviewScreen(),
-    ),
 
     // Профиль
     GoRoute(path: '/profile', builder: (_, _) => const ProfileScreen()),

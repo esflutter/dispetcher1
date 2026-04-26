@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_spacing.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
+import 'package:dispatcher_1/core/utils/plural.dart';
+import 'package:dispatcher_1/core/widgets/avatar_circle.dart';
 import 'package:dispatcher_1/core/widgets/dark_sub_app_bar.dart';
-
-import 'account_block.dart';
 
 class Review {
   const Review({
@@ -13,115 +15,146 @@ class Review {
     required this.date,
     required this.rating,
     required this.text,
-    this.avatarIndex = 0,
+    this.authorAvatarUrl,
   });
   final String author;
   final String date;
   final int rating;
   final String text;
-  final int avatarIndex;
+  final String? authorAvatarUrl;
 }
 
+/// Про кого открыт список отзывов. [customer] — отзывы исполнителей о
+/// заказчике (мой профиль в приложении заказчика). [executor] — отзывы
+/// заказчиков об исполнителе (открывается при тапе на «N отзывов» в
+/// карточке исполнителя в каталоге).
+enum ReviewSubject { customer, executor }
+
 class ReviewsScreen extends StatefulWidget {
-  const ReviewsScreen({super.key});
+  const ReviewsScreen({
+    super.key,
+    this.subject = ReviewSubject.customer,
+    this.targetUserId,
+    this.initialRating,
+    this.initialCount,
+  });
 
-  static const String _t1 = 'Заказчик ответственный и адекватный. Задачу описал чётко, на месте всё совпало с тем, что обсуждали по телефону. Доступ на объект организовал заранее, вопросы решал оперативно. Расчёт произвёл сразу после завершения работ, без задержек и торга. Общение вежливое, всегда на связи. С удовольствием поработаю снова.';
-  static const String _t2 = 'Отличный заказчик! Всё чётко: задача понятная, оплата сразу после работы. Никаких задержек и лишних вопросов. Рекомендую!';
-  static const String _t3 = 'Заказчик нормальный, но объём работ на месте оказался больше, чем обсуждали изначально. Пришлось отдельно согласовывать доплату и сроки. В итоге обо всём договорились, расчёт получил полностью. Хотелось бы заранее более точного описания задачи, тогда вопросов бы не возникло.';
-  static const String _t4 = 'Очень приятный в общении заказчик. Встретил на объекте, всё показал, помог с подъездом для техники. Работать было комфортно.';
-  static const String _t5 = 'Адекватный заказчик, без лишней суеты. Объяснил задачу, не вмешивался в процесс, оплатил вовремя. Готов сотрудничать ещё.';
-  static const String _t1Bad = 'Очень неприятный опыт. Задача на месте оказалась совсем не той, о которой договаривались. По оплате тоже были вопросы, расчёт пришлось вытаскивать.';
+  final ReviewSubject subject;
 
-  static const List<Review> _initialMock = <Review>[
-    Review(author: 'Илья Иванов', date: '29/03/2024', rating: 5, text: _t1, avatarIndex: 1),
-    Review(author: 'Анна Петрова', date: '15/02/2024', rating: 5, text: _t4, avatarIndex: 2),
-    Review(author: 'Сергей Козлов', date: '10/02/2024', rating: 5, text: _t2, avatarIndex: 3),
-    Review(author: 'Мария Смирнова', date: '28/01/2024', rating: 5, text: _t2, avatarIndex: 4),
-    Review(author: 'Дмитрий Волков', date: '15/01/2024', rating: 5, text: _t5, avatarIndex: 5),
-    Review(author: 'Елена Новикова', date: '10/01/2024', rating: 5, text: _t4, avatarIndex: 6),
-    Review(author: 'Артём Соколов', date: '25/12/2023', rating: 4, text: _t1, avatarIndex: 1),
-    Review(author: 'Ольга Морозова', date: '20/12/2023', rating: 4, text: _t5, avatarIndex: 2),
-    Review(author: 'Павел Фёдоров', date: '10/12/2023', rating: 4, text: _t5, avatarIndex: 3),
-    Review(author: 'Ирина Лебедева', date: '05/12/2023', rating: 3, text: _t3, avatarIndex: 4),
-  ];
+  /// id пользователя, чьи отзывы смотрим. Для `customer`-режима, если
+  /// не задан — подставляется текущий `auth.uid()`.
+  final String? targetUserId;
 
-  /// Список отзывов, синхронизированный с `ReviewsData`. Сортировка:
-  /// сверху самые свежие (симулированные через `receive` идут первыми,
-  /// более поздние — ближе к верху), ниже — дефолтные (они уже
-  /// упорядочены от новых к старым).
-  static List<Review> _buildReviews() {
-    final List<Review> shown = <Review>[];
-    final List<ReviewRecord> all = ReviewsData.all;
-
-    // Симулированные отзывы — лежат в конце `all`. Самый последний
-    // вызов `receive` имеет максимальный индекс; отображаем сверху.
-    for (int i = all.length - 1; i >= _initialMock.length; i--) {
-      final int r = all[i].rating;
-      shown.add(Review(
-        author: 'Новый пользователь',
-        date: 'Сегодня',
-        rating: r,
-        text: r == 1 ? _t1Bad : _t2,
-        avatarIndex: (i % 6) + 1,
-      ));
-    }
-
-    // Дефолтные — _initialMock уже идёт от самых новых к самым старым.
-    final int initialShown =
-        all.length < _initialMock.length ? all.length : _initialMock.length;
-    for (int i = 0; i < initialShown; i++) {
-      shown.add(_initialMock[i]);
-    }
-    return shown;
-  }
+  /// Рейтинг и количество отзывов из карточки заказа/исполнителя.
+  /// Источник правды — БД-агрегат (`profiles.rating_as_*` /
+  /// `review_count_as_*`); подсчёт по выборке `LIMIT 50` расходится при
+  /// большем числе отзывов, поэтому в шапке используем переданные
+  /// значения, если они есть. `null` → fallback на подсчёт по выборке.
+  final double? initialRating;
+  final int? initialCount;
 
   @override
   State<ReviewsScreen> createState() => _ReviewsScreenState();
 }
 
 class _ReviewsScreenState extends State<ReviewsScreen> {
+  late Future<List<Review>?> _futureDb;
+
   @override
   void initState() {
     super.initState();
-    ReviewsData.revision.addListener(_refresh);
+    _futureDb = _loadFromDb();
   }
 
-  @override
-  void dispose() {
-    ReviewsData.revision.removeListener(_refresh);
-    super.dispose();
+  Future<List<Review>?> _loadFromDb() async {
+    final SupabaseClient client = Supabase.instance.client;
+    final User? me = client.auth.currentUser;
+    String? targetId = widget.targetUserId;
+    if (targetId == null && widget.subject == ReviewSubject.customer && me != null) {
+      targetId = me.id;
+    }
+    if (targetId == null) return null;
+    try {
+      final List<Map<String, dynamic>> rows = await client
+          .from('reviews')
+          .select(
+            'id, rating, text, created_at, '
+            'author:profiles!reviews_author_id_fkey(name, avatar_url)',
+          )
+          .eq('target_id', targetId)
+          .eq('subject', widget.subject == ReviewSubject.customer ? 'customer' : 'executor')
+          .eq('is_hidden', false)
+          .order('created_at', ascending: false)
+          .limit(50);
+      return rows.map(_dbToReview).toList();
+    } catch (_) {
+      return null;
+    }
   }
 
-  void _refresh() {
-    if (mounted) setState(() {});
+  Review _dbToReview(Map<String, dynamic> r) {
+    final dynamic author = r['author'];
+    final String authorName = author is Map<String, dynamic>
+        ? (author['name'] as String?) ?? 'Пользователь'
+        : 'Пользователь';
+    final String? authorAvatarUrl = author is Map<String, dynamic>
+        ? author['avatar_url'] as String?
+        : null;
+    final DateTime created = DateTime.parse(r['created_at'] as String);
+    final String date =
+        '${created.day.toString().padLeft(2, '0')}/${created.month.toString().padLeft(2, '0')}/${created.year}';
+    return Review(
+      author: authorName,
+      date: date,
+      rating: r['rating'] as int,
+      text: (r['text'] as String?) ?? '',
+      authorAvatarUrl: authorAvatarUrl,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final List<Review> reviews = ReviewsScreen._buildReviews();
-    final int count = ReviewsData.count;
-    final double avg = ReviewsData.aggregate;
-    final String ratingText = count == 0
-        ? '0,0'
-        : avg.toStringAsFixed(1).replaceAll('.', ',');
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: const DarkSubAppBar(title: 'Отзывы'),
       body: SafeArea(
-        child: reviews.isEmpty
-            ? const _Empty()
-            : ListView.separated(
-                padding: EdgeInsets.fromLTRB(
-                    AppSpacing.screenH, 28.h, AppSpacing.screenH, AppSpacing.md),
-                itemCount: reviews.length + 1,
-                separatorBuilder: (_, _) => SizedBox(height: 18.h),
-                itemBuilder: (BuildContext context, int i) {
-                  if (i == 0) {
-                    return _RatingHeader(rating: ratingText, count: count);
-                  }
-                  return _ReviewCard(review: reviews[i - 1]);
-                },
-              ),
+        child: FutureBuilder<List<Review>?>(
+          future: _futureDb,
+          builder: (BuildContext context, AsyncSnapshot<List<Review>?> snap) {
+            if (snap.connectionState != ConnectionState.done) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            final List<Review> reviews = snap.data ?? const <Review>[];
+            // Источник правды для агрегата — `profiles.rating_as_*` /
+            // `review_count_as_*` из карточки. На экране показываем
+            // `LIMIT 50`, поэтому считать по выборке = расходиться с
+            // карточкой при >50 отзывах. Если initialRating/initialCount
+            // не переданы — fallback на подсчёт по выборке.
+            final int count = widget.initialCount ?? reviews.length;
+            final double aggregate = widget.initialRating ??
+                (reviews.isEmpty
+                    ? 0
+                    : reviews.fold<int>(0, (int s, Review r) => s + r.rating) /
+                        reviews.length);
+            final String ratingText = aggregate > 0
+                ? aggregate.toStringAsFixed(1).replaceAll('.', ',')
+                : '0,0';
+            return reviews.isEmpty
+                ? const _Empty()
+                : ListView.separated(
+                    padding: EdgeInsets.fromLTRB(AppSpacing.screenH, 28.h,
+                        AppSpacing.screenH, AppSpacing.md),
+                    itemCount: reviews.length + 1,
+                    separatorBuilder: (_, _) => SizedBox(height: 18.h),
+                    itemBuilder: (BuildContext context, int i) {
+                      if (i == 0) {
+                        return _RatingHeader(rating: ratingText, count: count);
+                      }
+                      return _ReviewCard(review: reviews[i - 1]);
+                    },
+                  );
+          },
+        ),
       ),
     );
   }
@@ -181,7 +214,7 @@ class _RatingHeader extends StatelessWidget {
           ],
         ),
         SizedBox(height: 8.h),
-        Text('$count отзывов',
+        Text('$count ${reviewsWord(count)}',
             style: AppTextStyles.bodyMedium
                 .copyWith(color: AppColors.textTertiary)),
       ],
@@ -193,27 +226,14 @@ class _ReviewCard extends StatelessWidget {
   const _ReviewCard({required this.review});
   final Review review;
 
-  static const List<String> _avatars = <String>[
-    'assets/images/profile/photo_1.webp',
-    'assets/images/profile/photo_2.webp',
-    'assets/images/profile/photo_3.webp',
-    'assets/images/profile/photo_4.webp',
-    'assets/images/profile/photo_5.webp',
-    'assets/images/profile/photo_6.webp',
-  ];
-
   @override
   Widget build(BuildContext context) {
-    final String avatarPath = _avatars[(review.avatarIndex - 1) % _avatars.length];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         Row(
           children: <Widget>[
-            ClipOval(
-              child: Image.asset(avatarPath,
-                  width: 72.r, height: 72.r, fit: BoxFit.cover),
-            ),
+            AvatarCircle(size: 72.r, avatarUrl: review.authorAvatarUrl),
             SizedBox(width: 20.w),
             Expanded(
               child: Column(

@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
 
-import 'package:dispatcher_1/core/customer_orders/customer_orders_service.dart';
-import 'package:dispatcher_1/core/customer_orders/models.dart';
 import 'package:dispatcher_1/core/profile/profile_service.dart';
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_spacing.dart';
@@ -42,14 +40,20 @@ class _ExecutorCardScreenState extends State<ExecutorCardScreen> {
     try {
       final MyProfile? p = await ProfileService.instance.loadMine();
       if (p == null || !mounted) return;
-      // Карточку считаем созданной, если хотя бы одно из полей о себе
-      // заполнено в БД (about или legal_status).
-      final bool filled = (p.about != null && p.about!.trim().isNotEmpty) ||
-          (p.legalStatus != null && p.legalStatus!.trim().isNotEmpty);
+      // Карточку считаем созданной, только если оба содержательных
+      // поля заполнены — `about` и `legal_status`. Раньше было «или»:
+      // достаточно одного, чтобы экран считал карточку созданной, а
+      // на edit-screen всё равно были пробелы. Теперь критерий жёстче.
+      final bool filled = p.about != null &&
+          p.about!.trim().isNotEmpty &&
+          p.legalStatus != null &&
+          p.legalStatus!.trim().isNotEmpty;
       ExecutorCardData.about = p.about;
       ExecutorCardData.status = _legalLabel(p.legalStatus);
       ExecutorCardScreen.cardCreated = filled;
       if (filled) AccountBlock.setUntil(p.blockedUntil);
+      ExecutorCardData.ratingAsCustomer = p.ratingAsCustomer;
+      ExecutorCardData.reviewCountAsCustomer = p.reviewCountAsCustomer;
       if (mounted) setState(() {});
     } catch (_) {/* silent */}
   }
@@ -198,6 +202,13 @@ class ExecutorCardData {
   static String? status;
   static String? about;
 
+  /// Кэш рейтинга и количества отзывов из `profiles.rating_as_customer`
+  /// / `review_count_as_customer`. Подгружается в `_loadFromDb` экрана
+  /// карточки заказчика, читается шапкой `_HeaderRow` обоих режимов
+  /// (filled/edit). 0 = ещё нет ни одного отзыва — UI рисует «—».
+  static double ratingAsCustomer = 0;
+  static int reviewCountAsCustomer = 0;
+
   /// Сбросить все поля карточки — для logout.
   static void clear() {
     location = null;
@@ -207,6 +218,8 @@ class ExecutorCardData {
     experience = null;
     status = null;
     about = null;
+    ratingAsCustomer = 0;
+    reviewCountAsCustomer = 0;
   }
 }
 
@@ -218,14 +231,6 @@ class _FilledCard extends StatefulWidget {
 }
 
 class _FilledCardState extends State<_FilledCard> {
-  late Future<List<CustomerOrderListItem>> _ordersFuture;
-
-  @override
-  void initState() {
-    super.initState();
-    _ordersFuture = CustomerOrdersService.instance.listMine();
-  }
-
   String _val(String? v) => (v != null && v.trim().isNotEmpty) ? v : '—';
 
   @override
@@ -235,7 +240,10 @@ class _FilledCardState extends State<_FilledCard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          _HeaderRow(),
+          _HeaderRow(
+            rating: ExecutorCardData.ratingAsCustomer,
+            reviewCount: ExecutorCardData.reviewCountAsCustomer,
+          ),
           SizedBox(height: 20.h),
           _SectionTitle('Номер телефона'),
           SizedBox(height: 4.h),
@@ -252,100 +260,6 @@ class _FilledCardState extends State<_FilledCard> {
           _SectionTitle('Статус'),
           SizedBox(height: 4.h),
           Text(_val(ExecutorCardData.status), style: AppTextStyles.body),
-          SizedBox(height: 20.h),
-          _SectionTitle('Мои заказы'),
-          SizedBox(height: 8.h),
-          FutureBuilder<List<CustomerOrderListItem>>(
-            future: _ordersFuture,
-            builder: (BuildContext context,
-                AsyncSnapshot<List<CustomerOrderListItem>> snap) {
-              if (snap.connectionState != ConnectionState.done) {
-                return Padding(
-                  padding: EdgeInsets.symmetric(vertical: 16.h),
-                  child: const Center(child: CircularProgressIndicator()),
-                );
-              }
-              final List<CustomerOrderListItem> orders = (snap.data ??
-                      const <CustomerOrderListItem>[])
-                  .where((CustomerOrderListItem o) => o.status == 'published')
-                  .toList();
-              if (orders.isEmpty) {
-                return Text(
-                  'Опубликованных заказов пока нет',
-                  style: AppTextStyles.body
-                      .copyWith(color: AppColors.textTertiary),
-                );
-              }
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: <Widget>[
-                  for (int i = 0; i < orders.length; i++) ...<Widget>[
-                    _OrderRow(item: orders[i]),
-                    if (i < orders.length - 1) SizedBox(height: 10.h),
-                  ],
-                ],
-              );
-            },
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _OrderRow extends StatelessWidget {
-  const _OrderRow({required this.item});
-  final CustomerOrderListItem item;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: EdgeInsets.all(12.w),
-      decoration: BoxDecoration(
-        color: AppColors.fieldFill,
-        borderRadius: BorderRadius.circular(12.r),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Text(
-            '№${item.displayNumber.toString().padLeft(8, '0')}',
-            style: AppTextStyles.caption
-                .copyWith(color: AppColors.textTertiary),
-          ),
-          SizedBox(height: 2.h),
-          Text(item.title,
-              style: AppTextStyles.bodyMedium
-                  .copyWith(fontWeight: FontWeight.w600)),
-          SizedBox(height: 4.h),
-          Text(item.address,
-              style: AppTextStyles.body
-                  .copyWith(color: AppColors.textSecondary)),
-          if (item.machineryTitles.isNotEmpty) ...<Widget>[
-            SizedBox(height: 6.h),
-            Wrap(
-              spacing: 6.w,
-              runSpacing: 4.h,
-              children: item.machineryTitles
-                  .map((String t) => Container(
-                        padding: EdgeInsets.symmetric(
-                            horizontal: 8.w, vertical: 2.h),
-                        decoration: BoxDecoration(
-                          color: AppColors.surface,
-                          border: Border.all(
-                              color: AppColors.primary, width: 1),
-                          borderRadius: BorderRadius.circular(100.r),
-                        ),
-                        child: Text(t,
-                            style: TextStyle(
-                              fontFamily: 'Roboto',
-                              fontSize: 12.sp,
-                              color: AppColors.textPrimary,
-                            )),
-                      ))
-                  .toList(),
-            ),
-          ],
         ],
       ),
     );
@@ -353,13 +267,20 @@ class _OrderRow extends StatelessWidget {
 }
 
 class _HeaderRow extends StatelessWidget {
+  const _HeaderRow({
+    required this.rating,
+    required this.reviewCount,
+  });
+
+  final double rating;
+  final int reviewCount;
+
   @override
   Widget build(BuildContext context) {
-    final double rating = ReviewsData.aggregate;
-    final int reviewsCount = ReviewsData.count;
-    final String ratingText = reviewsCount == 0
-        ? '0,0'
-        : rating.toStringAsFixed(1).replaceAll('.', ',');
+    final int reviewsCount = reviewCount;
+    final String ratingText = rating > 0
+        ? rating.toStringAsFixed(1).replaceAll('.', ',')
+        : '—';
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: <Widget>[

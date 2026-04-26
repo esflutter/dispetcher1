@@ -1,13 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 
+import 'package:dispatcher_1/core/catalog/models.dart';
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
+import 'package:dispatcher_1/core/widgets/avatar_circle.dart';
 
 /// Карточка исполнителя в ленте каталога. Слева круглый аватар, справа —
-/// имя со звездой и рейтингом. Ниже — секции «Спецтехника» и
-/// «Категории услуг». Опыт работы и юридический статус показываются
-/// только на экране деталей, чтобы не загромождать карточку поиска.
+/// имя со звездой и рейтингом. Под шапкой — либо обобщённые блоки
+/// «Спецтехника / Категории услуг», либо, если задан непустой
+/// [matchingServices], построчные предложения по выбранной фильтром
+/// технике (вид «Экскаватор — 3 500 ₽/час, от 4 часов»).
 class OrderCard extends StatelessWidget {
   const OrderCard({
     super.key,
@@ -15,6 +18,7 @@ class OrderCard extends StatelessWidget {
     required this.rating,
     required this.equipment,
     required this.categories,
+    this.matchingServices = const <MatchingService>[],
     this.highlightEquipment = const <String>{},
     this.highlightCategories = const <String>{},
     this.avatarUrl,
@@ -25,10 +29,30 @@ class OrderCard extends StatelessWidget {
   final double rating;
   final List<String> equipment;
   final List<String> categories;
+  final List<MatchingService> matchingServices;
   final Set<String> highlightEquipment;
   final Set<String> highlightCategories;
   final String? avatarUrl;
   final VoidCallback? onTap;
+
+  static String _fmtThousands(int value) {
+    final String s = value.toString();
+    final StringBuffer out = StringBuffer();
+    for (int i = 0; i < s.length; i++) {
+      final int rest = s.length - i;
+      if (i > 0 && rest % 3 == 0) out.write(' ');
+      out.write(s[i]);
+    }
+    return out.toString();
+  }
+
+  /// Словоформа «час» после предлога «от» (родительный падеж).
+  static String _hoursWord(int n) {
+    final int mod100 = n % 100;
+    if (mod100 >= 11 && mod100 <= 14) return 'часов';
+    if (n % 10 == 1) return 'часа';
+    return 'часов';
+  }
 
   List<TextSpan> _buildSpans(List<String> items, Set<String> highlight) {
     final List<TextSpan> spans = <TextSpan>[];
@@ -56,17 +80,7 @@ class OrderCard extends StatelessWidget {
             Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: <Widget>[
-                ClipOval(
-                  child: (avatarUrl != null && avatarUrl!.trim().isNotEmpty)
-                      ? Image.network(
-                          avatarUrl!,
-                          width: 48.r,
-                          height: 48.r,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, _, _) => _placeholderAvatar(),
-                        )
-                      : _placeholderAvatar(),
-                ),
+                AvatarCircle(size: 48.r, avatarUrl: avatarUrl),
                 SizedBox(width: 12.w),
                 Expanded(
                   child: Column(
@@ -112,23 +126,15 @@ class OrderCard extends StatelessWidget {
               ],
             ),
             SizedBox(height: 12.h),
-            _buildDefaultBlocks(),
+            if (matchingServices.isNotEmpty)
+              _buildServicesBlock()
+            else
+              _buildDefaultBlocks(),
           ],
         ),
       ),
     );
   }
-
-  Widget _placeholderAvatar() => Container(
-        width: 48.r,
-        height: 48.r,
-        color: AppColors.primaryTint,
-        alignment: Alignment.center,
-        child: Text(
-          name.isEmpty ? '?' : name[0].toUpperCase(),
-          style: AppTextStyles.titleS,
-        ),
-      );
 
   Widget _buildDefaultBlocks() {
     return Column(
@@ -178,4 +184,68 @@ class OrderCard extends StatelessWidget {
     );
   }
 
+  Widget _buildServicesBlock() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        for (int i = 0; i < matchingServices.length; i++) ...<Widget>[
+          if (i > 0) SizedBox(height: 6.h),
+          _ServiceLine(service: matchingServices[i]),
+        ],
+      ],
+    );
+  }
+}
+
+class _ServiceLine extends StatelessWidget {
+  const _ServiceLine({required this.service});
+  final MatchingService service;
+
+  @override
+  Widget build(BuildContext context) {
+    final List<TextSpan> tail = <TextSpan>[];
+    final double? hour = service.pricePerHour;
+    final double? day = service.pricePerDay;
+    // Если у услуги указана только дневная ставка (без часовой) —
+    // показываем её, иначе строка превращается в «Экскаватор — » без
+    // цены и выглядит сломанной.
+    final TextStyle priceStyle = TextStyle(
+      color: AppColors.primary,
+      fontSize: 18.sp,
+      fontWeight: FontWeight.w600,
+    );
+    if (hour != null) {
+      tail.add(TextSpan(
+        text: '${OrderCard._fmtThousands(hour.round())} ₽/час',
+        style: priceStyle,
+      ));
+    } else if (day != null) {
+      tail.add(TextSpan(
+        text: '${OrderCard._fmtThousands(day.round())} ₽/день',
+        style: priceStyle,
+      ));
+    }
+    final int? mh = service.minHours;
+    if (mh != null && mh > 0 && hour != null) {
+      tail.add(TextSpan(text: ', от $mh ${OrderCard._hoursWord(mh)}'));
+    }
+    if (tail.isEmpty) {
+      tail.add(const TextSpan(text: 'цена по запросу'));
+    }
+    return Text.rich(
+      TextSpan(
+        children: <TextSpan>[
+          TextSpan(text: '${service.machineryTitle} — '),
+          ...tail,
+        ],
+      ),
+      style: TextStyle(
+        fontFamily: 'Roboto',
+        fontSize: 16.sp,
+        fontWeight: FontWeight.w400,
+        color: AppColors.textPrimary,
+        height: 1.4,
+      ),
+    );
+  }
 }

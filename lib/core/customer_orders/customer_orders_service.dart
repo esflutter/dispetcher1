@@ -52,10 +52,10 @@ class CustomerOrdersService {
       'category_ids': categoryIds,
       'machinery_ids': machineryIds,
       'works': d.works.map((WorkDraft w) => w.toJson()).toList(),
-      // Загрузка фото в Storage — отдельная задача. Пока отправляем пустой
-      // массив, даже если пользователь выбрал локальные файлы.
-      'photos': <String>[],
+      'photos': d.photos,
       'address': d.address,
+      'latitude': d.latitude,
+      'longitude': d.longitude,
       'date_from': _dateIso(d.dateFrom),
       'date_to': d.dateTo == null ? null : _dateIso(d.dateTo!),
       'exact_date': d.exactDate,
@@ -103,20 +103,52 @@ class CustomerOrdersService {
         m.id: m.title,
     };
 
-    // Считаем отклики по всем заказам одним запросом с group-by эмуляцией.
+    // По всем заказам одним запросом тянем мэтчи с инфой об исполнителе —
+    // отсюда и счётчик активных откликов, и «лучший» статус для маппинга
+    // в UI-вкладку (waiting/waitingChoose/accepted/completed/...).
     final List<String> ids = rows.map((r) => r['id'] as String).toList();
-    final Map<String, int> counts = <String, int>{
+    final Map<String, int> activeCounts = <String, int>{
       for (final String id in ids) id: 0,
     };
+    final Map<String, _BestMatch> bestByOrder = <String, _BestMatch>{};
     final List<Map<String, dynamic>> matchRows = await _client
         .from('order_matches')
-        .select('order_id')
-        .inFilter('order_id', ids)
-        .not('status', 'in',
-            '(completed,rejected_by_customer,rejected_by_executor,expired)');
+        .select(
+          'id, order_id, status, '
+          'executor:profiles!order_matches_executor_id_fkey('
+          'id, name, rating_as_executor, review_count_as_executor)',
+        )
+        .inFilter('order_id', ids);
     for (final Map<String, dynamic> m in matchRows) {
-      final String id = m['order_id'] as String;
-      counts[id] = (counts[id] ?? 0) + 1;
+      final String orderId = m['order_id'] as String;
+      final String mStatus = m['status'] as String;
+      // Активные = всё, кроме терминальных. Считаем для счётчика откликов
+      // (он показывается на статусе "Выберите исполнителя (N)").
+      const Set<String> terminal = <String>{
+        'completed',
+        'rejected_by_customer',
+        'rejected_by_executor',
+        'expired',
+      };
+      if (!terminal.contains(mStatus)) {
+        activeCounts[orderId] = (activeCounts[orderId] ?? 0) + 1;
+      }
+      final int rank = _matchPriority(mStatus);
+      final _BestMatch? prev = bestByOrder[orderId];
+      if (prev == null || rank > prev.rank) {
+        final Map<String, dynamic>? executor =
+            m['executor'] as Map<String, dynamic>?;
+        bestByOrder[orderId] = _BestMatch(
+          rank: rank,
+          matchId: m['id'] as String,
+          status: mStatus,
+          executorId: executor?['id'] as String?,
+          executorName: executor?['name'] as String?,
+          executorRating: _toDouble(executor?['rating_as_executor']) ?? 0,
+          executorReviewCount:
+              (executor?['review_count_as_executor'] as int?) ?? 0,
+        );
+      }
     }
 
     return rows.map((Map<String, dynamic> r) {
@@ -124,6 +156,7 @@ class CustomerOrdersService {
       final DateTime published = r['published_at'] == null
           ? DateTime.parse(r['created_at'] as String)
           : DateTime.parse(r['published_at'] as String);
+      final _BestMatch? best = bestByOrder[r['id']];
       return CustomerOrderListItem(
         id: r['id'] as String,
         displayNumber: r['display_number'] as int,
@@ -143,9 +176,35 @@ class CustomerOrdersService {
             .toList(),
         publishedAt: published,
         status: r['status'] as String,
-        respondersCount: counts[r['id']] ?? 0,
+        respondersCount: activeCounts[r['id']] ?? 0,
+        bestMatchId: best?.matchId,
+        bestMatchStatus: best?.status,
+        bestMatchExecutorId: best?.executorId,
+        bestMatchExecutorName: best?.executorName,
+        bestMatchExecutorRating: best?.executorRating ?? 0,
+        bestMatchExecutorReviewCount: best?.executorReviewCount ?? 0,
       );
     }).toList();
+  }
+
+  // Чем больше число — тем «важнее» статус для UI-вкладки.
+  // completed (заказ выполнен) > accepted (в работе) > awaiting_executor
+  // (ждёт подтверждения) > awaiting_customer (есть отклики) > terminal-rejected.
+  static int _matchPriority(String status) {
+    switch (status) {
+      case 'completed':
+        return 5;
+      case 'accepted':
+        return 4;
+      case 'awaiting_executor':
+        return 3;
+      case 'awaiting_customer':
+        return 2;
+      case 'rejected_by_executor':
+        return 1;
+      default:
+        return 0;
+    }
   }
 
   /// Отклики на конкретный заказ.
@@ -157,7 +216,7 @@ class CustomerOrdersService {
           'id, status, created_at, '
           'agreed_price_per_hour, agreed_price_per_day, agreed_min_hours, '
           'executor:profiles!order_matches_executor_id_fkey('
-          'id, name, rating_as_executor, review_count_as_executor), '
+          'id, name, avatar_url, rating_as_executor, review_count_as_executor), '
           'service:services!order_matches_service_id_fkey(id, machinery_ids)',
         )
         .eq('order_id', orderId)
@@ -187,6 +246,7 @@ class CustomerOrdersService {
         agreedMinHours: r['agreed_min_hours'] as int?,
         executorId: (executor?['id'] as String?) ?? '',
         executorName: (executor?['name'] as String?) ?? 'Пользователь',
+        executorAvatarUrl: executor?['avatar_url'] as String?,
         executorRating: _toDouble(executor?['rating_as_executor']) ?? 0,
         executorReviewCount:
             (executor?['review_count_as_executor'] as int?) ?? 0,
@@ -287,6 +347,15 @@ class CustomerOrdersService {
         .eq('id', orderId);
   }
 
+  /// Опубликовать заново ранее отменённый заказ (cancelled → published).
+  /// Триггер `set_published_at` обновит `published_at=now()`.
+  Future<void> republishOrder(String orderId) async {
+    await _client
+        .from('orders')
+        .update(<String, dynamic>{'status': 'published'})
+        .eq('id', orderId);
+  }
+
   /// Контакты исполнителя (телефон/email) — доступны только после
   /// `accepted`/`completed` через RLS-политику на `profiles_private`.
   /// Возвращает `null`, если RLS не пустила (статус ещё не accepted).
@@ -324,6 +393,47 @@ class CustomerOrdersService {
     }
   }
 
+  /// Snapshot цены из `order_matches.agreed_*` плюс список техник услуги,
+  /// по которой был мэтч. Возвращает null, если мэтча нет.
+  Future<MatchSnapshot?> getMatchSnapshot(String matchId) async {
+    await CatalogService.instance.listActiveMachinery();
+    try {
+      final Map<String, dynamic>? row = await _client
+          .from('order_matches')
+          .select(
+            'status, agreed_price_per_hour, agreed_price_per_day, '
+            'agreed_min_hours, '
+            'service:services!order_matches_service_id_fkey(machinery_ids)',
+          )
+          .eq('id', matchId)
+          .maybeSingle();
+      if (row == null) return null;
+      final Map<int, String> machineryById = <int, String>{
+        for (final MachineryRef m
+            in CatalogService.instance.cachedMachinery ??
+                const <MachineryRef>[])
+          m.id: m.title,
+      };
+      final Map<String, dynamic>? service =
+          row['service'] as Map<String, dynamic>?;
+      final List<int> machineryIds = service == null
+          ? const <int>[]
+          : List<int>.from(service['machinery_ids'] as List);
+      return MatchSnapshot(
+        status: row['status'] as String,
+        agreedPricePerHour: _toDouble(row['agreed_price_per_hour']),
+        agreedPricePerDay: _toDouble(row['agreed_price_per_day']),
+        agreedMinHours: row['agreed_min_hours'] as int?,
+        serviceMachineryTitles: machineryIds
+            .map((int id) => machineryById[id] ?? '')
+            .where((String t) => t.isNotEmpty)
+            .toList(),
+      );
+    } on PostgrestException {
+      return null;
+    }
+  }
+
   // ---------------------------------------------------------------
 
   String _dateIso(DateTime d) =>
@@ -336,4 +446,23 @@ class CustomerOrdersService {
     if (v is num) return v.toDouble();
     return double.tryParse(v.toString());
   }
+}
+
+class _BestMatch {
+  const _BestMatch({
+    required this.rank,
+    required this.matchId,
+    required this.status,
+    required this.executorId,
+    required this.executorName,
+    required this.executorRating,
+    required this.executorReviewCount,
+  });
+  final int rank;
+  final String matchId;
+  final String status;
+  final String? executorId;
+  final String? executorName;
+  final double executorRating;
+  final int executorReviewCount;
 }

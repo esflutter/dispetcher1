@@ -32,18 +32,22 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
   @override
   void initState() {
     super.initState();
-    _controller.addListener(() {
-      final complete = _maskFormatter.getUnmaskedText().length == 10;
-      if (complete != _isComplete) {
-        setState(() => _isComplete = complete);
-      }
-    });
+    _controller.addListener(_onTextChanged);
   }
 
   @override
   void dispose() {
+    _controller.removeListener(_onTextChanged);
     _controller.dispose();
     super.dispose();
+  }
+
+  void _onTextChanged() {
+    if (!mounted) return;
+    final complete = _maskFormatter.getUnmaskedText().length == 10;
+    if (complete != _isComplete) {
+      setState(() => _isComplete = complete);
+    }
   }
 
   Future<void> _onNext() async {

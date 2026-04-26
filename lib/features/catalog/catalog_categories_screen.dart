@@ -12,7 +12,6 @@ import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_spacing.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
 import 'package:dispatcher_1/features/catalog/catalog_filter_screen.dart';
-import 'package:dispatcher_1/features/catalog/executor_feed_screen.dart';
 import 'package:dispatcher_1/features/catalog/order_feed_screen.dart';
 import 'package:dispatcher_1/features/catalog/widgets/category_card.dart';
 import 'package:dispatcher_1/features/catalog/widgets/order_card.dart';
@@ -135,8 +134,10 @@ class _CatalogCategoriesScreenState extends State<CatalogCategoriesScreen> {
                       AppliedFilter.revision.value + 1;
                   Navigator.of(context).push(
                     MaterialPageRoute<void>(
-                      builder: (_) =>
-                          ExecutorFeedScreen(machineryTitle: m.title),
+                      builder: (_) => OrderFeedScreen(
+                        categoryId: 'all',
+                        categoryTitle: m.title,
+                      ),
                     ),
                   );
                 },

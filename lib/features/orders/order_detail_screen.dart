@@ -5,15 +5,20 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import 'package:dispatcher_1/core/catalog/catalog_service.dart';
+import 'package:dispatcher_1/core/catalog/models.dart';
 import 'package:dispatcher_1/core/customer_orders/customer_orders_service.dart';
+import 'package:dispatcher_1/core/customer_orders/models.dart';
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
 import 'package:dispatcher_1/core/utils/photo_source.dart';
 import 'package:dispatcher_1/core/utils/plural.dart';
+import 'package:dispatcher_1/core/widgets/avatar_circle.dart';
 import 'package:dispatcher_1/core/widgets/clickable_address.dart';
 import 'package:dispatcher_1/core/widgets/primary_button.dart';
 import 'package:dispatcher_1/features/auth/photo_crop_screen.dart';
 import 'package:dispatcher_1/features/catalog/widgets/catalog_search_bar.dart';
+import 'package:dispatcher_1/features/catalog/widgets/order_card.dart';
 import 'package:dispatcher_1/features/orders/review_screen.dart';
 import 'package:dispatcher_1/features/orders/widgets/order_alerts.dart';
 import 'package:dispatcher_1/features/orders/widgets/order_status_pill.dart';
@@ -41,29 +46,17 @@ class MyOrderDetailScreen extends StatefulWidget {
   const MyOrderDetailScreen({
     super.key,
     required this.state,
-    this.title = 'Нужен экскаватор для копки траншеи',
-    this.equipment = const <String>[
-      'Экскаватор',
-      'Автокран',
-      'Манипулятор',
-      'Погрузчик',
-      'Автовышка',
-    ],
-    this.workCategories = const <String>[
-      'Земляные работы',
-      'Погрузочно-разгрузочные работы',
-    ],
-    this.rentDate = '15 июня · 09:00–18:00',
-    this.address = 'Московская область, Москва, Улица1, д 144',
+    this.title = '',
+    this.equipment = const <String>[],
+    this.workCategories = const <String>[],
+    this.rentDate = '',
+    this.address = '',
     this.customerName = '',
     this.customerPhone = '',
     this.customerEmail,
-    this.timeAgo = 'Вчера в 14:30',
-    this.orderNumber = '№12345678',
-    this.workDescription = const <String>[
-      'Разработка грунта — 40 м³',
-      'Планировка участка — 2 × 12 × 15 м',
-    ],
+    this.timeAgo = '',
+    this.orderNumber = '',
+    this.workDescription = const <String>[],
     this.description = '',
     this.photos = const <String>[],
     this.rejectedStatus = MyOrderStatus.rejectedOther,
@@ -78,6 +71,8 @@ class MyOrderDetailScreen extends StatefulWidget {
     this.onOpenCatalog,
     this.matchId,
     this.executorId,
+    this.executorRating = 0,
+    this.executorReviewCount = 0,
     this.agreedPricePerHour,
     this.agreedPricePerDay,
     this.serviceMachineryTitle,
@@ -169,6 +164,11 @@ class MyOrderDetailScreen extends StatefulWidget {
   /// Техника услуги, по которой шёл мэтч. Подпись к строке «Цена».
   final String? serviceMachineryTitle;
 
+  /// Рейтинг исполнителя из `profiles.rating_as_executor`. 0 значит
+  /// «отзывов нет» — UI рисует «—».
+  final double executorRating;
+  final int executorReviewCount;
+
   @override
   State<MyOrderDetailScreen> createState() => _MyOrderDetailScreenState();
 }
@@ -185,35 +185,78 @@ class _MyOrderDetailScreenState extends State<MyOrderDetailScreen> {
   String? _dbExecutorPhone;
   String? _dbExecutorEmail;
 
+  /// Snapshot мэтча из БД: цена и список техник услуги. Подгружается
+  /// в `_syncFromDb` — нужен для блока «Цена» (одна строка на каждую
+  /// технику услуги, попадающую в технику заказа).
+  double? _dbAgreedPricePerHour;
+  double? _dbAgreedPricePerDay;
+  int? _dbAgreedMinHours;
+  List<String> _dbServiceMachineryTitles = const <String>[];
+
+  /// Полные данные исполнителя для блока «Ждёт подтверждения». Грузим
+  /// один раз в `initState` параллельно со снапшотом мэтча, чтобы
+  /// не моргала компактная плашка-fallback во время FutureBuilder
+  /// внутри `_AwaitingExecutorCard`.
+  ExecutorCardListItem? _awaitingExecutor;
+  bool _awaitingLoading = false;
+
   @override
   void initState() {
     super.initState();
     _state = widget.state;
     _rejectedStatus = widget.rejectedStatus;
     _reviewLeft = widget.reviewLeft;
+    _dbAgreedPricePerHour = widget.agreedPricePerHour;
+    _dbAgreedPricePerDay = widget.agreedPricePerDay;
+    if (widget.serviceMachineryTitle != null &&
+        widget.serviceMachineryTitle!.isNotEmpty) {
+      _dbServiceMachineryTitles = <String>[widget.serviceMachineryTitle!];
+    }
     _syncFromDb();
+    if (widget.waitingStatus == MyOrderStatus.awaitingExecutor &&
+        widget.executorId != null &&
+        widget.executorId!.isNotEmpty) {
+      _awaitingLoading = true;
+      _loadAwaitingExecutor(widget.executorId!);
+    }
+  }
+
+  Future<void> _loadAwaitingExecutor(String executorId) async {
+    try {
+      final ExecutorCardListItem? found =
+          await CatalogService.instance.getExecutorById(executorId);
+      if (!mounted) return;
+      setState(() {
+        _awaitingExecutor = found;
+        _awaitingLoading = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _awaitingLoading = false);
+    }
   }
 
   /// Спрашивает у БД актуальный статус мэтча и при `accepted`/`completed`
-  /// переключает экран в соответствующее состояние и тянет контакты.
-  /// Без [matchId] и [executorId] ничего не делает (моковые заказы).
+  /// переключает экран в соответствующее состояние и тянет контакты +
+  /// snapshot цены. Без [matchId] и [executorId] ничего не делает.
   Future<void> _syncFromDb() async {
     final String? matchId = widget.matchId;
     final String? executorId = widget.executorId;
     if (matchId == null || executorId == null) return;
-    if (_state == MyOrderDetailState.confirmed ||
-        _state == MyOrderDetailState.completed) {
-      await _loadContacts(executorId);
-      return;
-    }
-    final String? status =
-        await CustomerOrdersService.instance.getMatchStatus(matchId);
-    if (!mounted || status == null) return;
-    if (status == 'accepted') {
-      setState(() => _state = MyOrderDetailState.confirmed);
-      await _loadContacts(executorId);
-    } else if (status == 'completed') {
-      setState(() => _state = MyOrderDetailState.completed);
+    final MatchSnapshot? snap =
+        await CustomerOrdersService.instance.getMatchSnapshot(matchId);
+    if (!mounted || snap == null) return;
+    setState(() {
+      _dbAgreedPricePerHour = snap.agreedPricePerHour;
+      _dbAgreedPricePerDay = snap.agreedPricePerDay;
+      _dbAgreedMinHours = snap.agreedMinHours;
+      _dbServiceMachineryTitles = snap.serviceMachineryTitles;
+      if (snap.status == 'accepted') {
+        _state = MyOrderDetailState.confirmed;
+      } else if (snap.status == 'completed') {
+        _state = MyOrderDetailState.completed;
+      }
+    });
+    if (snap.status == 'accepted' || snap.status == 'completed') {
       await _loadContacts(executorId);
     }
   }
@@ -240,9 +283,30 @@ class _MyOrderDetailScreenState extends State<MyOrderDetailScreen> {
           : widget.customerEmail;
 
   bool get _hasAgreedPrice =>
-      (widget.agreedPricePerHour != null &&
-              widget.agreedPricePerHour! > 0) ||
-      (widget.agreedPricePerDay != null && widget.agreedPricePerDay! > 0);
+      (_dbAgreedPricePerHour != null && _dbAgreedPricePerHour! > 0) ||
+      (_dbAgreedPricePerDay != null && _dbAgreedPricePerDay! > 0);
+
+  /// Названия техник, под которые показываем строки цены: пересечение
+  /// техник услуги исполнителя (`_dbServiceMachineryTitles`) и техник,
+  /// которые заказчик указал в заказе (`widget.equipment`). Если
+  /// пересечение пустое, возвращаем все техники услуги — иначе блок
+  /// «Цена» останется без подписи.
+  List<String> get _priceMachineryTitles {
+    if (_dbServiceMachineryTitles.isEmpty) return const <String>[];
+    if (widget.equipment.isEmpty) return _dbServiceMachineryTitles;
+    final Set<String> orderEq = widget.equipment.toSet();
+    final List<String> intersect = _dbServiceMachineryTitles
+        .where((String t) => orderEq.contains(t))
+        .toList();
+    return intersect.isEmpty ? _dbServiceMachineryTitles : intersect;
+  }
+
+  String _hoursWord(int n) {
+    final int mod100 = n % 100;
+    if (mod100 >= 11 && mod100 <= 14) return 'часов';
+    if (n % 10 == 1) return 'часа';
+    return 'часов';
+  }
 
   String _fmtAgreedPrice(double? v) {
     if (v == null || v <= 0) return '';
@@ -291,10 +355,21 @@ class _MyOrderDetailScreenState extends State<MyOrderDetailScreen> {
     context.push('/catalog/executor/$executorId');
   }
 
-  /// Открывает экран отзывов исполнителя по тапу «15 отзывов».
+  /// Открывает экран отзывов конкретного исполнителя по тапу «N отзывов».
+  /// Без `executorId` ничего не делает — иначе откроется список «отзывы
+  /// обо мне» (заказчике), что собьёт пользователя.
   void _openExecutorReviews() {
+    final String? executorId = widget.executorId;
+    if (executorId == null || executorId.isEmpty) return;
     Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(builder: (_) => const ReviewsScreen()),
+      MaterialPageRoute<void>(
+        builder: (_) => ReviewsScreen(
+          subject: ReviewSubject.executor,
+          targetUserId: executorId,
+          initialRating: widget.executorRating,
+          initialCount: widget.executorReviewCount,
+        ),
+      ),
     );
   }
 
@@ -385,6 +460,8 @@ class _MyOrderDetailScreenState extends State<MyOrderDetailScreen> {
                     SizedBox(height: 12.h),
                     _CustomerHeader(
                       name: widget.customerName,
+                      rating: widget.executorRating,
+                      reviewCount: widget.executorReviewCount,
                       onTap: _openExecutorProfile,
                       onCall: _state == MyOrderDetailState.confirmed
                           ? () => _dialPhone(_effectivePhone)
@@ -518,12 +595,26 @@ class _MyOrderDetailScreenState extends State<MyOrderDetailScreen> {
                       _hasAgreedPrice)
                     _Section(
                       title: 'Цена',
-                      child: _PriceLine(
-                        equipment: widget.serviceMachineryTitle ?? '',
-                        pricePerHour:
-                            _fmtAgreedPrice(widget.agreedPricePerHour),
-                        pricePerDay:
-                            _fmtAgreedPrice(widget.agreedPricePerDay),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          for (int i = 0;
+                              i < _priceMachineryTitles.length;
+                              i++) ...<Widget>[
+                            if (i > 0) SizedBox(height: 2.h),
+                            _PriceLine(
+                              equipment: _priceMachineryTitles[i],
+                              pricePerHour:
+                                  _fmtAgreedPrice(_dbAgreedPricePerHour),
+                              pricePerDay:
+                                  _fmtAgreedPrice(_dbAgreedPricePerDay),
+                              minHoursLabel: _dbAgreedMinHours != null &&
+                                      _dbAgreedMinHours! > 0
+                                  ? 'от $_dbAgreedMinHours ${_hoursWord(_dbAgreedMinHours!)}'
+                                  : null,
+                            ),
+                          ],
+                        ],
                       ),
                     ),
                   if (widget.photos.isNotEmpty)
@@ -532,11 +623,14 @@ class _MyOrderDetailScreenState extends State<MyOrderDetailScreen> {
                       child: _PhotosGrid(photos: widget.photos),
                     ),
                   if (widget.waitingStatus ==
-                      MyOrderStatus.awaitingExecutor) ...<Widget>[
+                          MyOrderStatus.awaitingExecutor &&
+                      !_awaitingLoading) ...<Widget>[
                     SizedBox(height: 4.h),
                     _AwaitingExecutorCard(
-                      name: widget.customerName,
+                      executor: _awaitingExecutor,
+                      fallbackName: widget.customerName,
                       onTap: _openExecutorProfile,
+                      orderEquipment: widget.equipment,
                     ),
                   ],
                 ],
@@ -649,7 +743,10 @@ class _MyOrderDetailScreenState extends State<MyOrderDetailScreen> {
           onPressed: () async {
             final bool? submitted = await Navigator.of(context).push<bool>(
               MaterialPageRoute<bool>(
-                builder: (_) => const ReviewScreen(),
+                builder: (_) => ReviewScreen(
+                  targetUserId: widget.executorId,
+                  matchId: widget.matchId,
+                ),
               ),
             );
             if (submitted == true && mounted) {
@@ -667,19 +764,27 @@ class _MyOrderDetailScreenState extends State<MyOrderDetailScreen> {
 class _CustomerHeader extends StatelessWidget {
   const _CustomerHeader({
     required this.name,
+    required this.rating,
+    required this.reviewCount,
     required this.onTap,
     this.onCall,
     this.onReviewsTap,
   });
 
   final String name;
+
+  /// Реальный рейтинг исполнителя (`profiles.rating_as_executor`).
+  /// 0 = ещё нет ни одного отзыва — UI рисует «—».
+  final double rating;
+  final int reviewCount;
+
   final VoidCallback onTap;
 
   /// Если задан — справа появляется оранжевая кнопка с телефоном.
   /// Видна только когда есть кого звонить (accepted/completed).
   final VoidCallback? onCall;
 
-  /// Тап по «15 отзывов» — открывает экран отзывов. Если `null`,
+  /// Тап по «N отзывов» — открывает экран отзывов. Если `null`,
   /// текст остаётся некликабельным (для состояний, где у исполнителя
   /// ещё нет профиля-мэтча).
   final VoidCallback? onReviewsTap;
@@ -690,13 +795,7 @@ class _CustomerHeader extends StatelessWidget {
       onTap: onTap,
       child: Row(
         children: <Widget>[
-          CircleAvatar(
-            radius: 28.r,
-            backgroundColor: AppColors.primaryTint,
-            backgroundImage: const AssetImage(
-              'assets/images/catalog/avatar_placeholder.webp',
-            ),
-          ),
+          AvatarCircle(size: 56.r),
           SizedBox(width: 10.w),
           Expanded(
             child: Column(
@@ -721,7 +820,9 @@ class _CustomerHeader extends StatelessWidget {
                     ),
                     SizedBox(width: 4.w),
                     Text(
-                      '4,5',
+                      rating > 0
+                          ? rating.toStringAsFixed(1).replaceAll('.', ',')
+                          : '—',
                       style: TextStyle(
                         fontFamily: 'Roboto',
                         fontSize: 16.sp,
@@ -735,7 +836,7 @@ class _CustomerHeader extends StatelessWidget {
                       behavior: HitTestBehavior.opaque,
                       onTap: onReviewsTap,
                       child: Text(
-                        '15 ${reviewsWord(15)}',
+                        '$reviewCount ${reviewsWord(reviewCount)}',
                         style: TextStyle(
                           fontFamily: 'Roboto',
                           fontSize: 16.sp,
@@ -864,46 +965,65 @@ class _OutlinedChip extends StatelessWidget {
 }
 
 /// Карточка единственного исполнителя в статусе «Ждёт подтверждения».
-/// Подробности техники/услуг подгружаются из БД на экране карточки
-/// исполнителя по тапу. Здесь — только имя и переход в карточку.
+/// Получает уже загруженного исполнителя сверху — родительский экран
+/// грузит его параллельно со снапшотом мэтча. Если executor=null
+/// (исполнителя не нашли в выдаче или executorId пуст), показывает
+/// компактную fallback-плашку с именем.
 class _AwaitingExecutorCard extends StatelessWidget {
   const _AwaitingExecutorCard({
-    required this.name,
+    required this.executor,
+    required this.fallbackName,
     required this.onTap,
+    required this.orderEquipment,
   });
 
-  final String name;
+  final ExecutorCardListItem? executor;
+  final String fallbackName;
   final VoidCallback onTap;
+  final List<String> orderEquipment;
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: onTap,
-      child: Container(
-        decoration: BoxDecoration(
-          color: AppColors.fieldFill,
-          borderRadius: BorderRadius.circular(14.r),
-        ),
-        padding: EdgeInsets.all(16.w),
-        child: Row(
-          children: <Widget>[
-            CircleAvatar(
-              radius: 20.r,
-              backgroundColor: AppColors.primaryTint,
-              child: Text(
-                name.isEmpty ? '?' : name[0].toUpperCase(),
-                style: AppTextStyles.titleS,
+    final ExecutorCardListItem? e = executor;
+    if (e == null) {
+      return GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: Container(
+          decoration: BoxDecoration(
+            color: AppColors.fieldFill,
+            borderRadius: BorderRadius.circular(14.r),
+          ),
+          padding: EdgeInsets.all(16.w),
+          child: Row(
+            children: <Widget>[
+              AvatarCircle(size: 40.r),
+              SizedBox(width: 12.w),
+              Expanded(
+                child: Text(fallbackName, style: AppTextStyles.bodyMedium),
               ),
-            ),
-            SizedBox(width: 12.w),
-            Expanded(
-              child: Text(name, style: AppTextStyles.bodyMedium),
-            ),
-            Icon(Icons.chevron_right_rounded,
-                color: AppColors.textTertiary, size: 24.r),
-          ],
+              Icon(Icons.chevron_right_rounded,
+                  color: AppColors.textTertiary, size: 24.r),
+            ],
+          ),
         ),
+      );
+    }
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.fieldFill,
+        borderRadius: BorderRadius.circular(14.r),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: OrderCard(
+        name: e.name,
+        rating: e.ratingAsExecutor,
+        equipment: e.machineryTitles,
+        categories: e.categoryTitles,
+        matchingServices: e.matchingServices,
+        highlightEquipment: orderEquipment.toSet(),
+        avatarUrl: e.avatarUrl,
+        onTap: onTap,
       ),
     );
   }
@@ -917,10 +1037,12 @@ class _PriceLine extends StatelessWidget {
     required this.equipment,
     required this.pricePerHour,
     required this.pricePerDay,
+    this.minHoursLabel,
   });
   final String equipment;
   final String pricePerHour;
   final String pricePerDay;
+  final String? minHoursLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -949,6 +1071,9 @@ class _PriceLine extends StatelessWidget {
     if (hasDay) {
       spans.add(TextSpan(text: pricePerDay, style: priceUnit));
       spans.add(TextSpan(text: ' ₽/день', style: priceUnit));
+    }
+    if (minHoursLabel != null && minHoursLabel!.isNotEmpty && hasHour) {
+      spans.add(TextSpan(text: ', ${minHoursLabel!}'));
     }
     return Text.rich(TextSpan(children: spans), style: base);
   }

@@ -14,6 +14,8 @@ class OrderDraft {
     required this.machineryTitles,
     required this.works,
     required this.address,
+    this.latitude,
+    this.longitude,
     required this.dateFrom,
     required this.dateTo,
     required this.exactDate,
@@ -29,6 +31,8 @@ class OrderDraft {
   final List<String> machineryTitles;
   final List<WorkDraft> works;
   final String address;
+  final double? latitude;
+  final double? longitude;
   final DateTime dateFrom;
   final DateTime? dateTo;
   final bool exactDate;
@@ -69,6 +73,12 @@ class CustomerOrderListItem {
     required this.publishedAt,
     required this.status,
     required this.respondersCount,
+    this.bestMatchId,
+    this.bestMatchStatus,
+    this.bestMatchExecutorId,
+    this.bestMatchExecutorName,
+    this.bestMatchExecutorRating = 0,
+    this.bestMatchExecutorReviewCount = 0,
   });
 
   final String id;
@@ -85,6 +95,16 @@ class CustomerOrderListItem {
   final DateTime publishedAt;
   final String status; // 'published' | 'archived' | 'cancelled' | 'draft'
   final int respondersCount;
+
+  /// «Лучший» мэтч по заказу — приоритет:
+  /// completed > accepted > awaiting_executor > awaiting_customer.
+  /// `null`, если активных мэтчей нет.
+  final String? bestMatchId;
+  final String? bestMatchStatus;
+  final String? bestMatchExecutorId;
+  final String? bestMatchExecutorName;
+  final double bestMatchExecutorRating;
+  final int bestMatchExecutorReviewCount;
 
   /// Удобный адаптер для утилиты `formatRentDate` из каталога исполнителя.
   catalog.OrderListItem toFormatAdapter() => catalog.OrderListItem(
@@ -120,6 +140,7 @@ class IncomingResponse {
     required this.agreedMinHours,
     required this.executorId,
     required this.executorName,
+    required this.executorAvatarUrl,
     required this.executorRating,
     required this.executorReviewCount,
     required this.serviceId,
@@ -134,8 +155,29 @@ class IncomingResponse {
   final int? agreedMinHours;
   final String executorId;
   final String executorName;
+  final String? executorAvatarUrl;
   final double executorRating;
   final int executorReviewCount;
   final String? serviceId;
+  final List<String> serviceMachineryTitles;
+}
+
+/// Снапшот мэтча на момент чтения: статус, согласованная цена и список
+/// техник услуги. Используется на детальной странице моего заказа,
+/// чтобы показать цену и подписи к ней (например «Экскаватор — 3 500
+/// ₽/час, от 4 часов»).
+class MatchSnapshot {
+  const MatchSnapshot({
+    required this.status,
+    required this.agreedPricePerHour,
+    required this.agreedPricePerDay,
+    required this.agreedMinHours,
+    required this.serviceMachineryTitles,
+  });
+
+  final String status;
+  final double? agreedPricePerHour;
+  final double? agreedPricePerDay;
+  final int? agreedMinHours;
   final List<String> serviceMachineryTitles;
 }

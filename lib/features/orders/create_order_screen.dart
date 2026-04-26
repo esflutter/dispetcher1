@@ -6,6 +6,8 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'package:dispatcher_1/core/catalog/catalog_service.dart';
+import 'package:dispatcher_1/core/catalog/models.dart' as cat;
 import 'package:dispatcher_1/core/customer_orders/customer_orders_service.dart';
 import 'package:dispatcher_1/core/customer_orders/models.dart' as co;
 import 'package:dispatcher_1/core/settings/settings_service.dart';
@@ -209,34 +211,11 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
   static const List<String> _workUnits = <String>['м', 'м²', 'м³'];
   static const int _maxWorks = 20;
 
-  static const List<String> _categories = <String>[
-    'Земляные работы',
-    'Погрузочно-разгрузочные работы',
-    'Перевозка материалов',
-    'Строительные работы',
-    'Дорожные работы',
-    'Буровые работы',
-    'Высотные работы',
-    'Демонтажные работы',
-    'Благоустройство территории',
-  ];
-
-  static const List<String> _machinery = <String>[
-    'Экскаватор-погрузчик',
-    'Экскаватор',
-    'Погрузчик',
-    'Миниэкскаватор',
-    'Буроям',
-    'Самогруз',
-    'Автокран',
-    'Бетононасос',
-    'Эвакуатор',
-    'Автовышка',
-    'Манипулятор',
-    'Минипогрузчик',
-    'Самосвал',
-    'Минитрактор',
-  ];
+  // Справочники тянем из БД через CatalogService — те же id↔title, что и
+  // в фильтре каталога/в createOrder. Сначала берём из in-memory кэша
+  // (прогрет в main.dart), при отсутствии — догружаем асинхронно.
+  List<String> _categories = const <String>[];
+  List<String> _machinery = const <String>[];
 
   @override
   void initState() {
@@ -246,6 +225,40 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
     // форма от их ввода не зависит.
     for (final _WorkItem w in _works) {
       _attachWorkListeners(w);
+    }
+    final List<cat.MachineryRef>? mc =
+        CatalogService.instance.cachedMachinery;
+    final List<cat.CategoryRef>? cc =
+        CatalogService.instance.cachedCategories;
+    if (mc != null) {
+      _machinery =
+          mc.map((cat.MachineryRef e) => e.title).toList(growable: false);
+    }
+    if (cc != null) {
+      _categories =
+          cc.map((cat.CategoryRef e) => e.title).toList(growable: false);
+    }
+    if (mc == null || cc == null) {
+      _loadDirectories();
+    }
+  }
+
+  Future<void> _loadDirectories() async {
+    try {
+      final List<cat.MachineryRef> m =
+          await CatalogService.instance.listActiveMachinery();
+      final List<cat.CategoryRef> c =
+          await CatalogService.instance.listActiveCategories();
+      if (!mounted) return;
+      setState(() {
+        _machinery =
+            m.map((cat.MachineryRef e) => e.title).toList(growable: false);
+        _categories =
+            c.map((cat.CategoryRef e) => e.title).toList(growable: false);
+      });
+    } catch (_) {
+      // БД упала — пользователь увидит пустой список чипов и не сможет
+      // создать заказ; на следующем входе попробуем снова.
     }
   }
 
@@ -382,9 +395,10 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
     );
     if (!mounted || published != true) return;
 
+    final String dbId;
     try {
       final co.OrderDraft dbDraft = await _buildDbDraft();
-      await CustomerOrdersService.instance.createOrder(dbDraft);
+      dbId = await CustomerOrdersService.instance.createOrder(dbDraft);
     } on PostgrestException catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -400,10 +414,10 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
     }
 
     DailyOrderLimit.increment();
-    // MyOrdersStore — локальный кэш UI. Экран "Мои заказы" заказчика теперь
-    // читает из БД, но оставляем добавление, чтобы список мгновенно
-    // обновился, если пользователь туда переключится до перечитывания.
-    MyOrdersStore.addCreated(_buildOrderMock(draft));
+    // MyOrdersStore — локальный кэш UI. Используем DB-id, чтобы при
+    // следующем `loadFromDb` запись из БД совпала с локальной по id и
+    // мы не получили заказ-дубль в списке «Мои заказы».
+    MyOrdersStore.addCreated(_buildOrderMock(draft, id: dbId));
     if (!mounted) return;
     Navigator.of(context).maybePop();
   }
@@ -435,7 +449,7 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
         return co.WorkDraft(
           name: w.nameCtrl.text.trim(),
           volume: double.tryParse(volStr),
-          unit: w.unit,
+          unit: _unitToAscii(w.unit),
         );
       }).toList(),
       address: _address ?? '',
@@ -453,6 +467,20 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
 
   String _fmtHm(TimeOfDay t) =>
       '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+
+  // CHECK в БД (jsonb_matches_schema) ждёт ASCII-юниты.
+  static String? _unitToAscii(String? ui) {
+    switch (ui) {
+      case 'м':
+        return 'm';
+      case 'м²':
+        return 'm2';
+      case 'м³':
+        return 'm3';
+      default:
+        return null;
+    }
+  }
 
   void _onAutoFillTap() {
     Navigator.of(context).push<void>(
@@ -484,9 +512,12 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
   }
 
   /// Преобразует черновик в карточку для списка «Мои заказы».
-  OrderMock _buildOrderMock(OrderDraft draft) {
+  OrderMock _buildOrderMock(OrderDraft draft, {String? id}) {
     return OrderMock(
-      id: 'c${DateTime.now().microsecondsSinceEpoch}',
+      // Если есть id из БД — используем его (createOrder вернул UUID).
+      // Без id — fallback на time-based, но при следующем loadFromDb
+      // запись будет дублирована.
+      id: id ?? 'c${DateTime.now().microsecondsSinceEpoch}',
       status: MyOrderStatus.waiting,
       title: draft.title,
       equipment: draft.machinery,
@@ -756,10 +787,14 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
                           child: _TintField(
                             controller: _works[i].volumeCtrl,
                             hint: 'Объём работы',
-                            keyboardType: TextInputType.number,
-                            maxLength: 6,
+                            keyboardType: const TextInputType.numberWithOptions(
+                                decimal: true),
+                            maxLength: 7,
                             extraFormatters: <TextInputFormatter>[
-                              FilteringTextInputFormatter.digitsOnly,
+                              // Цифры + одна точка/запятая. Запятая на ввод,
+                              // в БД уйдёт точка (replaceAll в _buildDbDraft).
+                              FilteringTextInputFormatter.allow(
+                                  RegExp(r'^\d+([.,]\d{0,2})?')),
                             ],
                             fontSize: 14.sp,
                             height: 40.h,

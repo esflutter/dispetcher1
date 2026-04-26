@@ -7,6 +7,7 @@ import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_spacing.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
 import 'package:dispatcher_1/core/utils/plural.dart';
+import 'package:dispatcher_1/core/widgets/avatar_circle.dart';
 import 'package:dispatcher_1/core/widgets/cropped_avatar.dart';
 import 'package:dispatcher_1/features/auth/photo_crop_screen.dart';
 import 'account_block.dart';
@@ -29,12 +30,12 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   double? _dbRating;
   int? _dbReviewCount;
+  String? _dbAvatarUrl;
 
   @override
   void initState() {
     super.initState();
     AccountBlock.notifier.addListener(_refresh);
-    ReviewsData.revision.addListener(_refresh);
     _loadFromDb();
   }
 
@@ -46,6 +47,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       setState(() {
         _dbRating = p.ratingAsCustomer;
         _dbReviewCount = p.reviewCountAsCustomer;
+        _dbAvatarUrl = p.avatarUrl;
       });
     } catch (_) {/* silent */}
   }
@@ -53,7 +55,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   void dispose() {
     AccountBlock.notifier.removeListener(_refresh);
-    ReviewsData.revision.removeListener(_refresh);
     super.dispose();
   }
 
@@ -63,14 +64,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _openEdit() async {
     await context.push('/profile/edit');
+    if (!mounted) return;
+    // Аватар/имя могли поменяться — перетягиваем из БД, чтобы UI
+    // не остался с устаревшим _dbAvatarUrl.
+    await _loadFromDb();
     if (mounted) setState(() {});
   }
 
   @override
   Widget build(BuildContext context) {
     final String fullName = CropResult.displayName;
-    final double rating = _dbRating ?? ReviewsData.aggregate;
-    final int reviewsCount = _dbReviewCount ?? ReviewsData.count;
+    final double rating = _dbRating ?? 0.0;
+    final int reviewsCount = _dbReviewCount ?? 0;
     final bool isBlocked = AccountBlock.isBlocked;
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -112,7 +117,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               fullName: fullName,
               rating: rating,
               reviewsCount: reviewsCount,
-              photoUrl: widget.photoUrl,
+              avatarUrl: _dbAvatarUrl ?? widget.photoUrl,
               onReviewsTap: () => context.push('/profile/reviews'),
             ),
             if (isBlocked) ...<Widget>[
@@ -150,14 +155,14 @@ class _Header extends StatelessWidget {
     required this.fullName,
     required this.rating,
     required this.reviewsCount,
-    required this.photoUrl,
+    required this.avatarUrl,
     required this.onReviewsTap,
   });
 
   final String fullName;
   final double rating;
   final int reviewsCount;
-  final String? photoUrl;
+  final String? avatarUrl;
   final VoidCallback onReviewsTap;
 
   @override
@@ -165,10 +170,16 @@ class _Header extends StatelessWidget {
     final String ratingText = reviewsCount == 0
         ? '0,0'
         : rating.toStringAsFixed(1).replaceAll('.', ',');
+    // Если только что выбрали новое фото в этой сессии и crop ещё в
+    // памяти — показываем live-preview (cropped local file). Иначе —
+    // сетевую аватарку из БД (или серый placeholder, если url пуст).
+    final Widget avatar = CropResult.saved != null
+        ? CroppedAvatar(size: 72.r)
+        : AvatarCircle(size: 72.r, avatarUrl: avatarUrl);
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: <Widget>[
-        CroppedAvatar(size: 72.r),
+        avatar,
         SizedBox(width: AppSpacing.sm),
         Expanded(
           child: Column(

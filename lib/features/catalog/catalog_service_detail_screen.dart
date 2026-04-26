@@ -1,0 +1,364 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:go_router/go_router.dart';
+
+import 'package:dispatcher_1/core/catalog/models.dart';
+import 'package:dispatcher_1/core/theme/app_colors.dart';
+import 'package:dispatcher_1/core/theme/app_text_styles.dart';
+import 'package:dispatcher_1/core/widgets/dark_sub_app_bar.dart';
+import 'package:dispatcher_1/core/widgets/photo_gallery_screen.dart';
+import 'package:dispatcher_1/core/widgets/primary_button.dart';
+import 'package:dispatcher_1/features/catalog/select_order_for_executor_screen.dart';
+import 'package:dispatcher_1/features/catalog/widgets/catalog_search_bar.dart';
+import 'package:dispatcher_1/features/executor_card/executor_card_screen.dart';
+import 'package:dispatcher_1/features/orders/create_order_screen.dart';
+import 'package:dispatcher_1/features/orders/orders_store.dart';
+import 'package:dispatcher_1/features/profile/account_block.dart';
+
+/// Склонение «час» после предлога «от» (род. падеж).
+String _hoursWord(int n) {
+  final int mod100 = n % 100;
+  if (mod100 >= 11 && mod100 <= 14) return 'часов';
+  if (n % 10 == 1) return 'часа';
+  return 'часов';
+}
+
+String _fmtThousands(int value) {
+  final String s = value.toString();
+  final StringBuffer out = StringBuffer();
+  for (int i = 0; i < s.length; i++) {
+    final int rest = s.length - i;
+    if (i > 0 && rest % 3 == 0) out.write(' ');
+    out.write(s[i]);
+  }
+  return out.toString();
+}
+
+/// Экран «Детали услуги» — открывается тапом по карточке услуги в
+/// карточке исполнителя. Нижняя кнопка повторяет логику карточки
+/// исполнителя: «Предложить заказ» / «Предложение уже отправлено» в
+/// каталоге; «Выбрать исполнителя» — в режиме выбора из откликнувшихся.
+class CatalogServiceDetailScreen extends StatefulWidget {
+  const CatalogServiceDetailScreen({
+    super.key,
+    required this.service,
+    required this.executorId,
+    required this.executorName,
+    required this.executorMachinery,
+    this.selectMode = false,
+    this.onSelectExecutor,
+  }) : assert(
+          !selectMode || onSelectExecutor != null,
+          'selectMode требует non-null onSelectExecutor',
+        );
+
+  final ExecutorService service;
+  final String executorId;
+  final String executorName;
+  final List<String> executorMachinery;
+  final bool selectMode;
+  final VoidCallback? onSelectExecutor;
+
+  @override
+  State<CatalogServiceDetailScreen> createState() =>
+      _CatalogServiceDetailScreenState();
+}
+
+class _CatalogServiceDetailScreenState
+    extends State<CatalogServiceDetailScreen> {
+  @override
+  void initState() {
+    super.initState();
+    OfferSubmissions.revision.addListener(_onRevision);
+  }
+
+  @override
+  void dispose() {
+    OfferSubmissions.revision.removeListener(_onRevision);
+    super.dispose();
+  }
+
+  void _onRevision() {
+    if (mounted) setState(() {});
+  }
+
+  bool get _alreadyOffered =>
+      !widget.selectMode && OfferSubmissions.isOffered(widget.executorId);
+
+  Future<void> _onRespondTap() async {
+    if (AccountBlock.isBlocked) {
+      await showBlockedProfileDialog(context);
+      return;
+    }
+    if (!ExecutorCardScreen.cardCreated) {
+      await showCreateCustomerCardDialog(context);
+      return;
+    }
+    if (MyOrdersStore.offerable.isEmpty) {
+      await showDialog<void>(
+        context: context,
+        barrierColor: Colors.black.withValues(alpha: 0.35),
+        builder: (_) => NoOrderDialog(
+          onCreateOrder: () => DailyOrderLimit.openCreateOrAlert(context),
+        ),
+      );
+      return;
+    }
+    if (!mounted) return;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => SelectOrderForExecutorScreen(
+          executorId: widget.executorId,
+          executorName: widget.executorName,
+          executorMachinery: widget.executorMachinery,
+        ),
+      ),
+    );
+  }
+
+  String? _fmtPrice(double? v) {
+    if (v == null || v <= 0) return null;
+    return _fmtThousands(v.round());
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ExecutorService s = widget.service;
+    final String? priceHour = _fmtPrice(s.pricePerHour);
+    final String? priceDay = _fmtPrice(s.pricePerDay);
+    final bool hasHour = priceHour != null;
+    final bool hasDay = priceDay != null;
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      appBar: const DarkSubAppBar(title: 'Детали услуги'),
+      floatingActionButton: Padding(
+        padding: EdgeInsets.only(bottom: 88.h),
+        child: AiAssistantFab(onTap: () => context.push('/assistant/chat')),
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+      body: Column(
+        children: <Widget>[
+          Expanded(
+            child: SingleChildScrollView(
+              padding: EdgeInsets.fromLTRB(16.w, 16.h, 16.w, 0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text(
+                    s.title,
+                    style: AppTextStyles.titleL.copyWith(
+                      fontWeight: FontWeight.w700,
+                      height: 1.2,
+                    ),
+                  ),
+                  if (hasHour || hasDay) ...<Widget>[
+                    SizedBox(height: 16.h),
+                    Row(
+                      children: <Widget>[
+                        if (hasHour) ...<Widget>[
+                          Text('₽ / час',
+                              style: AppTextStyles.body.copyWith(
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.textPrimary,
+                              )),
+                          SizedBox(width: 6.w),
+                          Text(priceHour,
+                              style: AppTextStyles.bodyMedium.copyWith(
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.primary)),
+                        ],
+                        if (hasHour && hasDay) SizedBox(width: 24.w),
+                        if (hasDay) ...<Widget>[
+                          Text('₽ / день',
+                              style: AppTextStyles.body.copyWith(
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.textPrimary,
+                              )),
+                          SizedBox(width: 6.w),
+                          Text(priceDay,
+                              style: AppTextStyles.bodyMedium.copyWith(
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.primary)),
+                        ],
+                      ],
+                    ),
+                  ],
+                  if (s.minHours != null && s.minHours! > 0) ...<Widget>[
+                    SizedBox(height: 16.h),
+                    Row(
+                      children: <Widget>[
+                        Text('Минимальный заказ:',
+                            style: AppTextStyles.body.copyWith(
+                              fontSize: 14.sp,
+                              color: AppColors.textSecondary,
+                            )),
+                        SizedBox(width: 6.w),
+                        Text(
+                          'от ${s.minHours} ${_hoursWord(s.minHours!)}',
+                          style: AppTextStyles.bodyMedium.copyWith(
+                            fontSize: 14.sp,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                  if (s.description != null &&
+                      s.description!.trim().isNotEmpty) ...<Widget>[
+                    SizedBox(height: 16.h),
+                    Text(s.description!,
+                        style: AppTextStyles.body
+                            .copyWith(fontSize: 14.sp, height: 1.4)),
+                  ],
+                  if (s.machineryTitles.isNotEmpty) ...<Widget>[
+                    SizedBox(height: 16.h),
+                    const _SectionTitle('Спецтехника'),
+                    SizedBox(height: 8.h),
+                    _ChipRow(items: s.machineryTitles),
+                  ],
+                  if (s.categoryTitles.isNotEmpty) ...<Widget>[
+                    SizedBox(height: 16.h),
+                    const _SectionTitle('Категория работ'),
+                    SizedBox(height: 8.h),
+                    _ChipRow(items: s.categoryTitles),
+                  ],
+                  if (s.photos.isNotEmpty) ...<Widget>[
+                    SizedBox(height: 16.h),
+                    const _SectionTitle('Фото'),
+                    SizedBox(height: 8.h),
+                    _PhotosGrid(photos: s.photos),
+                  ],
+                  SizedBox(height: 16.h),
+                ],
+              ),
+            ),
+          ),
+          Container(
+            decoration: BoxDecoration(
+              color: AppColors.background,
+              boxShadow: <BoxShadow>[
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.08),
+                  blurRadius: 8,
+                  offset: const Offset(0, -2),
+                ),
+              ],
+            ),
+            padding: EdgeInsets.fromLTRB(
+              16.w,
+              12.h,
+              16.w,
+              16.h + MediaQuery.of(context).padding.bottom,
+            ),
+            child: PrimaryButton(
+              label: widget.selectMode
+                  ? 'Выбрать исполнителя'
+                  : (_alreadyOffered
+                      ? 'Отклик уже отправлен'
+                      : 'Предложить заказ'),
+              enabled: widget.selectMode
+                  ? widget.onSelectExecutor != null
+                  : (!AccountBlock.isBlocked && !_alreadyOffered),
+              onPressed: widget.selectMode
+                  ? widget.onSelectExecutor
+                  : ((AccountBlock.isBlocked || _alreadyOffered)
+                      ? null
+                      : _onRespondTap),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SectionTitle extends StatelessWidget {
+  const _SectionTitle(this.title);
+  final String title;
+  @override
+  Widget build(BuildContext context) => Text(
+        title,
+        style: TextStyle(
+          fontFamily: 'Roboto',
+          fontSize: 16.sp,
+          fontWeight: FontWeight.w600,
+          height: 1.3,
+        ),
+      );
+}
+
+/// Сетка миниатюр фото услуги. Источник — публичные URL из бакета
+/// `service-photos`. По тапу открывает [PhotoGalleryScreen] с тем же
+/// списком и выбранным индексом.
+class _PhotosGrid extends StatelessWidget {
+  const _PhotosGrid({required this.photos});
+  final List<String> photos;
+
+  @override
+  Widget build(BuildContext context) {
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 4,
+        mainAxisSpacing: 4.r,
+        crossAxisSpacing: 4.r,
+      ),
+      itemCount: photos.length,
+      itemBuilder: (BuildContext ctx, int i) => GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => Navigator.of(ctx).push<void>(
+          MaterialPageRoute<void>(
+            builder: (_) => PhotoGalleryScreen(
+              photos: photos,
+              initialIndex: i,
+            ),
+          ),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(8.r),
+          child: Image.network(
+            photos[i],
+            fit: BoxFit.cover,
+            errorBuilder: (_, _, _) => Container(color: AppColors.fieldFill),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ChipRow extends StatelessWidget {
+  const _ChipRow({required this.items});
+  final List<String> items;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 8.w,
+      runSpacing: 8.h,
+      children: items
+          .map(
+            (String label) => Container(
+              padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 5.h),
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                border: Border.all(color: AppColors.primary, width: 1),
+                borderRadius: BorderRadius.circular(100.r),
+              ),
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontFamily: 'Roboto',
+                  fontSize: 13.sp,
+                  fontWeight: FontWeight.w400,
+                  height: 1.3,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+            ),
+          )
+          .toList(),
+    );
+  }
+}

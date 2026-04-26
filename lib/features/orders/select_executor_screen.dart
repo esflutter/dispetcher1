@@ -2,20 +2,25 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'package:dispatcher_1/core/catalog/models.dart';
 import 'package:dispatcher_1/core/customer_orders/customer_orders_service.dart';
 import 'package:dispatcher_1/core/customer_orders/models.dart';
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
-import 'package:dispatcher_1/core/utils/plural.dart';
 import 'package:dispatcher_1/core/widgets/dark_sub_app_bar.dart';
 import 'package:dispatcher_1/core/widgets/primary_button.dart';
+import 'package:dispatcher_1/features/catalog/executor_card_view_screen.dart';
+import 'package:dispatcher_1/features/catalog/widgets/order_card.dart';
 import 'package:dispatcher_1/features/orders/orders_store.dart';
 import 'package:dispatcher_1/features/orders/widgets/order_alerts.dart';
 import 'package:dispatcher_1/features/orders/widgets/order_status_pill.dart';
 
 /// Экран выбора исполнителя — открывается по тапу на заказ со статусом
 /// «ожидает» с откликами. Источник откликов — таблица `order_matches`
-/// через [CustomerOrdersService.listResponsesForOrder].
+/// через [CustomerOrdersService.listResponsesForOrder]. Каждая карточка —
+/// `OrderCard` с превью прайса; тап на карточку открывает полную
+/// [ExecutorCardViewScreen] в режиме `selectMode`, где кнопка снизу
+/// меняется на «Выбрать исполнителя».
 class SelectExecutorScreen extends StatefulWidget {
   const SelectExecutorScreen({
     super.key,
@@ -82,8 +87,45 @@ class _SelectExecutorScreenState extends State<SelectExecutorScreen> {
     widget.onExecutorSelected(r.matchId, r.executorName, r.executorId);
   }
 
+  /// Открывает полную карточку исполнителя в режиме «выбор». Кнопка
+  /// «Выбрать исполнителя» отрабатывает: закрывает карточку и
+  /// выполняет [_pickExecutor] (UPDATE + диалог + callback родителю).
+  Future<void> _openExecutorForSelection(IncomingResponse r) async {
+    if (_busy) return;
+    final NavigatorState nav = Navigator.of(context);
+    await nav.push<void>(
+      MaterialPageRoute<void>(
+        builder: (BuildContext detailCtx) => ExecutorCardViewScreen(
+          executorId: r.executorId,
+          selectMode: true,
+          onSelectExecutor: () async {
+            if (!detailCtx.mounted) return;
+            Navigator.of(detailCtx).pop();
+            await _pickExecutor(r);
+          },
+        ),
+      ),
+    );
+  }
+
+  /// Превращает agreed-цену из отклика в строки `MatchingService` —
+  /// по одной на каждую технику услуги, чтобы карточка показывала
+  /// «Экскаватор — 3 500 ₽/час, от 4 часов» как в эталоне.
+  List<MatchingService> _matchingServicesFor(IncomingResponse r) {
+    if (r.serviceMachineryTitles.isEmpty) return const <MatchingService>[];
+    return r.serviceMachineryTitles
+        .map((String t) => MatchingService(
+              machineryTitle: t,
+              pricePerHour: r.agreedPricePerHour,
+              pricePerDay: r.agreedPricePerDay,
+              minHours: r.agreedMinHours,
+            ))
+        .toList();
+  }
+
   @override
   Widget build(BuildContext context) {
+    final Set<String> orderEq = widget.order.equipment.toSet();
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: DarkSubAppBar(title: widget.order.title),
@@ -129,8 +171,8 @@ class _SelectExecutorScreenState extends State<SelectExecutorScreen> {
                                     color: AppColors.textTertiary)),
                             SizedBox(height: 4.h),
                             Text(widget.order.title,
-                                style:
-                                    AppTextStyles.titleL.copyWith(height: 1.2)),
+                                style: AppTextStyles.titleL
+                                    .copyWith(height: 1.2)),
                             SizedBox(height: 12.h),
                             Text('Дата и время аренды',
                                 style: TextStyle(
@@ -176,12 +218,31 @@ class _SelectExecutorScreenState extends State<SelectExecutorScreen> {
                           ),
                         )
                       else
-                        for (final IncomingResponse r in responses)
-                          _ResponseCard(
-                            response: r,
-                            enabled: !_busy,
-                            onPick: () => _pickExecutor(r),
+                        for (int i = 0; i < responses.length; i++) ...<Widget>[
+                          SizedBox(height: i == 0 ? 0 : 16.h),
+                          Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 16.w),
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: AppColors.fieldFill,
+                                borderRadius: BorderRadius.circular(14.r),
+                              ),
+                              clipBehavior: Clip.antiAlias,
+                              child: OrderCard(
+                                name: responses[i].executorName,
+                                rating: responses[i].executorRating,
+                                avatarUrl: responses[i].executorAvatarUrl,
+                                equipment: responses[i].serviceMachineryTitles,
+                                categories: const <String>[],
+                                matchingServices:
+                                    _matchingServicesFor(responses[i]),
+                                highlightEquipment: orderEq,
+                                onTap: () => _openExecutorForSelection(
+                                    responses[i]),
+                              ),
+                            ),
                           ),
+                        ],
                       SizedBox(height: 16.h),
                     ],
                   ),
@@ -211,126 +272,6 @@ class _SelectExecutorScreenState extends State<SelectExecutorScreen> {
               ],
             );
           },
-        ),
-      ),
-    );
-  }
-}
-
-class _ResponseCard extends StatelessWidget {
-  const _ResponseCard({
-    required this.response,
-    required this.enabled,
-    required this.onPick,
-  });
-  final IncomingResponse response;
-  final bool enabled;
-  final VoidCallback onPick;
-
-  String _fmtRating(double v) =>
-      v.toStringAsFixed(1).replaceAll('.', ',');
-
-  String _fmtPrice(double v) {
-    final int i = v.round();
-    final String s = i.toString();
-    final StringBuffer b = StringBuffer();
-    for (int k = 0; k < s.length; k++) {
-      if (k > 0 && (s.length - k) % 3 == 0) b.write(' ');
-      b.write(s[k]);
-    }
-    return b.toString();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.fromLTRB(16.w, 16.h, 16.w, 0),
-      child: Container(
-        decoration: BoxDecoration(
-          color: AppColors.fieldFill,
-          borderRadius: BorderRadius.circular(14.r),
-        ),
-        padding: EdgeInsets.all(16.w),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Row(
-              children: <Widget>[
-                CircleAvatar(
-                  radius: 24.r,
-                  backgroundColor: AppColors.primaryTint,
-                  child: Text(
-                    response.executorName.isEmpty
-                        ? '?'
-                        : response.executorName[0].toUpperCase(),
-                    style: AppTextStyles.titleS,
-                  ),
-                ),
-                SizedBox(width: 12.w),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Text(response.executorName,
-                          style: AppTextStyles.titleS),
-                      SizedBox(height: 4.h),
-                      Row(
-                        children: <Widget>[
-                          Icon(Icons.star_rounded,
-                              size: 18.r, color: AppColors.ratingStar),
-                          SizedBox(width: 4.w),
-                          Text(_fmtRating(response.executorRating),
-                              style: AppTextStyles.body),
-                          SizedBox(width: 12.w),
-                          Text(
-                            '${response.executorReviewCount} ${reviewsWord(response.executorReviewCount)}',
-                            style: AppTextStyles.body
-                                .copyWith(color: AppColors.textTertiary),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            if (response.serviceMachineryTitles.isNotEmpty) ...<Widget>[
-              SizedBox(height: 12.h),
-              Wrap(
-                spacing: 8.w,
-                runSpacing: 8.h,
-                children: response.serviceMachineryTitles
-                    .map((String e) => _Chip(label: e))
-                    .toList(),
-              ),
-            ],
-            if (response.agreedPricePerHour != null ||
-                response.agreedPricePerDay != null) ...<Widget>[
-              SizedBox(height: 12.h),
-              Row(
-                children: <Widget>[
-                  if (response.agreedPricePerHour != null) ...<Widget>[
-                    Text('${_fmtPrice(response.agreedPricePerHour!)} ₽/час',
-                        style: AppTextStyles.bodyMedium.copyWith(
-                            color: AppColors.primary,
-                            fontWeight: FontWeight.w700)),
-                    SizedBox(width: 16.w),
-                  ],
-                  if (response.agreedPricePerDay != null)
-                    Text('${_fmtPrice(response.agreedPricePerDay!)} ₽/день',
-                        style: AppTextStyles.bodyMedium.copyWith(
-                            color: AppColors.primary,
-                            fontWeight: FontWeight.w700)),
-                ],
-              ),
-            ],
-            SizedBox(height: 16.h),
-            PrimaryButton(
-              label: 'Выбрать исполнителя',
-              enabled: enabled,
-              onPressed: enabled ? onPick : null,
-            ),
-          ],
         ),
       ),
     );

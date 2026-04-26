@@ -61,18 +61,36 @@ class _OrderFeedScreenState extends State<OrderFeedScreen> {
       machineryTitles: AppliedFilter.equipment,
       categoryTitles: AppliedFilter.categories,
       search: _query.trim().isEmpty ? null : _query,
+      dateFrom: AppliedFilter.dateFrom,
+      dateTo: AppliedFilter.dateTo,
+      timeFrom: _fmtHm(AppliedFilter.timeFrom),
+      timeTo: _fmtHm(AppliedFilter.timeTo),
+      wholeDay: AppliedFilter.wholeDay,
     );
   }
 
+  static String? _fmtHm(TimeOfDay? t) {
+    if (t == null) return null;
+    return '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+  }
+
   void _onFilterChanged() {
-    if (mounted) setState(() => _future = _fetch());
+    if (mounted) {
+      setState(() {
+        _future = _fetch();
+      });
+    }
   }
 
   void _onSearchChanged(String v) {
     setState(() => _query = v);
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 300), () {
-      if (mounted) setState(() => _future = _fetch());
+      if (mounted) {
+        setState(() {
+          _future = _fetch();
+        });
+      }
     });
   }
 
@@ -249,8 +267,10 @@ class _OrderFeedScreenState extends State<OrderFeedScreen> {
                           rating: e.ratingAsExecutor,
                           equipment: e.machineryTitles,
                           categories: e.categoryTitles,
+                          matchingServices: e.matchingServices,
                           highlightEquipment: AppliedFilter.equipment,
                           highlightCategories: AppliedFilter.categories,
+                          avatarUrl: e.avatarUrl,
                           onTap: () =>
                               context.push('/catalog/executor/${e.userId}'),
                         ),

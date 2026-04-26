@@ -11,8 +11,26 @@ class _ExecAggregate {
   double? minPriceHour;
   double? minPriceDay;
 
+  /// Все услуги исполнителя — нужны, чтобы потом сформировать
+  /// `matchingServices` для карточки ленты под активный фильтр.
+  final List<_ServiceRow> services = <_ServiceRow>[];
+
   void addMachinery(List<int> ids) => machineryIds.addAll(ids);
   void addCategory(List<int> ids) => categoryIds.addAll(ids);
+}
+
+class _ServiceRow {
+  const _ServiceRow({
+    required this.machineryIds,
+    required this.pricePerHour,
+    required this.pricePerDay,
+    required this.minHours,
+  });
+
+  final List<int> machineryIds;
+  final double? pricePerHour;
+  final double? pricePerDay;
+  final int? minHours;
 }
 
 class CatalogService {
@@ -80,6 +98,12 @@ class CatalogService {
     ]);
   }
 
+  /// Прогревает in-memory кэш справочников. Вызывается один раз на
+  /// старте приложения после `Supabase.initialize`, чтобы экраны
+  /// (каталог, фильтр, создание заказа) получали списки техники и
+  /// категорий из памяти с первого кадра.
+  Future<void> warmup() => _primeDirectories();
+
   // ---------------------------------------------------------------
   // Лента заказов
   // ---------------------------------------------------------------
@@ -91,6 +115,9 @@ class CatalogService {
     DateTime? dateFrom,
     DateTime? dateTo,
     String? addressContains,
+    String? timeFrom,
+    String? timeTo,
+    bool? wholeDay,
     int limit = 50,
   }) async {
     await _primeDirectories();
@@ -139,6 +166,15 @@ class CatalogService {
     if (addressContains != null && addressContains.trim().isNotEmpty) {
       final String esc = addressContains.trim().replaceAll(',', ' ');
       q = q.ilike('address', '%$esc%');
+    }
+    if (wholeDay == true) {
+      q = q.eq('whole_day', true);
+    }
+    if (timeFrom != null && timeFrom.isNotEmpty) {
+      q = q.gte('time_from', '$timeFrom:00');
+    }
+    if (timeTo != null && timeTo.isNotEmpty) {
+      q = q.lte('time_to', '$timeTo:00');
     }
 
     final List<Map<String, dynamic>> rows =
@@ -265,6 +301,11 @@ class CatalogService {
     Set<String> machineryTitles = const <String>{},
     Set<String> categoryTitles = const <String>{},
     String? search,
+    DateTime? dateFrom,
+    DateTime? dateTo,
+    String? timeFrom,
+    String? timeTo,
+    bool? wholeDay,
     int limit = 50,
   }) async {
     await _primeDirectories();
@@ -283,7 +324,7 @@ class CatalogService {
         .select(
           'user_id, location_address, radius_km, '
           'profile:profiles!executor_cards_user_id_fkey('
-          'id, name, avatar_url, legal_status, experience_years, '
+          'id, name, avatar_url, legal_status, experience_years, about, '
           'rating_as_executor, review_count_as_executor)',
         )
         .eq('is_published', true);
@@ -302,11 +343,28 @@ class CatalogService {
 
     final List<String> userIds =
         cards.map((Map<String, dynamic> r) => r['user_id'] as String).toList();
+
+    // Если задан фильтр по дате — собираем список user_id, у которых
+    // расписание (`schedule_day_overrides`) на эти даты конфликтует с
+    // запросом, и исключаем их. Без override считаем, что исполнитель
+    // доступен по умолчанию.
+    Set<String> excludedByDate = const <String>{};
+    if (dateFrom != null) {
+      excludedByDate = await _findUnavailableExecutors(
+        userIds: userIds,
+        dateFrom: dateFrom,
+        dateTo: dateTo ?? dateFrom,
+        timeFrom: timeFrom,
+        timeTo: timeTo,
+        wholeDay: wholeDay ?? false,
+      );
+    }
+
     final List<Map<String, dynamic>> services = await _client
         .from('services')
         .select(
           'executor_id, machinery_ids, category_ids, '
-          'price_per_hour, price_per_day',
+          'price_per_hour, price_per_day, min_hours',
         )
         .inFilter('executor_id', userIds)
         .eq('is_paid', true)
@@ -319,10 +377,21 @@ class CatalogService {
       final String uid = s['executor_id'] as String;
       final _ExecAggregate agg =
           byUser.putIfAbsent(uid, _ExecAggregate.new);
-      agg.addMachinery(List<int>.from(s['machinery_ids'] as List));
-      agg.addCategory(List<int>.from(s['category_ids'] as List));
-      agg.minPriceHour = _min(agg.minPriceHour, _toDouble(s['price_per_hour']));
-      agg.minPriceDay = _min(agg.minPriceDay, _toDouble(s['price_per_day']));
+      final List<int> mIds = List<int>.from(s['machinery_ids'] as List);
+      final List<int> cIds = List<int>.from(s['category_ids'] as List);
+      final double? pricePerHour = _toDouble(s['price_per_hour']);
+      final double? pricePerDay = _toDouble(s['price_per_day']);
+      final int? minHours = s['min_hours'] as int?;
+      agg.addMachinery(mIds);
+      agg.addCategory(cIds);
+      agg.minPriceHour = _min(agg.minPriceHour, pricePerHour);
+      agg.minPriceDay = _min(agg.minPriceDay, pricePerDay);
+      agg.services.add(_ServiceRow(
+        machineryIds: mIds,
+        pricePerHour: pricePerHour,
+        pricePerDay: pricePerDay,
+        minHours: minHours,
+      ));
     }
 
     final List<ExecutorCardListItem> out = <ExecutorCardListItem>[];
@@ -342,6 +411,29 @@ class CatalogService {
           !categoryIds.any(agg.categoryIds.contains)) {
         continue;
       }
+      if (excludedByDate.contains(uid)) {
+        continue;
+      }
+      // Если активен фильтр по технике — собираем для карточки конкретные
+      // услуги по выбранной технике (одна машина → одна строка прайса).
+      // Без фильтра карточка показывает обобщённые блоки.
+      final List<MatchingService> matching = <MatchingService>[];
+      if (machineryIds.isNotEmpty) {
+        for (final _ServiceRow s in agg.services) {
+          for (final int mId in s.machineryIds) {
+            if (!machineryIds.contains(mId)) continue;
+            final String title = _machineryIdToTitle[mId] ?? '';
+            if (title.isEmpty) continue;
+            matching.add(MatchingService(
+              machineryTitle: title,
+              pricePerHour: s.pricePerHour,
+              pricePerDay: s.pricePerDay,
+              minHours: s.minHours,
+            ));
+          }
+        }
+      }
+
       out.add(ExecutorCardListItem(
         userId: uid,
         name: (p['name'] as String?) ?? 'Пользователь',
@@ -351,6 +443,7 @@ class CatalogService {
             (p['review_count_as_executor'] as int?) ?? 0,
         legalStatus: p['legal_status'] as String?,
         experienceYears: p['experience_years'] as int?,
+        about: p['about'] as String?,
         locationAddress: c['location_address'] as String?,
         radiusKm: c['radius_km'] as int?,
         machineryTitles: agg.machineryIds
@@ -363,18 +456,231 @@ class CatalogService {
             .toList(),
         minPricePerHour: agg.minPriceHour,
         minPricePerDay: agg.minPriceDay,
+        matchingServices: matching,
       ));
     }
     return out;
   }
 
-  Future<ExecutorCardListItem?> getExecutorById(String userId) async {
-    final List<ExecutorCardListItem> all =
-        await listPublishedExecutors(limit: 100);
-    for (final ExecutorCardListItem e in all) {
-      if (e.userId == userId) return e;
+  /// Возвращает множество `user_id`, у которых на интервале
+  /// `[dateFrom..dateTo]` расписание конфликтует с запрошенным временем.
+  /// Если для дня нет override — считаем, что исполнитель доступен.
+  /// Конфликт = override.accepting=false ИЛИ
+  /// (заказ wholeDay=true, override.whole_day=false) ИЛИ
+  /// (заданы timeFrom/timeTo, override не whole_day и время не покрывает запрос).
+  Future<Set<String>> _findUnavailableExecutors({
+    required List<String> userIds,
+    required DateTime dateFrom,
+    required DateTime dateTo,
+    String? timeFrom,
+    String? timeTo,
+    required bool wholeDay,
+  }) async {
+    final List<Map<String, dynamic>> rows = await _client
+        .from('schedule_day_overrides')
+        .select('user_id, day, accepting, whole_day, time_from, time_to')
+        .inFilter('user_id', userIds)
+        .gte('day', _isoDate(dateFrom))
+        .lte('day', _isoDate(dateTo));
+
+    final Set<String> excluded = <String>{};
+    for (final Map<String, dynamic> r in rows) {
+      final String uid = r['user_id'] as String;
+      if (excluded.contains(uid)) continue;
+      final bool accepting = (r['accepting'] as bool?) ?? true;
+      if (!accepting) {
+        excluded.add(uid);
+        continue;
+      }
+      final bool overrideWholeDay = (r['whole_day'] as bool?) ?? false;
+      if (wholeDay && !overrideWholeDay) {
+        excluded.add(uid);
+        continue;
+      }
+      if (!wholeDay && timeFrom != null && timeTo != null) {
+        if (overrideWholeDay) continue; // полностью покрывает
+        final String? oFrom = _trimTime(r['time_from'] as String?);
+        final String? oTo = _trimTime(r['time_to'] as String?);
+        if (oFrom == null ||
+            oTo == null ||
+            timeFrom.compareTo(oFrom) < 0 ||
+            timeTo.compareTo(oTo) > 0) {
+          excluded.add(uid);
+        }
+      }
     }
-    return null;
+    return excluded;
+  }
+
+  /// Прямой SELECT по `user_id` + агрегация услуг этого исполнителя.
+  /// Раньше делал `listPublishedExecutors(limit:100)` и линейный поиск
+  /// — для исполнителей за пределами топ-100 возвращал null, хотя
+  /// карточка существует и опубликована.
+  Future<ExecutorCardListItem?> getExecutorById(String userId) async {
+    await _primeDirectories();
+
+    final Map<String, dynamic>? card = await _client
+        .from('executor_cards')
+        .select(
+          'user_id, location_address, radius_km, '
+          'profile:profiles!executor_cards_user_id_fkey('
+          'id, name, avatar_url, legal_status, experience_years, about, '
+          'rating_as_executor, review_count_as_executor)',
+        )
+        .eq('user_id', userId)
+        .eq('is_published', true)
+        .maybeSingle();
+    if (card == null) return null;
+
+    final List<Map<String, dynamic>> services = await _client
+        .from('services')
+        .select(
+          'machinery_ids, category_ids, '
+          'price_per_hour, price_per_day, min_hours',
+        )
+        .eq('executor_id', userId)
+        .eq('is_paid', true)
+        .eq('is_archived', false);
+
+    final _ExecAggregate agg = _ExecAggregate();
+    for (final Map<String, dynamic> s in services) {
+      final List<int> mIds = List<int>.from(s['machinery_ids'] as List);
+      final List<int> cIds = List<int>.from(s['category_ids'] as List);
+      final double? pricePerHour = _toDouble(s['price_per_hour']);
+      final double? pricePerDay = _toDouble(s['price_per_day']);
+      agg.addMachinery(mIds);
+      agg.addCategory(cIds);
+      agg.minPriceHour = _min(agg.minPriceHour, pricePerHour);
+      agg.minPriceDay = _min(agg.minPriceDay, pricePerDay);
+      agg.services.add(_ServiceRow(
+        machineryIds: mIds,
+        pricePerHour: pricePerHour,
+        pricePerDay: pricePerDay,
+        minHours: s['min_hours'] as int?,
+      ));
+    }
+
+    final Map<String, dynamic> p = card['profile'] as Map<String, dynamic>;
+    return ExecutorCardListItem(
+      userId: userId,
+      name: (p['name'] as String?) ?? 'Пользователь',
+      avatarUrl: p['avatar_url'] as String?,
+      ratingAsExecutor: _toDouble(p['rating_as_executor']) ?? 0,
+      reviewCountAsExecutor: (p['review_count_as_executor'] as int?) ?? 0,
+      legalStatus: p['legal_status'] as String?,
+      experienceYears: p['experience_years'] as int?,
+      about: p['about'] as String?,
+      locationAddress: card['location_address'] as String?,
+      radiusKm: card['radius_km'] as int?,
+      machineryTitles: agg.machineryIds
+          .map((int id) => _machineryIdToTitle[id] ?? '')
+          .where((String t) => t.isNotEmpty)
+          .toList(),
+      categoryTitles: agg.categoryIds
+          .map((int id) => _categoryIdToTitle[id] ?? '')
+          .where((String t) => t.isNotEmpty)
+          .toList(),
+      minPricePerHour: agg.minPriceHour,
+      minPricePerDay: agg.minPriceDay,
+    );
+  }
+
+  /// Полная карточка исполнителя: summary + услуги + расписание.
+  /// Делает 3 параллельных запроса. Если карточка не опубликована или
+  /// исполнитель не найден — возвращает null.
+  Future<ExecutorCardFull?> getExecutorFull(String userId) async {
+    await _primeDirectories();
+
+    final ExecutorCardListItem? summary = await getExecutorById(userId);
+    if (summary == null) return null;
+
+    final List<List<Map<String, dynamic>>> results =
+        await Future.wait<List<Map<String, dynamic>>>(<Future<List<Map<String, dynamic>>>>[
+      _client
+          .from('services')
+          .select(
+            'id, title, description, machinery_ids, category_ids, '
+            'price_per_hour, price_per_day, min_hours, photos',
+          )
+          .eq('executor_id', userId)
+          .eq('is_paid', true)
+          .eq('is_archived', false)
+          .order('updated_at', ascending: false),
+      _client
+          .from('schedule_day_overrides')
+          .select(
+            'day, accepting, whole_day, time_from, time_to, '
+            'machinery_ids, radius_km',
+          )
+          .eq('user_id', userId),
+    ]);
+
+    final List<ExecutorService> services = results[0]
+        .map<ExecutorService>(_executorServiceFromRow)
+        .toList();
+
+    final Map<DateTime, ExecutorScheduleDay> schedule =
+        <DateTime, ExecutorScheduleDay>{};
+    for (final Map<String, dynamic> r in results[1]) {
+      final ExecutorScheduleDay day = _scheduleDayFromRow(r);
+      schedule[day.day] = day;
+    }
+
+    return ExecutorCardFull(
+      summary: summary,
+      services: services,
+      scheduleOverrides: schedule,
+    );
+  }
+
+  ExecutorService _executorServiceFromRow(Map<String, dynamic> r) {
+    final List<int> mIds = List<int>.from(r['machinery_ids'] as List);
+    final List<int> cIds = List<int>.from(r['category_ids'] as List);
+    final List<String> photos = List<String>.from(
+      (r['photos'] as List?) ?? const <String>[],
+    );
+    return ExecutorService(
+      id: r['id'] as String,
+      title: (r['title'] as String?) ?? '',
+      description: r['description'] as String?,
+      machineryTitles: mIds
+          .map((int id) => _machineryIdToTitle[id] ?? '')
+          .where((String t) => t.isNotEmpty)
+          .toList(),
+      categoryTitles: cIds
+          .map((int id) => _categoryIdToTitle[id] ?? '')
+          .where((String t) => t.isNotEmpty)
+          .toList(),
+      pricePerHour: _toDouble(r['price_per_hour']),
+      pricePerDay: _toDouble(r['price_per_day']),
+      minHours: r['min_hours'] as int?,
+      photos: photos,
+    );
+  }
+
+  ExecutorScheduleDay _scheduleDayFromRow(Map<String, dynamic> r) {
+    final List<int> mIds = List<int>.from(
+        (r['machinery_ids'] as List?) ?? const <int>[]);
+    final DateTime day = DateTime.parse(r['day'] as String);
+    return ExecutorScheduleDay(
+      day: DateTime(day.year, day.month, day.day),
+      accepting: (r['accepting'] as bool?) ?? true,
+      wholeDay: (r['whole_day'] as bool?) ?? false,
+      timeFrom: _trimTime(r['time_from'] as String?),
+      timeTo: _trimTime(r['time_to'] as String?),
+      machineryTitles: mIds
+          .map((int id) => _machineryIdToTitle[id] ?? '')
+          .where((String t) => t.isNotEmpty)
+          .toList(),
+      radiusKm: r['radius_km'] as int?,
+    );
+  }
+
+  /// Postgres `time` отдаёт `HH:MM:SS`; UI хочет `HH:MM`.
+  String? _trimTime(String? t) {
+    if (t == null) return null;
+    if (t.length >= 5) return t.substring(0, 5);
+    return t;
   }
 
   double? _toDouble(Object? v) {

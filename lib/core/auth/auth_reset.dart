@@ -1,4 +1,5 @@
-import 'package:dispatcher_1/core/auth/session_cache.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
 import 'package:dispatcher_1/features/auth/photo_crop_screen.dart';
 import 'package:dispatcher_1/features/catalog/catalog_filter_screen.dart';
 import 'package:dispatcher_1/features/catalog/select_order_for_executor_screen.dart';
@@ -7,33 +8,32 @@ import 'package:dispatcher_1/features/orders/create_order_screen.dart';
 import 'package:dispatcher_1/features/orders/orders_store.dart';
 import 'package:dispatcher_1/features/profile/account_block.dart';
 import 'package:dispatcher_1/features/shell/main_shell.dart';
+import 'package:dispatcher_1/features/support/chat_screen.dart';
 
-/// Выход из аккаунта. Снимок пользовательских данных по текущему номеру
-/// кладём в [SessionCache] — чтобы при повторном входе с тем же номером
-/// регистрация не требовалась и всё восстановилось. Потом чистим все
-/// статические сторы, чтобы экран `/auth/phone` не показывал остатки.
-void signOut() {
-  SessionCache.save(CropResult.userPhone);
+/// Выход из аккаунта. Закрываем сессию Supabase (иначе RLS будет
+/// пропускать запросы как от прошлого пользователя) и чистим все
+/// статические сторы. При повторном входе профиль/заказы подтянутся
+/// из БД заново.
+Future<void> signOut() async {
+  try {
+    await Supabase.instance.client.auth.signOut();
+  } catch (_) {/* всё равно чистим локально */}
   _clearAll();
 }
 
-/// Удаление аккаунта. Снимок из кэша выбрасываем — повторный вход по
-/// тому же номеру начинается с регистрации «с нуля». Потом тот же
-/// сброс всех сторов, что и при выходе.
-void deleteAccount() {
-  SessionCache.drop(CropResult.userPhone);
+/// Удаление аккаунта. Закрываем сессию Supabase и делаем тот же сброс
+/// всех сторов, что и при выходе. Сами данные удаляются на сервере
+/// отдельным RPC, который дёргает экран профиля до вызова этой функции.
+Future<void> deleteAccount() async {
+  try {
+    await Supabase.instance.client.auth.signOut();
+  } catch (_) {/* всё равно чистим локально */}
   _clearAll();
 }
 
 /// Полная очистка всех глобальных статических хранилищ. Каждый новый
 /// «стор» с пользовательскими данными обязан чиститься здесь — иначе
 /// на устройстве у следующего пользователя останутся старые данные.
-///
-/// ⚠️ Любой новый статический стор с данными пользователя должен быть
-/// синхронно добавлен в ТРИ места, иначе будут баги:
-///   1. [_clearAll] (этот метод) — обнуление после logout/deleteAccount
-///   2. [SessionCache.save] — снимок перед logout
-///   3. [SessionCache.restore] — восстановление при повторном входе
 void _clearAll() {
   // Профиль: имя/телефон/почта/аватар.
   CropResult.clearAuthData();
@@ -57,6 +57,10 @@ void _clearAll() {
 
   // Заказы пользователя (новые/принятые/отклонённые).
   MyOrdersStore.clear();
+
+  // История чата с ассистентом — иначе у следующего пользователя
+  // на устройстве осталась бы переписка предыдущего.
+  ChatScreen.resetHistory();
 
   // Активная вкладка нижней навигации.
   MainShell.selectedTab.value = 0;

@@ -73,6 +73,7 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
     _tab = TabController(length: 3, vsync: this);
     AccountBlock.notifier.addListener(_onBlockChanged);
     MyOrdersStore.revision.addListener(_onStoreChanged);
+    MyOrdersStore.onError = _onStoreError;
     // Подгружаем свои заказы из БД. Первый вызов также почистит
     // initial-моки; повторные — просто дольют новые записи.
     MyOrdersStore.loadFromDb();
@@ -84,10 +85,20 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
     }
   }
 
+  void _onStoreError(Object e) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Сервер не принял изменение: $e')),
+    );
+  }
+
   @override
   void dispose() {
     AccountBlock.notifier.removeListener(_onBlockChanged);
     MyOrdersStore.revision.removeListener(_onStoreChanged);
+    if (MyOrdersStore.onError == _onStoreError) {
+      MyOrdersStore.onError = null;
+    }
     _tab.dispose();
     _waitingScrollCtrl.dispose();
     super.dispose();
@@ -280,29 +291,26 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
             },
             onExecutorSelected:
                 (String matchId, String name, String executorId) {
-              // Локально сразу показываем как "в работе". Реальный статус
-              // в БД — `awaiting_executor` (ждём подтверждения от
-              // исполнителя). UI `moveToAccepted` пока используем чтобы
-              // не усложнять цепочку обновлений экрана. Контакты
-              // подтянутся в `MyOrderDetailScreen` после того, как
-              // исполнитель подтвердит и RLS пропустит запрос к
-              // `profiles_private`.
-              MyOrdersStore.moveToAccepted(o,
+              // БД-статус — `awaiting_executor` (UI: «Ждёт подтверждения
+              // исполнителя»). Заказ остаётся во вкладке «Ожидает» —
+              // переводим его туда в этом же статусе, не в accepted.
+              // Реальный accepted придёт после `_syncFromDb` в деталях
+              // заказа, когда исполнитель подтвердит.
+              MyOrdersStore.proposeToExecutor(o,
                   name: name,
                   phone: '',
                   matchId: matchId,
                   executorId: executorId);
-              final OrderMock updated = MyOrdersStore.accepted.firstWhere(
+              final OrderMock updated = MyOrdersStore.newOrders.firstWhere(
                 (OrderMock x) => x.id == o.id,
                 orElse: () => o.copyWith(
-                  status: MyOrderStatus.accepted,
+                  status: MyOrderStatus.awaitingExecutor,
                   customerName: name,
                   customerPhone: '',
                   matchId: matchId,
                   executorId: executorId,
                 ),
               );
-              if (mounted) _tab.animateTo(1);
               _swapToAcceptedOrderDetail(updated);
             },
           ),
@@ -342,7 +350,10 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
               final bool? submitted =
                   await Navigator.of(ctx).push<bool>(
                 MaterialPageRoute<bool>(
-                  builder: (_) => const ReviewScreen(),
+                  builder: (_) => ReviewScreen(
+                    targetUserId: o.executorId,
+                    matchId: o.matchId,
+                  ),
                 ),
               );
               if (submitted == true && mounted) {
@@ -377,6 +388,8 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
           customerEmail: o.customerEmail,
           matchId: o.matchId,
           executorId: o.executorId,
+          executorRating: o.executorRating,
+          executorReviewCount: o.executorReviewCount,
           state: _detailStateForCard(o.status),
           rejectedStatus: o.status,
           waitingStatus: o.status,
@@ -421,6 +434,8 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
           customerEmail: o.customerEmail,
           matchId: o.matchId,
           executorId: o.executorId,
+          executorRating: o.executorRating,
+          executorReviewCount: o.executorReviewCount,
           state: _detailStateForCard(o.status),
           rejectedStatus: o.status,
           waitingStatus: o.status,

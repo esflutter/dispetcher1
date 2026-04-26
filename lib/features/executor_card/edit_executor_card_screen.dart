@@ -60,6 +60,12 @@ class _EditExecutorCardScreenState extends State<EditExecutorCardScreen> {
   /// при возврате фокуса в поле либо после корректного ввода.
   String? _emailError;
 
+  /// Реальный рейтинг заказчика — `profiles.rating_as_customer` /
+  /// `review_count_as_customer`. Грузится при открытии экрана; до
+  /// первого ответа БД отображаем «—».
+  double _ratingAsCustomer = 0;
+  int _reviewCountAsCustomer = 0;
+
   static const _statusOptions = [
     'Физ. лицо',
     'Самозанятый',
@@ -108,6 +114,18 @@ class _EditExecutorCardScreenState extends State<EditExecutorCardScreen> {
         }
       }
     });
+    _loadRatingFromDb();
+  }
+
+  Future<void> _loadRatingFromDb() async {
+    try {
+      final MyProfile? p = await ProfileService.instance.loadMine();
+      if (!mounted || p == null) return;
+      setState(() {
+        _ratingAsCustomer = p.ratingAsCustomer;
+        _reviewCountAsCustomer = p.reviewCountAsCustomer;
+      });
+    } catch (_) {/* нет сети — оставим «—» */}
   }
 
   @override
@@ -151,7 +169,11 @@ class _EditExecutorCardScreenState extends State<EditExecutorCardScreen> {
                   children: [
               ListenableBuilder(
                 listenable: _nameCtrl,
-                builder: (_, _) => _HeaderRow(displayName: _nameCtrl.text),
+                builder: (_, _) => _HeaderRow(
+                  displayName: _nameCtrl.text,
+                  rating: _ratingAsCustomer,
+                  reviewCount: _reviewCountAsCustomer,
+                ),
               ),
               SizedBox(height: 16.h),
               _PlainEditableField(
@@ -369,12 +391,18 @@ class _EditExecutorCardScreenState extends State<EditExecutorCardScreen> {
 }
 
 class _HeaderRow extends StatefulWidget {
-  const _HeaderRow({required this.displayName});
+  const _HeaderRow({
+    required this.displayName,
+    required this.rating,
+    required this.reviewCount,
+  });
 
   /// Имя пользователя, отображаемое рядом с аватаром. Родитель передаёт
   /// текущее значение из контроллера «Имя и фамилия», чтобы шапка
   /// обновлялась одновременно с тем, что вводит пользователь.
   final String displayName;
+  final double rating;
+  final int reviewCount;
 
   @override
   State<_HeaderRow> createState() => _HeaderRowState();
@@ -437,15 +465,24 @@ class _HeaderRowState extends State<_HeaderRow> {
                   Image.asset('assets/images/catalog/star.webp',
                       width: 20.r, height: 20.r),
                   SizedBox(width: 4.w),
-                  Text('4,5', style: AppTextStyles.body),
+                  Text(
+                    widget.rating > 0
+                        ? widget.rating
+                            .toStringAsFixed(1)
+                            .replaceAll('.', ',')
+                        : '—',
+                    style: AppTextStyles.body,
+                  ),
                   SizedBox(width: 16.w),
                   GestureDetector(
                     onTap: () => context.push('/profile/reviews'),
-                    child: Text('10 отзывов',
-                        style: AppTextStyles.body.copyWith(
-                          color: AppColors.textPrimary,
-                          decoration: TextDecoration.underline,
-                        )),
+                    child: Text(
+                      '${widget.reviewCount} ${_reviewsWord(widget.reviewCount)}',
+                      style: AppTextStyles.body.copyWith(
+                        color: AppColors.textPrimary,
+                        decoration: TextDecoration.underline,
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -455,6 +492,15 @@ class _HeaderRowState extends State<_HeaderRow> {
       ],
     );
   }
+}
+
+String _reviewsWord(int n) {
+  final int mod100 = n % 100;
+  final int mod10 = n % 10;
+  if (mod100 >= 11 && mod100 <= 14) return 'отзывов';
+  if (mod10 == 1) return 'отзыв';
+  if (mod10 >= 2 && mod10 <= 4) return 'отзыва';
+  return 'отзывов';
 }
 
 class _SectionTitle extends StatelessWidget {

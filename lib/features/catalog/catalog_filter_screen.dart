@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 
+import 'package:dispatcher_1/core/catalog/catalog_service.dart';
+import 'package:dispatcher_1/core/catalog/models.dart';
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
 import 'package:dispatcher_1/core/utils/thousand_separator_formatter.dart';
@@ -23,34 +25,13 @@ class CatalogFilterScreen extends StatefulWidget {
 }
 
 class _CatalogFilterScreenState extends State<CatalogFilterScreen> {
-  static const List<String> _serviceCategories = <String>[
-    'Земляные работы',
-    'Погрузочно-разгрузочные работы',
-    'Перевозка материалов',
-    'Строительные работы',
-    'Дорожные работы',
-    'Буровые работы',
-    'Высотные работы',
-    'Демонтажные работы',
-    'Благоустройство территории',
-  ];
-
-  static const List<String> _equipment = <String>[
-    'Экскаватор-погрузчик',
-    'Экскаватор',
-    'Погрузчик',
-    'Миниэкскаватор',
-    'Буроям',
-    'Самогруз',
-    'Автокран',
-    'Бетононасос',
-    'Эвакуатор',
-    'Автовышка',
-    'Манипулятор',
-    'Минипогрузчик',
-    'Самосвал',
-    'Минитрактор',
-  ];
+  /// Списки техники/категорий тянем из БД, чтобы строки точно совпадали
+  /// с теми, по которым внутри `CatalogService` строится фильтр (он
+  /// маппит title → id через справочники из БД). Раньше тут был хардкод
+  /// и при малейшем расхождении (например, «Экскаватор» в коде vs
+  /// «Экскаватор гусеничный» в БД) фильтр молча возвращал «всех».
+  List<String> _machineryTitles = const <String>[];
+  List<String> _categoryTitles = const <String>[];
 
   final Set<String> _selectedCategories = <String>{};
   final Set<String> _selectedEquipment = <String>{};
@@ -90,6 +71,44 @@ class _CatalogFilterScreenState extends State<CatalogFilterScreen> {
     _wholeDay = AppliedFilter.wholeDay;
     _radiusKm = AppliedFilter.radiusKm;
     _address = AppliedFilter.address;
+
+    // Синхронно берём то, что уже в кэше CatalogService — обычно
+    // справочники прогреты на главном экране каталога, и чипы
+    // отрисовываются с первого кадра без сетевого запроса.
+    final List<MachineryRef>? mc = CatalogService.instance.cachedMachinery;
+    final List<CategoryRef>? cc = CatalogService.instance.cachedCategories;
+    if (mc != null) {
+      _machineryTitles =
+          mc.map((MachineryRef e) => e.title).toList(growable: false);
+    }
+    if (cc != null) {
+      _categoryTitles =
+          cc.map((CategoryRef e) => e.title).toList(growable: false);
+    }
+    // Если кэша ещё нет (зашли в фильтр в обход каталога) — асинхронно
+    // догружаем и обновляем чипы. listActiveMachinery/Categories
+    // сами поддержат кэш для следующих экранов.
+    if (mc == null || cc == null) {
+      _loadDirectories();
+    }
+  }
+
+  Future<void> _loadDirectories() async {
+    try {
+      final List<MachineryRef> m =
+          await CatalogService.instance.listActiveMachinery();
+      final List<CategoryRef> c =
+          await CatalogService.instance.listActiveCategories();
+      if (!mounted) return;
+      setState(() {
+        _machineryTitles =
+            m.map((MachineryRef e) => e.title).toList(growable: false);
+        _categoryTitles =
+            c.map((CategoryRef e) => e.title).toList(growable: false);
+      });
+    } catch (_) {
+      // БД упала — оставляем чипы пустыми, фильтр временно недоступен.
+    }
   }
 
   @override
@@ -197,7 +216,7 @@ class _CatalogFilterScreenState extends State<CatalogFilterScreen> {
                       _SectionTitle('Категории услуг'),
                       SizedBox(height: 12.h),
                       _ChipGrid(
-                        values: _serviceCategories,
+                        values: _categoryTitles,
                         selected: _selectedCategories,
                         onToggle: (String v) => setState(() {
                           if (!_selectedCategories.add(v)) {
@@ -209,7 +228,7 @@ class _CatalogFilterScreenState extends State<CatalogFilterScreen> {
                       _SectionTitle('Спецтехника'),
                       SizedBox(height: 12.h),
                       _ChipGrid(
-                        values: _equipment,
+                        values: _machineryTitles,
                         selected: _selectedEquipment,
                         onToggle: (String v) => setState(() {
                           if (!_selectedEquipment.add(v)) {
@@ -1237,7 +1256,6 @@ class AddressBottomSheet extends StatefulWidget {
 
 class AddressBottomSheetState extends State<AddressBottomSheet> {
   final TextEditingController _ctrl = TextEditingController();
-  String _query = '';
 
   static const List<MockAddress> _all = <MockAddress>[
     MockAddress('Моё местоположение', null),
@@ -1292,8 +1310,6 @@ class AddressBottomSheetState extends State<AddressBottomSheet> {
                           controller: _ctrl,
                           autofocus: true,
                           inputFormatters: [LengthLimitingTextInputFormatter(100)],
-                          onChanged: (String v) =>
-                              setState(() => _query = v),
                           style: AppTextStyles.bodyMRegular.copyWith(
                             fontSize: 16.sp,
                             color: AppColors.textPrimary,

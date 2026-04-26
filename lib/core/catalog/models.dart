@@ -175,6 +175,23 @@ class CustomerProfile {
       );
 }
 
+/// Услуга исполнителя, попадающая под фильтр по технике в каталоге.
+/// Используется на карточке исполнителя, чтобы показать конкретную
+/// строку прайса вместо обобщённого списка «Спецтехника / Категории».
+class MatchingService {
+  const MatchingService({
+    required this.machineryTitle,
+    required this.pricePerHour,
+    required this.pricePerDay,
+    required this.minHours,
+  });
+
+  final String machineryTitle;
+  final double? pricePerHour;
+  final double? pricePerDay;
+  final int? minHours;
+}
+
 /// Запись каталога исполнителей (видит заказчик при поиске).
 /// Для каждой публичной карточки в `executor_cards` плюс данные из
 /// `profiles` и aggregate по `services` (техника/категории/мин. цена).
@@ -187,12 +204,14 @@ class ExecutorCardListItem {
     required this.reviewCountAsExecutor,
     required this.legalStatus,
     required this.experienceYears,
+    required this.about,
     required this.locationAddress,
     required this.radiusKm,
     required this.machineryTitles,
     required this.categoryTitles,
     required this.minPricePerHour,
     required this.minPricePerDay,
+    this.matchingServices = const <MatchingService>[],
   });
 
   final String userId;
@@ -202,12 +221,93 @@ class ExecutorCardListItem {
   final int reviewCountAsExecutor;
   final String? legalStatus;
   final int? experienceYears;
+  final String? about;
   final String? locationAddress;
   final int? radiusKm;
   final List<String> machineryTitles;
   final List<String> categoryTitles;
   final double? minPricePerHour;
   final double? minPricePerDay;
+
+  /// Услуги исполнителя по выбранной в фильтре технике. Заполняется
+  /// только когда `machineryTitles` фильтр непустой — тогда карточка
+  /// в ленте показывает «Экскаватор — 3 500 ₽/час, от 4 часов» вместо
+  /// обобщённых блоков «Спецтехника / Категории услуг».
+  final List<MatchingService> matchingServices;
+}
+
+/// Услуга исполнителя для блока «Услуги» в его карточке. Полные поля
+/// из таблицы `services`, плюс резолвнутые названия техники.
+class ExecutorService {
+  const ExecutorService({
+    required this.id,
+    required this.title,
+    required this.description,
+    required this.machineryTitles,
+    required this.categoryTitles,
+    required this.pricePerHour,
+    required this.pricePerDay,
+    required this.minHours,
+    this.photos = const <String>[],
+  });
+
+  final String id;
+  final String title;
+  final String? description;
+  final List<String> machineryTitles;
+  final List<String> categoryTitles;
+  final double? pricePerHour;
+  final double? pricePerDay;
+  final int? minHours;
+
+  /// Фото услуги — публичные URL из storage-бакета `service-photos`.
+  /// До 8 шт. (CHECK в БД). Пустой список — фото не загружены.
+  final List<String> photos;
+}
+
+/// Override по конкретному дню в расписании исполнителя
+/// (`schedule_day_overrides`). По соглашению default — рабочий день,
+/// поэтому в БД хранятся только дни-исключения.
+class ExecutorScheduleDay {
+  const ExecutorScheduleDay({
+    required this.day,
+    required this.accepting,
+    required this.wholeDay,
+    required this.timeFrom,
+    required this.timeTo,
+    required this.machineryTitles,
+    required this.radiusKm,
+  });
+
+  final DateTime day;
+
+  /// `true` — исполнитель работает в этот день; `false` — выходной.
+  final bool accepting;
+
+  /// Если `true` — время не задано (24/7 на этот день).
+  final bool wholeDay;
+
+  /// Локальное время «c», формат `HH:MM` или null.
+  final String? timeFrom;
+  final String? timeTo;
+  final List<String> machineryTitles;
+  final int? radiusKm;
+}
+
+/// Полная карточка исполнителя для экрана просмотра. Включает всё
+/// из [ExecutorCardListItem] + список услуг + расписание (overrides).
+class ExecutorCardFull {
+  const ExecutorCardFull({
+    required this.summary,
+    required this.services,
+    required this.scheduleOverrides,
+  });
+
+  final ExecutorCardListItem summary;
+  final List<ExecutorService> services;
+
+  /// Дни-исключения расписания. Ключ — дата без времени (UTC date).
+  final Map<DateTime, ExecutorScheduleDay> scheduleOverrides;
 }
 
 /// Один отзыв для отображения на карточке заказчика/исполнителя.

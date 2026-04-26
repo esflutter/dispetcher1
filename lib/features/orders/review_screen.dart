@@ -1,13 +1,35 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/widgets/primary_button.dart';
 import 'package:dispatcher_1/features/orders/widgets/order_alerts.dart';
 
 /// Экран «Как всё прошло?» — оценка пользователя + комментарий + кнопка.
+/// Сохраняет отзыв в `public.reviews`. Если [targetUserId] не передан
+/// (legacy callsite), отзыв в БД не уходит — показывается только диалог
+/// «отзыв отправлен».
 class ReviewScreen extends StatefulWidget {
-  const ReviewScreen({super.key});
+  const ReviewScreen({
+    super.key,
+    this.targetUserId,
+    this.matchId,
+    this.subject = 'executor',
+  });
+
+  /// Кому ставим оценку (executor_id для отзыва заказчика).
+  final String? targetUserId;
+
+  /// Матч, в рамках которого пишется отзыв. RLS-триггер привязывает
+  /// отзыв к мэтчу и проверяет, что автор имел право его оставить.
+  final String? matchId;
+
+  /// 'executor' — заказчик оценивает исполнителя. 'customer' —
+  /// исполнитель оценивает заказчика. По умолчанию 'executor', т.к.
+  /// этот экран в приложении заказчика.
+  final String subject;
 
   @override
   State<ReviewScreen> createState() => _ReviewScreenState();
@@ -15,6 +37,7 @@ class ReviewScreen extends StatefulWidget {
 
 class _ReviewScreenState extends State<ReviewScreen> {
   int _rating = 0;
+  bool _submitting = false;
   final TextEditingController _comment = TextEditingController();
 
   @override
@@ -24,6 +47,39 @@ class _ReviewScreenState extends State<ReviewScreen> {
   }
 
   Future<void> _submit() async {
+    if (_submitting) return;
+    setState(() => _submitting = true);
+    final String? targetId = widget.targetUserId;
+    if (targetId != null && targetId.isNotEmpty) {
+      try {
+        final SupabaseClient c = Supabase.instance.client;
+        final User? me = c.auth.currentUser;
+        if (me == null) throw const AuthException('Нет активной сессии');
+        await c.from('reviews').insert(<String, dynamic>{
+          'author_id': me.id,
+          'target_id': targetId,
+          'subject': widget.subject,
+          'match_id': widget.matchId,
+          'rating': _rating,
+          'text': _comment.text.trim().isEmpty ? null : _comment.text.trim(),
+        });
+      } on PostgrestException catch (e) {
+        if (!mounted) return;
+        setState(() => _submitting = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Не удалось отправить отзыв: ${e.message}')),
+        );
+        return;
+      } catch (_) {
+        if (!mounted) return;
+        setState(() => _submitting = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Не удалось отправить отзыв.')),
+        );
+        return;
+      }
+    }
+    if (!mounted) return;
     await showReviewSentDialog(context);
     if (!mounted) return;
     // Возвращаем `true`, чтобы родитель пометил заказ как «отзыв оставлен»
@@ -33,7 +89,7 @@ class _ReviewScreenState extends State<ReviewScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final bool canSubmit = _rating > 0;
+    final bool canSubmit = _rating > 0 && !_submitting;
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(

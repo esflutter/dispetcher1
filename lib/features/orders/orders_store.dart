@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import 'package:dispatcher_1/core/catalog/format.dart';
@@ -5,6 +7,13 @@ import 'package:dispatcher_1/core/customer_orders/customer_orders_service.dart';
 import 'package:dispatcher_1/core/customer_orders/models.dart';
 
 import 'package:dispatcher_1/features/orders/widgets/order_status_pill.dart';
+
+/// True, если строка похожа на UUID и заказ скорее всего реальный
+/// (не тестовый мок с id вроде «n0»). Локальные мутации стора
+/// дополнительно вызывают сервисный метод только для таких заказов.
+bool _looksLikeUuid(String id) {
+  return id.length == 36 && id.contains('-');
+}
 
 /// Данные карточки заказа заказчика. Внутренний публичный тип,
 /// используется экраном «Мои заказы», экраном «Выбор заказа для
@@ -24,6 +33,8 @@ class OrderMock {
     this.customerEmail,
     this.matchId,
     this.executorId,
+    this.executorRating = 0,
+    this.executorReviewCount = 0,
     this.number,
     this.description = '',
     this.categories = const <String>[],
@@ -127,6 +138,13 @@ class OrderMock {
   /// `accepted`).
   final String? executorId;
 
+  /// Рейтинг и количество отзывов исполнителя по этому мэтчу. Берутся
+  /// из `profiles.rating_as_executor` / `review_count_as_executor` при
+  /// загрузке (`loadFromDb`). 0 = ещё нет ни одного отзыва — UI
+  /// рисует «—».
+  final double executorRating;
+  final int executorReviewCount;
+
   /// Дополнительные поля, заполняемые из формы создания заказа заказчиком.
   /// У моковых заказов в списке «Мои заказы» они остаются пустыми — экран
   /// подробностей тогда скроет соответствующие блоки.
@@ -190,6 +208,8 @@ class OrderMock {
           clearContacts ? null : (customerEmail ?? this.customerEmail),
       matchId: clearContacts ? null : (matchId ?? this.matchId),
       executorId: clearContacts ? null : (executorId ?? this.executorId),
+      executorRating: clearContacts ? 0 : executorRating,
+      executorReviewCount: clearContacts ? 0 : executorReviewCount,
       number: number,
       description: description,
       categories: categories,
@@ -271,12 +291,6 @@ class MyOrdersStore {
 
   static final ValueNotifier<int> revision = ValueNotifier<int>(0);
 
-  /// Флаг одноразовой подмены initial-моков реальными данными из БД.
-  /// Вызов [loadFromDb] первый раз чистит хардкодные списки и подгружает
-  /// свои заказы текущего `auth.uid()`. Повторные вызовы просто обновляют
-  /// [newOrders] без повторной очистки (initial моков уже нет).
-  static bool _dbSeeded = false;
-
   /// «Ожидает»: заказ опубликован, исполнитель ещё не выбран.
   /// Заполняется из БД через [loadFromDb]; в стартовом состоянии пуст.
   static final List<OrderMock> newOrders = <OrderMock>[];
@@ -331,20 +345,38 @@ class MyOrdersStore {
     newOrders.clear();
     accepted.clear();
     rejected.clear();
-    _dbSeeded = false;
     _bump();
   }
 
-  /// Одноразово вычищает initial-моки и подгружает реальные заказы
-  /// текущего заказчика из БД. Повторные вызовы просто обновляют
-  /// `newOrders` без повторной очистки (initial уже ушли).
-  static Future<void> loadFromDb() async {
-    if (!_dbSeeded) {
-      newOrders.clear();
-      accepted.clear();
-      rejected.clear();
-      _dbSeeded = true;
+  // Маппинг (orders.status, лучший order_matches.status) → UI-статус.
+  // Приоритет: явное cancelled/archived (заказчик/cron поставили) >
+  // мэтч (есть accepted/completed) > только что собранные отклики.
+  static MyOrderStatus _mapStatus(CustomerOrderListItem r) {
+    if (r.status == 'cancelled') return MyOrderStatus.rejectedDeclined;
+    if (r.status == 'archived') return MyOrderStatus.rejectedOther;
+    final String? bestStatus = r.bestMatchStatus;
+    if (bestStatus == 'completed') return MyOrderStatus.completed;
+    if (bestStatus == 'accepted') return MyOrderStatus.accepted;
+    if (bestStatus == 'awaiting_executor') {
+      return MyOrderStatus.awaitingExecutor;
     }
+    if (bestStatus == 'awaiting_customer' || r.respondersCount > 0) {
+      return MyOrderStatus.waitingChoose;
+    }
+    if (bestStatus == 'rejected_by_executor') {
+      // Исполнитель отказался — но «других откликов нет» (мы здесь как
+      // раз потому, что accepted/awaiting_* нет). Идём в зелёный
+      // executorDeclinedWaiting, чтобы заказчик мог снова поискать.
+      return MyOrderStatus.executorDeclinedWaiting;
+    }
+    return MyOrderStatus.waiting;
+  }
+
+  /// Подгружает реальные заказы текущего заказчика из БД. Не очищает
+  /// списки — наоборот, мержит свежие записи к тому, что уже есть в
+  /// памяти (см. `knownIds` ниже), чтобы не потерять только что
+  /// созданный через `addCreated` заказ, ещё не попавший в БД.
+  static Future<void> loadFromDb() async {
     try {
       final List<CustomerOrderListItem> rows =
           await CustomerOrdersService.instance.listMine();
@@ -358,14 +390,11 @@ class MyOrdersStore {
       };
       for (final CustomerOrderListItem r in rows) {
         if (knownIds.contains(r.id)) continue;
-        final MyOrderStatus uiStatus;
-        if (r.status == 'cancelled') {
-          uiStatus = MyOrderStatus.rejectedDeclined;
-        } else if (r.respondersCount > 0) {
-          uiStatus = MyOrderStatus.waitingChoose;
-        } else {
-          uiStatus = MyOrderStatus.waiting;
-        }
+        // Черновики не показываем в UI «Мои заказы» — они появятся, когда
+        // заказчик опубликует. Архив `archived` (cron / истёкшие) и явный
+        // `cancelled` идут в красный архив с разной формулировкой.
+        if (r.status == 'draft') continue;
+        final MyOrderStatus uiStatus = _mapStatus(r);
         final OrderMock mock = OrderMock(
           id: r.id,
           status: uiStatus,
@@ -376,11 +405,21 @@ class MyOrdersStore {
           publishedAt: r.publishedAt,
           number: '№${r.displayNumber.toString().padLeft(8, '0')}',
           respondersCount: r.respondersCount,
+          matchId: r.bestMatchId,
+          executorId: r.bestMatchExecutorId,
+          customerName: r.bestMatchExecutorName,
+          executorRating: r.bestMatchExecutorRating,
+          executorReviewCount: r.bestMatchExecutorReviewCount,
         );
-        if (r.status == 'published') {
-          newOrders.add(mock);
-        } else {
+        if (uiStatus == MyOrderStatus.accepted) {
+          accepted.add(mock);
+        } else if (uiStatus == MyOrderStatus.completed) {
+          accepted.add(mock);
+        } else if (uiStatus == MyOrderStatus.rejectedDeclined ||
+            uiStatus == MyOrderStatus.rejectedOther) {
           rejected.add(mock);
+        } else {
+          newOrders.add(mock);
         }
       }
       _bump();
@@ -416,12 +455,29 @@ class MyOrdersStore {
     _bump();
   }
 
-  /// Переводит заказ в «красный» статус и складывает в архив.
+  /// Колбэк, который стор зовёт, когда fire-and-forget UPDATE в БД
+  /// падает. Регистрирует его экран, который видит SnackBar — обычно
+  /// это `MyOrdersScreen`. `null` (по умолчанию) — ошибка проглатывается
+  /// тихо, как и было.
+  static void Function(Object error)? onError;
+
+  /// Переводит заказ в «красный» статус и складывает в архив. Параллельно
+  /// делает UPDATE `orders.status='cancelled'` в БД через сервис, чтобы
+  /// заказ исчез из общей ленты для исполнителей. Если запрос упадёт,
+  /// локальный архив всё равно обновится — но мы оповещаем UI через
+  /// [onError], чтобы пользователь видел snackbar и мог повторить.
   static void moveToRejected(OrderMock o, MyOrderStatus newStatus) {
     newOrders.remove(o);
     accepted.remove(o);
     rejected.insert(0, o.copyWith(status: newStatus));
     _bump();
+    if (_looksLikeUuid(o.id)) {
+      unawaited(
+        CustomerOrdersService.instance
+            .cancelOrder(o.id)
+            .catchError((Object e) => onError?.call(e)),
+      );
+    }
   }
 
   /// «Выбрать другого исполнителя» из статуса `awaitingExecutor`.
@@ -438,6 +494,19 @@ class MyOrdersStore {
         : MyOrderStatus.waiting;
     final int idx = newOrders.indexWhere((OrderMock x) => x.id == o.id);
     if (idx < 0) return newStatus;
+    // Прежнее предложение тоже надо отозвать в БД, иначе исполнитель
+    // увидит призрачный «awaiting_executor» с заказа, от которого его
+    // уже отвели. matchId известен только если предложение было сделано
+    // в этой сессии (через proposeToExecutor) — иначе fire-and-forget
+    // пропустим.
+    final String? prevMatchId = newOrders[idx].matchId;
+    if (prevMatchId != null && prevMatchId.isNotEmpty) {
+      unawaited(
+        CustomerOrdersService.instance
+            .rejectResponse(prevMatchId)
+            .catchError((Object e) => onError?.call(e)),
+      );
+    }
     // Сбрасываем контакты ранее предложенного исполнителя — он больше
     // не ассоциирован с заказом. Иначе его имя и телефон тихо
     // переехали бы в следующий матч.
@@ -487,11 +556,19 @@ class MyOrdersStore {
   }
 
   /// Возвращает архивный заказ обратно в «Ожидает» со статусом
-  /// `waiting` (после нажатия «Опубликовать заново»).
+  /// `waiting` (после нажатия «Опубликовать заново»). Параллельно
+  /// возвращает БД-заказ в `published`.
   static void republish(OrderMock o) {
     rejected.remove(o);
     newOrders.insert(0, o.copyWith(status: MyOrderStatus.waiting));
     _bump();
+    if (_looksLikeUuid(o.id)) {
+      unawaited(
+        CustomerOrdersService.instance
+            .republishOrder(o.id)
+            .catchError((Object e) => onError?.call(e)),
+      );
+    }
   }
 
   /// При блокировке аккаунта переносит активные заказы в архив со
