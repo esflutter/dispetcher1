@@ -216,6 +216,12 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
   List<String> _categories = const <String>[];
   List<String> _machinery = const <String>[];
 
+  /// true пока идёт INSERT + загрузка фото + UPDATE. Блокирует:
+  /// - повторное нажатие «Создать» (защита от дубль-инсёрта);
+  /// - back-навигацию (`PopScope.canPop=false`), чтобы пользователь не
+  ///   ушёл с экрана с заказом, висящим в `draft` без фото.
+  bool _creating = false;
+
   @override
   void initState() {
     super.initState();
@@ -382,6 +388,7 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
       _address != null;
 
   Future<void> _onCreateTap() async {
+    if (_creating) return;
     if (!DailyOrderLimit.canCreate) {
       await DailyOrderLimit.showLimitDialog(context);
       return;
@@ -394,28 +401,30 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
     );
     if (!mounted || published != true) return;
 
-    final String dbId;
+    setState(() => _creating = true);
+
+    final CreateOrderResult result;
     try {
       final co.OrderDraft dbDraft = _buildDbDraft();
-      // Фото уйдут в storage уже после INSERT-а заказа: путь должен
-      // содержать `order_id`, иначе RLS-политика на чтение для исполнителя
-      // не пропустит. Локальные ассет-моки/уже загруженные http-URL не
-      // отдаём — в БД они нам не нужны.
+      // Локальные ассет-моки и уже загруженные http-URL не отдаём в
+      // storage — нужны только новые файлы из галереи/камеры.
       final List<File> photoFiles = _photos
           .where((String p) =>
               !p.startsWith('assets/') && !p.startsWith('http'))
           .map(File.new)
           .toList();
-      dbId = await CustomerOrdersService.instance
+      result = await CustomerOrdersService.instance
           .createOrder(dbDraft, photoFiles: photoFiles);
     } on PostgrestException catch (e) {
       if (!mounted) return;
+      setState(() => _creating = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Не удалось опубликовать: ${e.message}')),
       );
       return;
     } catch (e) {
       if (!mounted) return;
+      setState(() => _creating = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Не удалось опубликовать: $e')),
       );
@@ -426,10 +435,28 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
     // MyOrdersStore — локальный кэш UI. Используем DB-id, чтобы при
     // следующем `loadFromDb` запись из БД совпала с локальной по id и
     // мы не получили заказ-дубль в списке «Мои заказы».
-    MyOrdersStore.addCreated(_buildOrderMock(draft, id: dbId));
+    MyOrdersStore.addCreated(_buildOrderMock(draft, id: result.id));
     if (!mounted) return;
+
+    if (result.hasPhotoFailures) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Заказ опубликован, но ${result.photosFailed} '
+            '${_photoNoun(result.photosFailed)} не загрузились',
+          ),
+        ),
+      );
+    }
+
+    setState(() => _creating = false);
     Navigator.of(context).maybePop();
   }
+
+  /// «1 фото / 2 фото / 5 фото» — в русском «фото» не склоняется по числу,
+  /// но оставляю отдельный геттер, если в будущем дизайн потребует
+  /// «фотография/фотографии/фотографий».
+  String _photoNoun(int n) => 'фото';
 
   /// Собирает черновик в формате, пригодном для INSERT в `public.orders`.
   /// Поле `photos` оставляем пустым — фото заливаются уже после INSERT-а
@@ -556,6 +583,19 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
 
   @override
   Widget build(BuildContext context) {
+    return PopScope(
+      canPop: !_creating,
+      child: Stack(
+        children: <Widget>[
+          _buildScaffold(context),
+          if (_creating)
+            const _CreatingOverlay(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildScaffold(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: _CreateAppBar(onBack: () => Navigator.of(context).maybePop()),
@@ -1336,6 +1376,60 @@ class _UnitDropdown extends StatelessWidget {
             ),
           ),
       ],
+    );
+  }
+}
+
+/// Полупрозрачный модальный оверлей на время INSERT + загрузки фото
+/// + UPDATE. Перекрывает форму, чтобы пользователь не мог тапнуть
+/// «Создать» повторно или уйти назад жестом — пара ловушек уже стоит
+/// в State (`_creating` + `PopScope.canPop`), но визуальная блокировка
+/// делает поведение однозначным.
+class _CreatingOverlay extends StatelessWidget {
+  const _CreatingOverlay();
+
+  @override
+  Widget build(BuildContext context) {
+    return ColoredBox(
+      color: const Color(0x99000000),
+      child: Center(
+        child: Container(
+          padding: EdgeInsets.symmetric(horizontal: 24.w, vertical: 20.h),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(16.r),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              SizedBox(
+                width: 32.r,
+                height: 32.r,
+                child: const CircularProgressIndicator(
+                  color: AppColors.primary,
+                  strokeWidth: 3,
+                ),
+              ),
+              SizedBox(height: 16.h),
+              Text(
+                'Публикуем заказ…',
+                style: AppTextStyles.titleS.copyWith(
+                  color: AppColors.textPrimary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              SizedBox(height: 4.h),
+              Text(
+                'Загружаем фото, не закрывайте экран',
+                textAlign: TextAlign.center,
+                style: AppTextStyles.caption.copyWith(
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

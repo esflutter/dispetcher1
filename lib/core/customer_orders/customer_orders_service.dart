@@ -8,6 +8,24 @@ import 'package:dispatcher_1/core/storage/storage_service.dart';
 
 import 'models.dart';
 
+/// Результат публикации заказа: id новой записи + сколько фото из
+/// заявленных реально залилось в Storage. UI показывает снэкбар, если
+/// `photosUploaded < photosTotal`.
+class CreateOrderResult {
+  const CreateOrderResult({
+    required this.id,
+    required this.photosUploaded,
+    required this.photosTotal,
+  });
+
+  final String id;
+  final int photosUploaded;
+  final int photosTotal;
+
+  bool get hasPhotoFailures => photosUploaded < photosTotal;
+  int get photosFailed => photosTotal - photosUploaded;
+}
+
 /// Заказы, созданные текущим заказчиком (`orders.customer_id = me`),
 /// и входящие отклики исполнителей на них (`order_matches`).
 class CustomerOrdersService {
@@ -16,17 +34,27 @@ class CustomerOrdersService {
 
   SupabaseClient get _client => Supabase.instance.client;
 
-  /// INSERT в `public.orders`. Триггер `set_published_at` проставит
-  /// `published_at=now()` на статусе `published`. Возвращает id нового
-  /// заказа.
+  /// INSERT в `public.orders` + загрузка фото + публикация одним актом.
+  /// Возвращает [CreateOrderResult]: id заказа и инфо о том, сколько
+  /// фото из ожидаемых реально залилось.
   ///
-  /// Фото заливаем после INSERT, потому что путь в `order-photos` обязан
-  /// содержать `order_id` (RLS на чтении для исполнителя проверяет
-  /// `foldername[2] = order_id`). Сначала вставляем заказ с пустым
-  /// `photos`, получаем id, заливаем фото с нужным префиксом и UPDATE-ом
-  /// дописываем массив путей. Если в процессе залива упадёт сеть —
-  /// заказ всё равно опубликован, просто без фото.
-  Future<String> createOrder(
+  /// Поток специально draft → upload → published, чтобы исполнители не
+  /// видели заказ в каталоге, пока к нему не подтянутся фото:
+  ///
+  /// 1. INSERT со `status='draft'` (заказ в БД есть, но в `listPublishedOrders`
+  ///    не выбирается — фильтр `is_published`).
+  /// 2. Заливаем фото в `order-photos/<user_id>/<order_id>/...` —
+  ///    путь обязан содержать `order_id` из-за RLS-политики чтения.
+  /// 3. UPDATE одним запросом: `photos = uploaded` + `status='published'`.
+  ///    Триггер `set_published_at` поставит `published_at=now()` на
+  ///    переходе в `published`.
+  ///
+  /// Если все фото не залились — заказ всё равно публикуем (оставлять его
+  /// застрявшим в `draft` без UI-управления черновиками было бы хуже).
+  /// UI вызывающего экрана узнаёт о частичной потере по
+  /// [CreateOrderResult.photosUploaded] / [CreateOrderResult.photosTotal]
+  /// и показывает снэкбар.
+  Future<CreateOrderResult> createOrder(
     OrderDraft d, {
     bool publishNow = true,
     List<File> photoFiles = const <File>[],
@@ -73,7 +101,9 @@ class CustomerOrdersService {
       'time_from': d.timeFrom == null ? null : '${d.timeFrom!}:00',
       'time_to': d.timeTo == null ? null : '${d.timeTo!}:00',
       'whole_day': d.wholeDay,
-      'status': publishNow ? 'published' : 'draft',
+      // Намеренно draft, даже если publishNow=true: финальный статус
+      // переключим в UPDATE ниже, после того как фото загрузятся.
+      'status': 'draft',
     };
 
     final Map<String, dynamic> row = await _client
@@ -83,26 +113,32 @@ class CustomerOrdersService {
         .single();
     final String orderId = row['id'] as String;
 
-    if (photoFiles.isNotEmpty) {
-      final List<String> uploaded = <String>[];
-      for (final File f in photoFiles) {
-        try {
-          final String path = await StorageService.instance
-              .uploadOrderPhoto(f, orderId: orderId);
-          uploaded.add(path);
-        } catch (_) {
-          // Конкретное фото не залилось — пропускаем; остальные пробуем.
-        }
-      }
-      if (uploaded.isNotEmpty) {
-        await _client
-            .from('orders')
-            .update(<String, dynamic>{'photos': uploaded})
-            .eq('id', orderId);
+    final List<String> uploaded = <String>[];
+    for (final File f in photoFiles) {
+      try {
+        final String path = await StorageService.instance
+            .uploadOrderPhoto(f, orderId: orderId);
+        uploaded.add(path);
+      } catch (_) {
+        // Конкретное фото не залилось — пропускаем; остальные пробуем.
+        // UI узнает о потере по photosUploaded < photosTotal.
       }
     }
 
-    return orderId;
+    final Map<String, dynamic> finalize = <String, dynamic>{
+      'photos': uploaded,
+      if (publishNow) 'status': 'published',
+    };
+    await _client
+        .from('orders')
+        .update(finalize)
+        .eq('id', orderId);
+
+    return CreateOrderResult(
+      id: orderId,
+      photosUploaded: uploaded.length,
+      photosTotal: photoFiles.length,
+    );
   }
 
   /// Свои заказы + счётчик активных (не-терминальных) откликов.
