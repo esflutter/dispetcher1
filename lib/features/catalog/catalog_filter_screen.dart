@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -5,6 +7,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 
 import 'package:dispatcher_1/core/catalog/catalog_service.dart';
 import 'package:dispatcher_1/core/catalog/models.dart';
+import 'package:dispatcher_1/core/dadata/dadata_service.dart';
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
 import 'package:dispatcher_1/core/utils/thousand_separator_formatter.dart';
@@ -405,7 +408,8 @@ class _CatalogFilterScreenState extends State<CatalogFilterScreen> {
                       SizedBox(height: 12.h),
                       GestureDetector(
                         onTap: () async {
-                          final String? result = await showModalBottomSheet<String>(
+                          final DadataAddress? result =
+                              await showModalBottomSheet<DadataAddress>(
                             context: context,
                             isScrollControlled: true,
                             backgroundColor: Colors.transparent,
@@ -413,7 +417,7 @@ class _CatalogFilterScreenState extends State<CatalogFilterScreen> {
                           );
                           if (result != null) {
                             setState(() {
-                              _address = result;
+                              _address = result.value;
                               // Радиус поиска по умолчанию — 10 км.
                               // Искать строго в точке адреса почти
                               // бессмысленно (мало совпадений), но ручной
@@ -1247,6 +1251,12 @@ class InlineTimePickerState extends State<InlineTimePicker> {
 }
 
 /// Bottom Sheet для выбора адреса в фильтре «Местоположение».
+/// Боттом-шит выбора адреса через DaData Suggest API.
+///
+/// Дебаунс 300 мс — ниже сильно растёт расход бесплатной квоты, выше
+/// чувствуется как «тормоза». Возвращает [DadataAddress] (содержит
+/// `value` и координаты), чтобы каллер мог сохранить и адрес, и lat/lon
+/// в БД (`orders.latitude`/`orders.longitude`).
 class AddressBottomSheet extends StatefulWidget {
   const AddressBottomSheet({super.key});
 
@@ -1256,18 +1266,51 @@ class AddressBottomSheet extends StatefulWidget {
 
 class AddressBottomSheetState extends State<AddressBottomSheet> {
   final TextEditingController _ctrl = TextEditingController();
+  Timer? _debounce;
+  List<DadataAddress> _suggestions = const <DadataAddress>[];
+  bool _loading = false;
 
-  static const List<MockAddress> _all = <MockAddress>[
-    MockAddress('Моё местоположение', null),
-    MockAddress('Адрес', 'Москва, Московская область'),
-    MockAddress('Адрес', 'Москва, Московская область'),
-    MockAddress('Адрес', 'Москва, Московская область'),
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _ctrl.addListener(_onChanged);
+  }
 
   @override
   void dispose() {
-    _ctrl.dispose();
+    _debounce?.cancel();
+    _ctrl
+      ..removeListener(_onChanged)
+      ..dispose();
     super.dispose();
+  }
+
+  void _onChanged() {
+    _debounce?.cancel();
+    final String q = _ctrl.text.trim();
+    if (q.isEmpty) {
+      setState(() {
+        _suggestions = const <DadataAddress>[];
+        _loading = false;
+      });
+      return;
+    }
+    setState(() => _loading = true);
+    _debounce = Timer(const Duration(milliseconds: 300), () => _fetch(q));
+  }
+
+  Future<void> _fetch(String query) async {
+    final List<DadataAddress> res =
+        await DadataService.instance.suggest(query);
+    if (!mounted) return;
+    // Защита от гонки: пока летел запрос, пользователь мог ввести что-то
+    // ещё. Если текст в поле уже не совпадает с тем, что мы запрашивали,
+    // игнорируем результат — следующий debounce пришлёт более свежий.
+    if (_ctrl.text.trim() != query) return;
+    setState(() {
+      _suggestions = res;
+      _loading = false;
+    });
   }
 
   @override
@@ -1285,7 +1328,6 @@ class AddressBottomSheetState extends State<AddressBottomSheet> {
           child: Column(
             children: <Widget>[
               SizedBox(height: 16.h),
-              // Поле поиска.
               Padding(
                 padding: EdgeInsets.symmetric(horizontal: 16.w),
                 child: Container(
@@ -1309,7 +1351,9 @@ class AddressBottomSheetState extends State<AddressBottomSheet> {
                         child: TextField(
                           controller: _ctrl,
                           autofocus: true,
-                          inputFormatters: [LengthLimitingTextInputFormatter(100)],
+                          inputFormatters: <TextInputFormatter>[
+                            LengthLimitingTextInputFormatter(100),
+                          ],
                           style: AppTextStyles.bodyMRegular.copyWith(
                             fontSize: 16.sp,
                             color: AppColors.textPrimary,
@@ -1325,66 +1369,62 @@ class AddressBottomSheetState extends State<AddressBottomSheet> {
                           ),
                         ),
                       ),
+                      if (_loading)
+                        SizedBox(
+                          width: 16.r,
+                          height: 16.r,
+                          child: const CircularProgressIndicator(
+                            color: AppColors.primary,
+                            strokeWidth: 2,
+                          ),
+                        ),
                     ],
                   ),
                 ),
               ),
               SizedBox(height: 8.h),
-              // Список адресов.
               Expanded(
-                child: ListView.builder(
-                  controller: scrollCtrl,
-                  padding: EdgeInsets.symmetric(horizontal: 16.w),
-                  itemCount: _all.length,
-                  itemBuilder: (BuildContext context, int i) {
-                    final MockAddress a = _all[i];
-                    return InkWell(
-                      onTap: () => Navigator.of(context).pop(a.title),
-                      child: Padding(
-                        padding: EdgeInsets.symmetric(vertical: 14.h),
-                        child: Row(
-                          children: <Widget>[
-                            Image.asset(
-                              'assets/icons/ui/location.webp',
-                              width: 20.r,
-                              height: 20.r,
-                              fit: BoxFit.contain,
-                            ),
-                            SizedBox(width: 12.w),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment:
-                                    CrossAxisAlignment.start,
+                child: _suggestions.isEmpty
+                    ? _EmptyHint(
+                        query: _ctrl.text.trim(),
+                        loading: _loading,
+                      )
+                    : ListView.builder(
+                        controller: scrollCtrl,
+                        padding: EdgeInsets.symmetric(horizontal: 16.w),
+                        itemCount: _suggestions.length,
+                        itemBuilder: (BuildContext context, int i) {
+                          final DadataAddress a = _suggestions[i];
+                          return InkWell(
+                            onTap: () => Navigator.of(context).pop(a),
+                            child: Padding(
+                              padding: EdgeInsets.symmetric(vertical: 14.h),
+                              child: Row(
                                 children: <Widget>[
-                                  Text(
-                                    a.title,
-                                    style: AppTextStyles.bodyMRegular
-                                        .copyWith(
-                                      fontSize: 16.sp,
-                                      fontWeight: FontWeight.w500,
-                                      color: AppColors.textPrimary,
-                                    ),
+                                  Image.asset(
+                                    'assets/icons/ui/location.webp',
+                                    width: 20.r,
+                                    height: 20.r,
+                                    fit: BoxFit.contain,
                                   ),
-                                  if (a.subtitle != null) ...<Widget>[
-                                    SizedBox(height: 2.h),
-                                    Text(
-                                      a.subtitle!,
+                                  SizedBox(width: 12.w),
+                                  Expanded(
+                                    child: Text(
+                                      a.value,
                                       style: AppTextStyles.bodyMRegular
                                           .copyWith(
-                                        fontSize: 13.sp,
-                                        color: AppColors.textTertiary,
+                                        fontSize: 16.sp,
+                                        fontWeight: FontWeight.w500,
+                                        color: AppColors.textPrimary,
                                       ),
                                     ),
-                                  ],
+                                  ),
                                 ],
                               ),
                             ),
-                          ],
-                        ),
+                          );
+                        },
                       ),
-                    );
-                  },
-                ),
               ),
             ],
           ),
@@ -1394,10 +1434,31 @@ class AddressBottomSheetState extends State<AddressBottomSheet> {
   }
 }
 
-class MockAddress {
-  const MockAddress(this.title, this.subtitle);
-  final String title;
-  final String? subtitle;
+/// Подсказка под пустым полем поиска или над пустым результатом DaData.
+class _EmptyHint extends StatelessWidget {
+  const _EmptyHint({required this.query, required this.loading});
+
+  final String query;
+  final bool loading;
+
+  @override
+  Widget build(BuildContext context) {
+    if (loading) return const SizedBox.shrink();
+    final String text = query.isEmpty
+        ? 'Начните вводить адрес — появятся подсказки'
+        : 'Адрес не найден. Уточните запрос.';
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: 24.w, vertical: 24.h),
+      child: Text(
+        text,
+        textAlign: TextAlign.center,
+        style: AppTextStyles.bodyMRegular.copyWith(
+          color: AppColors.textTertiary,
+          fontSize: 14.sp,
+        ),
+      ),
+    );
+  }
 }
 
 /// Глобальное состояние применённого фильтра каталога. Лента исполнителей

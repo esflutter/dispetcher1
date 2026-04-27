@@ -10,6 +10,7 @@ import 'package:dispatcher_1/core/catalog/catalog_service.dart';
 import 'package:dispatcher_1/core/catalog/models.dart' as cat;
 import 'package:dispatcher_1/core/customer_orders/customer_orders_service.dart';
 import 'package:dispatcher_1/core/customer_orders/models.dart' as co;
+import 'package:dispatcher_1/core/dadata/dadata_service.dart';
 import 'package:dispatcher_1/core/settings/settings_service.dart';
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
@@ -202,6 +203,12 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
   bool _wholeDay = false;
   String? _openTimePicker;
   String? _address;
+  /// Координаты выбранного адреса из DaData. Сохраняем рядом с `_address`,
+  /// чтобы исполнитель видел заказ на карте по точке, а не по детерминированному
+  /// мок-хешу. null, если пользователь выбрал адрес из старого мок-списка
+  /// или DaData не нашёл координат для свежего адреса (новостройка).
+  double? _lat;
+  double? _lon;
   final List<String> _photos = <String>[];
   final Set<String> _selCat = <String>{};
   final Set<String> _selMach = <String>{};
@@ -366,14 +373,18 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
   }
 
   Future<void> _openAddressSheet() async {
-    final String? result = await showModalBottomSheet<String>(
+    final DadataAddress? result = await showModalBottomSheet<DadataAddress>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (_) => const AddressBottomSheet(),
     );
     if (result != null && mounted) {
-      setState(() => _address = result);
+      setState(() {
+        _address = result.value;
+        _lat = result.lat;
+        _lon = result.lon;
+      });
     }
   }
 
@@ -478,6 +489,8 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
         );
       }).toList(),
       address: _address ?? '',
+      latitude: _lat,
+      longitude: _lon,
       dateFrom: _dateFrom!,
       dateTo: _exactDate ? null : _dateTo,
       exactDate: _exactDate,
