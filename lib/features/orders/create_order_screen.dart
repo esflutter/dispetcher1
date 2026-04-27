@@ -44,6 +44,32 @@ class DailyOrderLimit {
     } catch (_) {/* остаётся дефолт 30 */}
   }
 
+  /// Считает реально созданные сегодня заказы из БД и подгоняет под них
+  /// локальный счётчик. Без этого `_count` хранится только в памяти Dart
+  /// и сбрасывается при перезапуске приложения — пользователь успевал
+  /// заполнить форму, отправить INSERT и получить отказ от серверного
+  /// триггера `enforce_daily_order_limit`.
+  static Future<void> primeCountFromDb() async {
+    try {
+      final SupabaseClient client = Supabase.instance.client;
+      final User? user = client.auth.currentUser;
+      if (user == null) return;
+      final DateTime now = DateTime.now();
+      final DateTime today = DateTime(now.year, now.month, now.day);
+      final String iso = '${today.year.toString().padLeft(4, '0')}-'
+          '${today.month.toString().padLeft(2, '0')}-'
+          '${today.day.toString().padLeft(2, '0')}';
+      final List<Map<String, dynamic>> rows = await client
+          .from('orders')
+          .select('id')
+          .eq('customer_id', user.id)
+          .gte('created_at', '${iso}T00:00:00')
+          .lte('created_at', '${iso}T23:59:59');
+      _date = today;
+      _count = rows.length;
+    } catch (_) {/* silent — оставляем локальный счётчик */}
+  }
+
   static void _rolloverIfNeeded() {
     final DateTime now = DateTime.now();
     final DateTime today = DateTime(now.year, now.month, now.day);

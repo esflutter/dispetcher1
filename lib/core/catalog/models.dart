@@ -206,6 +206,8 @@ class ExecutorCardListItem {
     required this.experienceYears,
     required this.about,
     required this.locationAddress,
+    required this.locationLat,
+    required this.locationLng,
     required this.radiusKm,
     required this.machineryTitles,
     required this.categoryTitles,
@@ -223,6 +225,12 @@ class ExecutorCardListItem {
   final int? experienceYears;
   final String? about;
   final String? locationAddress;
+  /// Координаты адреса карточки. Заполняются при выборе адреса в форме
+  /// `EditExecutorCardScreen`; null для старых карточек, созданных до
+  /// подключения DaData. На карте каталога такой исполнитель попадает
+  /// под mock-fallback, в фильтре по радиусу — отсекается.
+  final double? locationLat;
+  final double? locationLng;
   final int? radiusKm;
   final List<String> machineryTitles;
   final List<String> categoryTitles;

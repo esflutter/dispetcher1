@@ -1,5 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'package:dispatcher_1/core/utils/geo_distance.dart';
+
 import 'models.dart';
 
 /// Чтение каталога из Supabase: справочники, лента заказов,
@@ -306,6 +308,9 @@ class CatalogService {
     String? timeFrom,
     String? timeTo,
     bool? wholeDay,
+    double? originLat,
+    double? originLng,
+    int? radiusKm,
     int limit = 50,
   }) async {
     await _primeDirectories();
@@ -319,10 +324,34 @@ class CatalogService {
         .whereType<int>()
         .toList();
 
+    // PostgREST `ilike('profile.name'...)` фильтрует только embedded
+    // ресурс, а не родительские строки — на родительский набор это
+    // не влияет, и в выдачу попадают все опубликованные карточки.
+    // Поэтому при поиске по имени сначала отдельным запросом
+    // резолвим список user_id'ов с подходящим именем, а карточки
+    // фильтруем уже по ним.
+    Set<String>? searchUserIds;
+    final String? s = search?.trim();
+    if (s != null && s.isNotEmpty) {
+      final String esc = s.replaceAll(',', ' ');
+      final List<Map<String, dynamic>> nameRows = await _client
+          .from('profiles')
+          .select('id')
+          .ilike('name', '%$esc%')
+          .limit(limit * 4);
+      searchUserIds = <String>{
+        for (final Map<String, dynamic> r in nameRows) r['id'] as String,
+      };
+      if (searchUserIds.isEmpty) {
+        return <ExecutorCardListItem>[];
+      }
+    }
+
     PostgrestFilterBuilder<List<Map<String, dynamic>>> q = _client
         .from('executor_cards')
         .select(
-          'user_id, location_address, radius_km, '
+          'user_id, location_address, location_lat, location_lng, '
+          'radius_km, '
           'profile:profiles!executor_cards_user_id_fkey('
           'id, name, avatar_url, legal_status, experience_years, about, '
           'rating_as_executor, review_count_as_executor, '
@@ -330,11 +359,8 @@ class CatalogService {
         )
         .eq('is_published', true);
 
-    final String? s = search?.trim();
-    if (s != null && s.isNotEmpty) {
-      // Поиск по имени исполнителя через related-таблицу.
-      final String esc = s.replaceAll(',', ' ');
-      q = q.ilike('profile.name', '%$esc%');
+    if (searchUserIds != null) {
+      q = q.inFilter('user_id', searchUserIds.toList());
     }
 
     List<Map<String, dynamic>> cards =
@@ -453,6 +479,21 @@ class CatalogService {
         }
       }
 
+      final double? cardLat = (c['location_lat'] as num?)?.toDouble();
+      final double? cardLng = (c['location_lng'] as num?)?.toDouble();
+
+      // Клиентский фильтр радиуса (haversine). Без PostGIS на сервере
+      // считаем расстояние от точки фильтра до адреса карточки, и
+      // пропускаем только тех, кто в радиусе. Карточки без координат
+      // (старые, созданы до подключения DaData) при активном фильтре
+      // отсекаем — иначе они «всплывали» бы из-за пропущенной проверки.
+      if (radiusKm != null && originLat != null && originLng != null) {
+        if (cardLat == null || cardLng == null) continue;
+        final double d =
+            haversineKm(originLat, originLng, cardLat, cardLng);
+        if (d > radiusKm) continue;
+      }
+
       out.add(ExecutorCardListItem(
         userId: uid,
         name: (p['name'] as String?) ?? 'Пользователь',
@@ -464,6 +505,8 @@ class CatalogService {
         experienceYears: p['experience_years'] as int?,
         about: p['about'] as String?,
         locationAddress: c['location_address'] as String?,
+        locationLat: cardLat,
+        locationLng: cardLng,
         radiusKm: c['radius_km'] as int?,
         machineryTitles: agg.machineryIds
             .map((int id) => _machineryIdToTitle[id] ?? '')
@@ -541,7 +584,8 @@ class CatalogService {
     final Map<String, dynamic>? card = await _client
         .from('executor_cards')
         .select(
-          'user_id, location_address, radius_km, '
+          'user_id, location_address, location_lat, location_lng, '
+          'radius_km, '
           'profile:profiles!executor_cards_user_id_fkey('
           'id, name, avatar_url, legal_status, experience_years, about, '
           'rating_as_executor, review_count_as_executor, '
@@ -600,6 +644,8 @@ class CatalogService {
       experienceYears: p['experience_years'] as int?,
       about: p['about'] as String?,
       locationAddress: card['location_address'] as String?,
+      locationLat: (card['location_lat'] as num?)?.toDouble(),
+      locationLng: (card['location_lng'] as num?)?.toDouble(),
       radiusKm: card['radius_km'] as int?,
       machineryTitles: agg.machineryIds
           .map((int id) => _machineryIdToTitle[id] ?? '')

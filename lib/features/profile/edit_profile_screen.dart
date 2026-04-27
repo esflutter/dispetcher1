@@ -69,7 +69,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     });
     _emailFocus.addListener(() async {
       if (_emailFocus.hasFocus) {
-        if (_emailError != null) {
+        // mounted-проверка: focusNode dispose внутри `dispose()` State
+        // триггерит unfocus уже после `super.dispose()`, и setState
+        // тогда упал бы с «setState after dispose».
+        if (_emailError != null && mounted) {
           setState(() => _emailError = null);
         }
       } else {
@@ -82,8 +85,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               await ProfileService.instance.updatePrivateEmail(value);
             } catch (_) {/* silent */}
           }
-          if (_emailError != null) setState(() => _emailError = null);
-        } else {
+          if (_emailError != null && mounted) {
+            setState(() => _emailError = null);
+          }
+        } else if (mounted) {
           setState(() => _emailError = 'Некорректная электронная почта');
         }
       }
@@ -92,15 +97,24 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
   @override
   void dispose() {
-    // Фикс значения на случай, если пользователь ушёл со экрана
-    // не снимая фокус (например, кнопкой назад). Невалидные значения
-    // просто не попадают в [CropResult] — там остаётся последнее
-    // сохранённое валидное.
+    // Фикс значения на случай, если пользователь ушёл с экрана не
+    // снимая фокус (например, кнопкой «Назад»). Раньше save в БД был
+    // повешен только на focus-blur listener; при тапе по back в момент
+    // когда фокус всё ещё на поле — listener не срабатывал и в БД
+    // оставалось старое значение. Дублируем запись здесь
+    // (fire-and-forget — экран уже размонтирован).
     final String name = _nameCtrl.text.trim();
-    if (name.isNotEmpty) CropResult.userName = name;
+    if (name.isNotEmpty && name != CropResult.userName) {
+      CropResult.userName = name;
+      // ignore: discarded_futures
+      ProfileService.instance.update(name: name).catchError((_) {});
+    }
     final String email = _emailCtrl.text.trim();
-    if (email.isEmpty || _emailRegex.hasMatch(email)) {
+    if ((email.isEmpty || _emailRegex.hasMatch(email)) &&
+        email != CropResult.userEmail) {
       CropResult.userEmail = email;
+      // ignore: discarded_futures
+      ProfileService.instance.updatePrivateEmail(email).catchError((_) {});
     }
     _nameCtrl.dispose();
     _emailCtrl.dispose();

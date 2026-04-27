@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import 'package:dispatcher_1/core/customer_orders/customer_orders_service.dart';
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/widgets/primary_button.dart';
 import 'package:dispatcher_1/features/auth/photo_crop_screen.dart';
@@ -78,6 +79,11 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
     // initial-моки; повторные — просто дольют новые записи.
     MyOrdersStore.loadFromDb();
     DailyOrderLimit.primeFromSettings();
+    // Сбрасываем локальный счётчик дневного лимита и считаем его
+    // заново из БД — иначе после рестарта приложения пользователь
+    // мог снова создавать 30 заказов, а серверный триггер отбивал
+    // лишь после `INSERT` уже заполненной формы.
+    DailyOrderLimit.primeCountFromDb();
     if (AccountBlock.isBlocked) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         MyOrdersStore.archiveActiveOrdersOnBlock();
@@ -258,12 +264,22 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
     );
   }
 
-  /// «Выбрать другого исполнителя» / «Перейти в каталог»:
-  /// закрываем текущий экран и переключаемся на вкладку «Каталог».
-  /// Никакого состояния не сохраняем и статус заказа не меняем —
-  /// пользователь сам найдёт нужного исполнителя и вручную выберет,
-  /// к какому заказу отправить предложение.
-  void _handlePickAnotherFromAwaiting(BuildContext screenCtx, OrderMock o) {
+  /// «Выбрать другого исполнителя» / «Перейти в каталог»: отзываем
+  /// текущий awaiting-мэтч в БД, закрываем экран и переключаемся на
+  /// каталог. Раньше переход в каталог не сопровождался UPDATE'ом —
+  /// старый мэтч оставался в `awaiting_executor` навечно: исполнитель
+  /// видел «призрачное» предложение в своих откликах, а заказчик
+  /// продолжал считать заказ «выбран другой».
+  Future<void> _handlePickAnotherFromAwaiting(
+      BuildContext screenCtx, OrderMock o) async {
+    final String? matchId = o.matchId;
+    if (matchId != null) {
+      try {
+        await CustomerOrdersService.instance.rejectResponse(matchId);
+      } catch (_) {/* пусть UI продолжит — следующая загрузка из БД
+        синхронизирует статус */}
+    }
+    if (!screenCtx.mounted) return;
     Navigator.of(screenCtx).maybePop();
     widget.onGoToCatalog?.call();
   }
@@ -377,6 +393,8 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
         builder: (BuildContext ctx) => MyOrderDetailScreen(
           title: o.title,
           equipment: o.equipment,
+          workCategories: o.categories,
+          workDescription: o.works,
           rentDate: o.rentDate,
           address: o.address,
           timeAgo: o.timeAgo,
@@ -423,6 +441,8 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
         builder: (BuildContext ctx) => MyOrderDetailScreen(
           title: o.title,
           equipment: o.equipment,
+          workCategories: o.categories,
+          workDescription: o.works,
           rentDate: o.rentDate,
           address: o.address,
           timeAgo: o.timeAgo,

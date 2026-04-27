@@ -411,8 +411,10 @@ class MyOrdersStore {
           executorRating: r.bestMatchExecutorRating,
           executorReviewCount: r.bestMatchExecutorReviewCount,
           description: r.description,
+          categories: r.categoryTitles,
           works: r.works,
           photos: r.photos,
+          reviewLeft: r.reviewLeft,
         );
         if (uiStatus == MyOrderStatus.accepted) {
           accepted.add(mock);

@@ -57,6 +57,9 @@ class _OrderFeedScreenState extends State<OrderFeedScreen> {
   }
 
   Future<List<ExecutorCardListItem>> _fetch() {
+    final bool radiusActive = AppliedFilter.radiusKm != null &&
+        AppliedFilter.addressLat != null &&
+        AppliedFilter.addressLng != null;
     return CatalogService.instance.listPublishedExecutors(
       machineryTitles: AppliedFilter.equipment,
       categoryTitles: AppliedFilter.categories,
@@ -66,6 +69,9 @@ class _OrderFeedScreenState extends State<OrderFeedScreen> {
       timeFrom: _fmtHm(AppliedFilter.timeFrom),
       timeTo: _fmtHm(AppliedFilter.timeTo),
       wholeDay: AppliedFilter.wholeDay,
+      originLat: radiusActive ? AppliedFilter.addressLat : null,
+      originLng: radiusActive ? AppliedFilter.addressLng : null,
+      radiusKm: radiusActive ? AppliedFilter.radiusKm : null,
     );
   }
 
@@ -430,6 +436,8 @@ class _AppliedFilterChips extends StatelessWidget {
       chips.add(_ChipSpec('В радиусе ${AppliedFilter.radiusKm} км', () {
         AppliedFilter.radiusKm = null;
         AppliedFilter.address = null;
+        AppliedFilter.addressLat = null;
+        AppliedFilter.addressLng = null;
         _bump();
       }));
     }

@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -84,6 +85,16 @@ class CustomerOrdersService {
         .whereType<int>()
         .toList();
 
+    // Если пользователь ввёл адрес вручную (не выбрал из подсказок DaData)
+    // или DaData вернул адрес без координат — генерируем рандомные
+    // координаты в пределах Москвы. Иначе заказ просто не появится на
+    // карте у исполнителей. Координаты детерминированы только в рамках
+    // одного заказа: для разных заказов точки будут разные.
+    final ({double lat, double lng}) coords =
+        (d.latitude != null && d.longitude != null)
+            ? (lat: d.latitude!, lng: d.longitude!)
+            : _randomMoscowCoords();
+
     final Map<String, dynamic> payload = <String, dynamic>{
       'customer_id': user.id,
       'title': d.title,
@@ -93,8 +104,8 @@ class CustomerOrdersService {
       'works': d.works.map((WorkDraft w) => w.toJson()).toList(),
       'photos': const <String>[],
       'address': d.address,
-      'latitude': d.latitude,
-      'longitude': d.longitude,
+      'latitude': coords.lat,
+      'longitude': coords.lng,
       'date_from': _dateIso(d.dateFrom),
       'date_to': d.dateTo == null ? null : _dateIso(d.dateTo!),
       'exact_date': d.exactDate,
@@ -150,13 +161,14 @@ class CustomerOrdersService {
     if (user == null) return <CustomerOrderListItem>[];
 
     await CatalogService.instance.listActiveMachinery();
+    await CatalogService.instance.listActiveCategories();
 
     final List<Map<String, dynamic>> rows = await _client
         .from('orders')
         .select(
           'id, display_number, title, description, address, '
           'date_from, date_to, time_from, time_to, exact_date, whole_day, '
-          'machinery_ids, works, photos, '
+          'machinery_ids, category_ids, works, photos, '
           'published_at, created_at, status',
         )
         .eq('customer_id', user.id)
@@ -170,6 +182,12 @@ class CustomerOrdersService {
           in CatalogService.instance.cachedMachinery ??
               const <MachineryRef>[])
         m.id: m.title,
+    };
+    final Map<int, String> categoryById = <int, String>{
+      for (final CategoryRef c
+          in CatalogService.instance.cachedCategories ??
+              const <CategoryRef>[])
+        c.id: c.title,
     };
 
     // По всем заказам одним запросом тянем мэтчи с инфой об исполнителе —
@@ -220,8 +238,31 @@ class CustomerOrdersService {
       }
     }
 
+    // Какие best-мэтчи уже получили отзыв от этого заказчика — нужно,
+    // чтобы UI не показывал «Оставить отзыв» дважды (после рестарта
+    // локальный `reviewLeft`-флаг терялся и кнопка возвращалась).
+    final List<String> bestMatchIds = <String>[
+      for (final _BestMatch b in bestByOrder.values) b.matchId,
+    ];
+    final Set<String> reviewedMatchIds = <String>{};
+    if (bestMatchIds.isNotEmpty) {
+      try {
+        final List<Map<String, dynamic>> rev = await _client
+            .from('reviews')
+            .select('match_id')
+            .eq('author_id', user.id)
+            .inFilter('match_id', bestMatchIds);
+        for (final Map<String, dynamic> r in rev) {
+          final String? mid = r['match_id'] as String?;
+          if (mid != null) reviewedMatchIds.add(mid);
+        }
+      } catch (_) {/* silent — на ошибке UI просто покажет кнопку */}
+    }
+
     return rows.map((Map<String, dynamic> r) {
       final List<int> mIds = List<int>.from(r['machinery_ids'] as List);
+      final List<int> cIds =
+          List<int>.from((r['category_ids'] as List?) ?? const <dynamic>[]);
       final DateTime published = r['published_at'] == null
           ? DateTime.parse(r['created_at'] as String)
           : DateTime.parse(r['published_at'] as String);
@@ -255,6 +296,11 @@ class CustomerOrdersService {
             .map((int id) => machineryById[id] ?? '')
             .where((String t) => t.isNotEmpty)
             .toList(),
+        categoryTitles: cIds
+            .map((int id) => categoryById[id] ?? '')
+            .where((String t) => t.isNotEmpty)
+            .toList(),
+        reviewLeft: best != null && reviewedMatchIds.contains(best.matchId),
         works: worksList,
         photos: photos,
         publishedAt: published,
@@ -452,21 +498,36 @@ class CustomerOrdersService {
     return (matchId: row['id'] as String, serviceId: serviceId);
   }
 
-  /// Снять заказ с публикации (status → `cancelled`).
+  /// Снять заказ с публикации (status → `cancelled`). RLS-политика
+  /// уже проверяет владельца, но `.eq('customer_id', user.id)` дублирует
+  /// её на стороне клиента — defense-in-depth: если RLS однажды
+  /// сломается миграцией, без этой проверки любой авторизованный
+  /// пользователь смог бы отменить чужой заказ, отправив orderId.
   Future<void> cancelOrder(String orderId) async {
+    final User? user = _client.auth.currentUser;
+    if (user == null) {
+      throw const AuthException('Нет активной сессии');
+    }
     await _client
         .from('orders')
         .update(<String, dynamic>{'status': 'cancelled'})
-        .eq('id', orderId);
+        .eq('id', orderId)
+        .eq('customer_id', user.id);
   }
 
   /// Опубликовать заново ранее отменённый заказ (cancelled → published).
-  /// Триггер `set_published_at` обновит `published_at=now()`.
+  /// Триггер `set_published_at` обновит `published_at=now()`. Тоже с
+  /// явной фильтрацией по `customer_id` (см. [cancelOrder]).
   Future<void> republishOrder(String orderId) async {
+    final User? user = _client.auth.currentUser;
+    if (user == null) {
+      throw const AuthException('Нет активной сессии');
+    }
     await _client
         .from('orders')
         .update(<String, dynamic>{'status': 'published'})
-        .eq('id', orderId);
+        .eq('id', orderId)
+        .eq('customer_id', user.id);
   }
 
   /// Контакты исполнителя (телефон/email) — доступны только после
@@ -553,6 +614,18 @@ class CustomerOrdersService {
       '${d.year.toString().padLeft(4, '0')}-'
       '${d.month.toString().padLeft(2, '0')}-'
       '${d.day.toString().padLeft(2, '0')}';
+
+  /// Случайная точка в пределах Москвы (≈ ±11 км по широте, ±10 км по
+  /// долготе от центра). Используется как fallback, когда заказ создан
+  /// без выбора подсказки DaData — чтобы он всё равно появился на карте.
+  static final math.Random _rng = math.Random();
+  ({double lat, double lng}) _randomMoscowCoords() {
+    const double centerLat = 55.7558;
+    const double centerLon = 37.6173;
+    final double dLat = (_rng.nextDouble() - 0.5) * 0.20;
+    final double dLon = (_rng.nextDouble() - 0.5) * 0.36;
+    return (lat: centerLat + dLat, lng: centerLon + dLon);
+  }
 
   double? _toDouble(Object? v) {
     if (v == null) return null;

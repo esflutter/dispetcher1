@@ -109,7 +109,15 @@ class OrderCard extends StatelessWidget {
                           ),
                           SizedBox(width: 4.w),
                           Text(
-                            rating.toStringAsFixed(1).replaceAll('.', ','),
+                            // У исполнителя без отзывов рейтинг 0,0
+                            // выглядит как «плохой». В остальных местах
+                            // в обоих приложениях такой рейтинг
+                            // показывается как «—»; приводим к тому же.
+                            rating > 0
+                                ? rating
+                                    .toStringAsFixed(1)
+                                    .replaceAll('.', ',')
+                                : '—',
                             style: TextStyle(
                               fontFamily: 'Roboto',
                               fontSize: 14.sp,

@@ -38,7 +38,11 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
   @override
   void initState() {
     super.initState();
-    // Таймер больше не запускается автоматически при входе на страницу
+    // SMS уже отправлен на предыдущем экране (`phone_input`); запускаем
+    // 60-секундный кулдаун сразу при входе. Без этого кнопка «Отправить
+    // повторно» сразу активна и пользователь успевает спамить SMS до
+    // срабатывания серверного rate-limit.
+    _startTimer();
   }
 
   void _startTimer() {

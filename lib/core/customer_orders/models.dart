@@ -71,6 +71,7 @@ class CustomerOrderListItem {
     required this.exactDate,
     required this.wholeDay,
     required this.machineryTitles,
+    this.categoryTitles = const <String>[],
     this.works = const <String>[],
     this.photos = const <String>[],
     required this.publishedAt,
@@ -82,6 +83,7 @@ class CustomerOrderListItem {
     this.bestMatchExecutorName,
     this.bestMatchExecutorRating = 0,
     this.bestMatchExecutorReviewCount = 0,
+    this.reviewLeft = false,
   });
 
   final String id;
@@ -96,6 +98,10 @@ class CustomerOrderListItem {
   final bool exactDate;
   final bool wholeDay;
   final List<String> machineryTitles;
+  /// Категории работ (резолвлены title из `categories`). Раньше не
+  /// подгружались из БД — на детальной карточке заказа блок «Категории
+  /// работ» был пустым у всех заказов из БД.
+  final List<String> categoryTitles;
   /// Готовые к отображению строки работ («Демонтаж — 5 м³»). Берём из
   /// `orders.works` jsonb-массива при чтении.
   final List<String> works;
@@ -115,6 +121,14 @@ class CustomerOrderListItem {
   final String? bestMatchExecutorName;
   final double bestMatchExecutorRating;
   final int bestMatchExecutorReviewCount;
+
+  /// True, если текущий заказчик уже оставил отзыв об исполнителе по
+  /// best-мэтчу. Берётся одним SELECT по `reviews` в `listMine` и
+  /// далее пробрасывается в `OrderMock.reviewLeft`. Без этого флаг
+  /// жил только в локальном кэше и сбрасывался при рестарте — после
+  /// перезагрузки приложения кнопка «Оставить отзыв» опять появлялась
+  /// и второй INSERT падал по unique-constraint (либо плодил дубль).
+  final bool reviewLeft;
 
   /// Удобный адаптер для утилиты `formatRentDate` из каталога исполнителя.
   catalog.OrderListItem toFormatAdapter() => catalog.OrderListItem(
