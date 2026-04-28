@@ -356,7 +356,10 @@ class CustomerOrdersService {
     }
   }
 
-  /// Отклики на конкретный заказ.
+  /// Отклики на конкретный заказ. Лимит 200 — практический потолок: даже
+  /// у популярного заказа реально приходит 20-50 откликов; 200 закрывает
+  /// 99% случаев и страхует UI от рендера тысяч карточек, если заказ
+  /// провисел в каталоге слишком долго.
   Future<List<IncomingResponse>> listResponsesForOrder(String orderId) async {
     await CatalogService.instance.listActiveMachinery();
     final List<Map<String, dynamic>> rows = await _client
@@ -369,7 +372,8 @@ class CustomerOrdersService {
           'service:services!order_matches_service_id_fkey(id, machinery_ids)',
         )
         .eq('order_id', orderId)
-        .order('created_at', ascending: false);
+        .order('created_at', ascending: false)
+        .limit(200);
 
     final Map<int, String> machineryById = <int, String>{
       for (final MachineryRef m

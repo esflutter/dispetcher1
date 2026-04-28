@@ -120,7 +120,7 @@ class CatalogService {
     String? timeFrom,
     String? timeTo,
     bool? wholeDay,
-    int limit = 50,
+    int limit = 200,
   }) async {
     await _primeDirectories();
 
@@ -311,7 +311,7 @@ class CatalogService {
     double? originLat,
     double? originLng,
     int? radiusKm,
-    int limit = 50,
+    int limit = 200,
   }) async {
     await _primeDirectories();
 
@@ -790,7 +790,7 @@ class CatalogService {
   /// Заказы конкретного заказчика — для списка на его карточке.
   /// По умолчанию только `published` (чтобы не утекали черновики/архив).
   Future<List<OrderListItem>> listCustomerOrders(String userId,
-      {int limit = 50}) async {
+      {int limit = 100}) async {
     await _primeDirectories();
     final List<Map<String, dynamic>> rows = await _client
         .from('orders')
