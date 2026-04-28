@@ -43,4 +43,9 @@ class SettingsService {
     await _load();
     return (_cache!['terms.current_version'] as String?) ?? '1.0';
   }
+
+  /// Прогревает кэш настроек на старте приложения. Вызывается из `main()`
+  /// fire-and-forget вместе с CatalogService.warmup() — после этого все
+  /// геттеры возвращают значения мгновенно, без сетевого запроса.
+  Future<void> warmup() => _load();
 }

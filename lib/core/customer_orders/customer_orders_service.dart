@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:math' as math;
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -86,14 +85,14 @@ class CustomerOrdersService {
         .toList();
 
     // Если пользователь ввёл адрес вручную (не выбрал из подсказок DaData)
-    // или DaData вернул адрес без координат — генерируем рандомные
-    // координаты в пределах Москвы. Иначе заказ просто не появится на
-    // карте у исполнителей. Координаты детерминированы только в рамках
-    // одного заказа: для разных заказов точки будут разные.
+    // или DaData вернул адрес без координат — детерминированно вычисляем
+    // координаты из хэша адреса, чтобы заказ всё равно появился на карте
+    // у исполнителей. Один и тот же адрес → одна и та же точка
+    // (без «прыжков» между сессиями).
     final ({double lat, double lng}) coords =
         (d.latitude != null && d.longitude != null)
             ? (lat: d.latitude!, lng: d.longitude!)
-            : _randomMoscowCoords();
+            : _stableMoscowCoordsForAddress(d.address);
 
     final Map<String, dynamic> payload = <String, dynamic>{
       'customer_id': user.id,
@@ -615,15 +614,24 @@ class CustomerOrdersService {
       '${d.month.toString().padLeft(2, '0')}-'
       '${d.day.toString().padLeft(2, '0')}';
 
-  /// Случайная точка в пределах Москвы (≈ ±11 км по широте, ±10 км по
-  /// долготе от центра). Используется как fallback, когда заказ создан
-  /// без выбора подсказки DaData — чтобы он всё равно появился на карте.
-  static final math.Random _rng = math.Random();
-  ({double lat, double lng}) _randomMoscowCoords() {
+  /// Детерминированная точка в пределах Москвы (≈ ±11 км по широте,
+  /// ±10 км по долготе от центра) из хэша адреса. Используется как
+  /// fallback, когда заказ создан без выбора подсказки DaData. Один и
+  /// тот же адрес всегда даёт одну и ту же точку — это стабильнее
+  /// рандома, который заставлял бы заказ «прыгать» между fetch'ами.
+  ({double lat, double lng}) _stableMoscowCoordsForAddress(String address) {
     const double centerLat = 55.7558;
     const double centerLon = 37.6173;
-    final double dLat = (_rng.nextDouble() - 0.5) * 0.20;
-    final double dLon = (_rng.nextDouble() - 0.5) * 0.36;
+    // FNV-1a 32-bit — быстрый стабильный хэш строки. Берём два независимых
+    // байтовых среза для широты и долготы, чтобы они не коррелировали.
+    int hash = 0x811c9dc5;
+    for (final int code in address.codeUnits) {
+      hash = ((hash ^ code) * 0x01000193) & 0xffffffff;
+    }
+    final int latSeed = hash & 0xffff;
+    final int lonSeed = (hash >> 16) & 0xffff;
+    final double dLat = ((latSeed / 0xffff) - 0.5) * 0.20;
+    final double dLon = ((lonSeed / 0xffff) - 0.5) * 0.36;
     return (lat: centerLat + dLat, lng: centerLon + dLon);
   }
 

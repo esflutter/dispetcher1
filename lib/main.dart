@@ -8,6 +8,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'app.dart';
 import 'core/catalog/catalog_service.dart';
 import 'core/config/env.dart';
+import 'core/settings/settings_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -38,11 +39,12 @@ Future<void> main() async {
       ),
       debug: false,
     );
-    // Прогрев справочников (техника + категории работ). 14 + 9 строк,
-    // меняются раз в год — после первого SELECT всё живёт в памяти,
-    // экраны фильтра/каталога/создания заказа рисуются мгновенно.
-    // Не блокируем старт приложения — fire-and-forget.
+    // Прогрев справочников (техника + категории работ) и глобальных
+    // настроек (цены, лимиты). Меняются редко, после первого SELECT
+    // живут в памяти; экраны фильтра/каталога/создания заказа рисуются
+    // мгновенно с готовыми значениями. Не блокируем старт — fire-and-forget.
     unawaited(CatalogService.instance.warmup());
+    unawaited(SettingsService.instance.warmup());
   }
 
   runApp(const DispatcherApp());
