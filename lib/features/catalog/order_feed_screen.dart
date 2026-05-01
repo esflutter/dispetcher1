@@ -72,6 +72,11 @@ class _OrderFeedScreenState extends State<OrderFeedScreen> {
       originLat: radiusActive ? AppliedFilter.addressLat : null,
       originLng: radiusActive ? AppliedFilter.addressLng : null,
       radiusKm: radiusActive ? AppliedFilter.radiusKm : null,
+      // Когда радиус не активен, но адрес выбран — используем
+      // ilike-поиск по `executor_cards.location_address`, чтобы
+      // фильтр по адресу хоть как-то работал. С активным радиусом
+      // отбор идёт через haversine, и ilike не нужен.
+      addressContains: radiusActive ? null : AppliedFilter.address,
     );
   }
 

@@ -543,6 +543,21 @@ class CustomerOrdersService {
         .single();
   }
 
+  /// Заказчик отзывает своё предложение исполнителю
+  /// (`awaiting_executor` → `expired`). FSM не разрешает прямой
+  /// переход в `rejected_by_customer` из `awaiting_executor`, поэтому
+  /// используем нейтральный терминал `expired`. Раньше этот сценарий
+  /// шёл через `rejectResponse`, и FSM-триггер отвергал UPDATE — мэтч
+  /// оставался «висячим», исполнитель продолжал видеть приглашение.
+  Future<void> withdrawProposal(String matchId) async {
+    await _client
+        .from('order_matches')
+        .update(<String, dynamic>{'status': 'expired'})
+        .eq('id', matchId)
+        .select('id')
+        .single();
+  }
+
   /// Предложить заказ конкретному исполнителю из каталога.
   /// INSERT в `order_matches` с `initiated_by='customer'`, status
   /// сразу `awaiting_executor` (заказчик уже выбрал, ждём подтверждения
@@ -590,6 +605,24 @@ class CustomerOrdersService {
       throw Exception('У исполнителя нет услуги под технику этого заказа');
     }
 
+    // Проверка: заказ может ждать ответа только от одного исполнителя
+    // одновременно. Если уже есть awaiting_executor / accepted мэтч —
+    // повторно предложить заказ другому исполнителю нельзя; иначе у
+    // заказа окажется два «активных» мэтча и оба исполнителя увидят
+    // «Отклик уже отправлен», но заказчик уже не может выбрать кого-то
+    // одного без ручного отказа от другого. Уникального индекса на
+    // (order_id) WHERE status = 'awaiting_executor' в БД нет, поэтому
+    // защищаемся на уровне сервиса.
+    final List<Map<String, dynamic>> activeMatches = await _client
+        .from('order_matches')
+        .select('id')
+        .eq('order_id', orderId)
+        .inFilter('status', <String>['awaiting_executor', 'accepted'])
+        .limit(1);
+    if (activeMatches.isNotEmpty) {
+      throw const MatchAlreadyTakenException();
+    }
+
     final Map<String, dynamic> row;
     try {
       row = await _client
@@ -626,11 +659,29 @@ class CustomerOrdersService {
     if (user == null) {
       throw const AuthException('Нет активной сессии');
     }
-    await _client
-        .from('orders')
-        .update(<String, dynamic>{'status': 'cancelled'})
-        .eq('id', orderId)
-        .eq('customer_id', user.id);
+    // Атомарно: UPDATE orders + закрытие активных мэтчей в одной
+    // транзакции. Раньше было три последовательных запроса, и при
+    // сетевой ошибке между ними у заказа оставались висячие
+    // awaiting_*/accepted мэтчи, которые исполнитель продолжал видеть
+    // у себя как «живые». См. `cancel_order_atomic` (migration 010).
+    await _client.rpc<dynamic>(
+      'cancel_order_atomic',
+      params: <String, dynamic>{'p_order_id': orderId},
+    );
+  }
+
+  /// При блокировке аккаунта — массово закрывает все активные заказы
+  /// текущего пользователя (orders → cancelled, активные мэтчи в
+  /// терминальные статусы). Раньше блокировка только меняла локальный
+  /// кэш `MyOrdersStore`, в БД заказы оставались `published`, и
+  /// исполнители продолжали их видеть. См. `block_user_orders`
+  /// (migration 010).
+  Future<void> blockUserOrders() async {
+    final User? user = _client.auth.currentUser;
+    if (user == null) {
+      throw const AuthException('Нет активной сессии');
+    }
+    await _client.rpc<dynamic>('block_user_orders');
   }
 
   /// Опубликовать заново ранее отменённый заказ (cancelled → published).

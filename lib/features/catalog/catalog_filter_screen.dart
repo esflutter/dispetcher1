@@ -149,7 +149,17 @@ class _CatalogFilterScreenState extends State<CatalogFilterScreen> {
     AppliedFilter.timeFrom = _timeFrom;
     AppliedFilter.timeTo = _timeTo;
     AppliedFilter.wholeDay = _wholeDay;
-    AppliedFilter.radiusKm = _radiusKm;
+    // Радиус без адреса вообще ничего не значит — сбрасываем оба
+    // поля. С адресом радиус сохраняем даже без координат: при
+    // отсутствии geo_lat/lon (DaData не вернула координаты для
+    // области/региона) фильтр поиска деградирует до текстового
+    // ilike по `executor_cards.location_address`, а чип «В радиусе
+    // X км» в выдаче помогает пользователю понять, что фильтр
+    // активен.
+    final bool radiusUsable = _radiusKm != null &&
+        _address != null &&
+        _address!.trim().isNotEmpty;
+    AppliedFilter.radiusKm = radiusUsable ? _radiusKm : null;
     AppliedFilter.address = _address;
     AppliedFilter.addressLat = _addressLat;
     AppliedFilter.addressLng = _addressLng;
@@ -1376,8 +1386,10 @@ class AddressBottomSheetState extends State<AddressBottomSheet> {
       if (a == null) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content:
-                Text('Адрес по координатам не найден. Введите вручную.'),
+            content: Text(
+              'Адрес по координатам не найден. Введите его в строке '
+              'поиска выше.',
+            ),
             duration: Duration(seconds: 3),
           ),
         );

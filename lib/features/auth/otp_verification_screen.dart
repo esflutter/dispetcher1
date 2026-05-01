@@ -128,6 +128,11 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
       });
     } catch (_) {
       if (!mounted) return;
+      // Сбрасываем введённый код, чтобы пользователь не мог повторно
+      // нажать «Далее» с тем же значением — иначе при «ожившей» сети
+      // пройдёт второй verify, и UI окажется в полузакомиченном
+      // состоянии.
+      _pinController.clear();
       setState(() => _verifying = false);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Не удалось проверить код. Попробуйте ещё раз.')),

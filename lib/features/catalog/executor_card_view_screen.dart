@@ -9,6 +9,7 @@ import 'package:dispatcher_1/core/theme/app_spacing.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
 import 'package:dispatcher_1/core/utils/plural.dart';
 import 'package:dispatcher_1/core/widgets/avatar_circle.dart';
+import 'package:dispatcher_1/core/widgets/clickable_address.dart';
 import 'package:dispatcher_1/core/widgets/primary_button.dart';
 import 'package:dispatcher_1/features/catalog/catalog_service_detail_screen.dart';
 import 'package:dispatcher_1/features/catalog/select_order_for_executor_screen.dart';
@@ -296,7 +297,10 @@ class _ExecutorCardViewScreenState extends State<ExecutorCardViewScreen> {
               e.locationAddress!.trim().isNotEmpty) ...<Widget>[
             const _SectionTitle('Местоположение'),
             SizedBox(height: 4.h),
-            Text(e.locationAddress!, style: AppTextStyles.body),
+            ClickableAddress(
+              e.locationAddress!,
+              baseStyle: AppTextStyles.body,
+            ),
             SizedBox(height: 16.h),
           ],
           if (e.machineryTitles.isNotEmpty) ...<Widget>[
@@ -522,7 +526,16 @@ class _AvailabilitySectionState extends State<_AvailabilitySection> {
       List<DateTime>.generate(7, (int i) => monday.add(Duration(days: i)));
 
   void _onPageChanged(int page) {
-    setState(() => _selected = _weekFromPage(page));
+    // На текущей неделе выделяем именно сегодня — пользователь свайпает
+    // вперёд, потом возвращается обратно и ожидает увидеть кружок на
+    // сегодня, а не на понедельник. На остальных неделях по умолчанию
+    // выделяем понедельник этой недели — там «сегодняшнего» дня нет.
+    final DateTime now = DateTime.now();
+    final DateTime today = DateTime(now.year, now.month, now.day);
+    final DateTime monday = _weekFromPage(page);
+    final DateTime newSelected =
+        _sameDay(monday, _mondayOf(today)) ? today : monday;
+    setState(() => _selected = newSelected);
   }
 
   int get _currentPage {
@@ -654,6 +667,8 @@ class _AvailabilitySectionState extends State<_AvailabilitySection> {
             itemBuilder: (BuildContext _, int page) {
               final DateTime monday = _weekFromPage(page);
               final List<DateTime> days = _weekDaysFor(monday);
+              final DateTime now = DateTime.now();
+              final DateTime today = DateTime(now.year, now.month, now.day);
               return Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: <Widget>[
@@ -662,6 +677,11 @@ class _AvailabilitySectionState extends State<_AvailabilitySection> {
                       date: d,
                       selected: _sameDay(d, _selected),
                       dayOff: _isDayOff(d),
+                      // Прошлые дни — серые и без onTap. Раньше клик на
+                      // вчерашний/позавчерашний день показывал «исполнитель
+                      // свободен для заказов», что вводило в заблуждение —
+                      // расписание для прошлого не имеет смысла.
+                      isPast: d.isBefore(today),
                       onTap: (DateTime tapped) =>
                           setState(() => _selected = tapped),
                     ),
@@ -706,10 +726,12 @@ class _DayCell extends StatelessWidget {
     required this.selected,
     required this.dayOff,
     required this.onTap,
+    this.isPast = false,
   });
   final DateTime date;
   final bool selected;
   final bool dayOff;
+  final bool isPast;
   final ValueChanged<DateTime> onTap;
 
   @override
@@ -717,12 +739,14 @@ class _DayCell extends StatelessWidget {
     final Color? bg = selected ? AppColors.primary : null;
     final Color textColor = selected
         ? Colors.white
-        : dayOff
-            ? const Color(0xFFF2F2F2)
-            : AppColors.textPrimary;
+        : isPast
+            ? AppColors.textTertiary
+            : dayOff
+                ? const Color(0xFFF2F2F2)
+                : AppColors.textPrimary;
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTap: () => onTap(date),
+      onTap: isPast ? null : () => onTap(date),
       child: Center(
         child: Container(
           width: 36.r,

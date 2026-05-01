@@ -115,8 +115,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       final String prev = CropResult.userName;
       CropResult.userName = name;
       // ignore: discarded_futures
-      ProfileService.instance.update(name: name).catchError((Object _) {
+      ProfileService.instance.update(name: name).catchError((Object e) {
         CropResult.userName = prev;
+        debugPrint('EditProfileScreen.update(name) failed: $e');
       });
     }
     final String email = _emailCtrl.text.trim().toLowerCase();
@@ -125,8 +126,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       final String prev = CropResult.userEmail;
       CropResult.userEmail = email;
       // ignore: discarded_futures
-      ProfileService.instance.updatePrivateEmail(email).catchError((Object _) {
+      ProfileService.instance.updatePrivateEmail(email).catchError((Object e) {
         CropResult.userEmail = prev;
+        debugPrint('EditProfileScreen.updatePrivateEmail failed: $e');
       });
     }
     _nameCtrl.dispose();

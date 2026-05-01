@@ -314,6 +314,7 @@ class CatalogService {
     double? originLat,
     double? originLng,
     int? radiusKm,
+    String? addressContains,
     int limit = 200,
   }) async {
     await _primeDirectories();
@@ -330,24 +331,96 @@ class CatalogService {
     // PostgREST `ilike('profile.name'...)` фильтрует только embedded
     // ресурс, а не родительские строки — на родительский набор это
     // не влияет, и в выдачу попадают все опубликованные карточки.
-    // Поэтому при поиске по имени сначала отдельным запросом
-    // резолвим список user_id'ов с подходящим именем, а карточки
-    // фильтруем уже по ним.
+    // Поэтому при поиске резолвим список подходящих user_id'ов
+    // несколькими источниками (имя, «о себе», адрес карточки,
+    // название/описание услуги, попадание в название техники или
+    // категории работ из справочника), объединяем в одно множество
+    // и уже по нему фильтруем карточки.
     Set<String>? searchUserIds;
     final String? s = search?.trim();
     if (s != null && s.isNotEmpty) {
       final String esc = _escapeLike(s).replaceAll(',', ' ');
+      final String pattern = '%$esc%';
+      final int hardLimit = limit * 4;
+      final Set<String> userIds = <String>{};
+
+      // (1) profiles.name — имя/фамилия
       final List<Map<String, dynamic>> nameRows = await _client
           .from('profiles')
           .select('id')
-          .ilike('name', '%$esc%')
-          .limit(limit * 4);
-      searchUserIds = <String>{
-        for (final Map<String, dynamic> r in nameRows) r['id'] as String,
-      };
-      if (searchUserIds.isEmpty) {
+          .ilike('name', pattern)
+          .limit(hardLimit);
+      for (final Map<String, dynamic> r in nameRows) {
+        userIds.add(r['id'] as String);
+      }
+
+      // (2) profiles.about — раздел «О себе» в карточке исполнителя
+      final List<Map<String, dynamic>> aboutRows = await _client
+          .from('profiles')
+          .select('id')
+          .ilike('about', pattern)
+          .limit(hardLimit);
+      for (final Map<String, dynamic> r in aboutRows) {
+        userIds.add(r['id'] as String);
+      }
+
+      // (3) executor_cards.location_address — адрес карточки
+      final List<Map<String, dynamic>> locRows = await _client
+          .from('executor_cards')
+          .select('user_id')
+          .ilike('location_address', pattern)
+          .limit(hardLimit);
+      for (final Map<String, dynamic> r in locRows) {
+        userIds.add(r['user_id'] as String);
+      }
+
+      // (4) services.title / services.description — содержимое услуги
+      final List<Map<String, dynamic>> svcRows = await _client
+          .from('services')
+          .select('executor_id')
+          .or('title.ilike.$pattern,description.ilike.$pattern')
+          .limit(hardLimit);
+      for (final Map<String, dynamic> r in svcRows) {
+        userIds.add(r['executor_id'] as String);
+      }
+
+      // (5) Названия техники / категорий из локальных справочников.
+      // Если запрос совпадает с названием — подмешиваем всех
+      // исполнителей, у кого есть услуги с этой техникой / категорией.
+      final String sLower = s.toLowerCase();
+      final List<int> matchedMachIds = <int>[
+        for (final MapEntry<String, int> e in _machineryTitleToId.entries)
+          if (e.key.toLowerCase().contains(sLower)) e.value,
+      ];
+      final List<int> matchedCatIds = <int>[
+        for (final MapEntry<String, int> e in _categoryTitleToId.entries)
+          if (e.key.toLowerCase().contains(sLower)) e.value,
+      ];
+      if (matchedMachIds.isNotEmpty) {
+        final List<Map<String, dynamic>> r = await _client
+            .from('services')
+            .select('executor_id')
+            .overlaps('machinery_ids', matchedMachIds)
+            .limit(hardLimit);
+        for (final Map<String, dynamic> x in r) {
+          userIds.add(x['executor_id'] as String);
+        }
+      }
+      if (matchedCatIds.isNotEmpty) {
+        final List<Map<String, dynamic>> r = await _client
+            .from('services')
+            .select('executor_id')
+            .overlaps('category_ids', matchedCatIds)
+            .limit(hardLimit);
+        for (final Map<String, dynamic> x in r) {
+          userIds.add(x['executor_id'] as String);
+        }
+      }
+
+      if (userIds.isEmpty) {
         return <ExecutorCardListItem>[];
       }
+      searchUserIds = userIds;
     }
 
     PostgrestFilterBuilder<List<Map<String, dynamic>>> q = _client
@@ -364,6 +437,22 @@ class CatalogService {
 
     if (searchUserIds != null) {
       q = q.inFilter('user_id', searchUserIds.toList());
+    }
+
+    // Фильтр по строке адреса карточки (`location_address`). Нужен,
+    // когда заказчик выбрал адрес в фильтре, но не задал радиус —
+    // в этом случае haversine не работает (нет origin), и без ilike
+    // по адресу карточки выдача не сужается совсем (показывались все
+    // регионы). При активном radius этот фильтр не применяется —
+    // отбор делает haversine по координатам.
+    final bool radiusActive =
+        radiusKm != null && originLat != null && originLng != null;
+    if (!radiusActive &&
+        addressContains != null &&
+        addressContains.trim().isNotEmpty) {
+      final String esc =
+          _escapeLike(addressContains.trim()).replaceAll(',', ' ');
+      q = q.ilike('location_address', '%$esc%');
     }
 
     List<Map<String, dynamic>> cards =

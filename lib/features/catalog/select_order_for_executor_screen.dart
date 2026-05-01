@@ -11,20 +11,48 @@ import 'package:dispatcher_1/features/catalog/widgets/respond_bottom_sheet.dart'
 import 'package:dispatcher_1/features/orders/create_order_screen.dart';
 import 'package:dispatcher_1/features/orders/orders_store.dart';
 
-/// Трекер отправленных откликов по executor-order id. После отправки
-/// отклика по конкретной карточке исполнителя кнопка «Предложить заказ»
-/// на ней должна скрываться.
+/// Трекер отправленных откликов по executor id. После отправки
+/// предложения исполнителю кнопка «Предложить заказ» на его карточке
+/// сменяется на «Предложение уже отправлено». Сбрасывается, когда
+/// исполнитель отказался от заказа (`rejected_by_executor`) или
+/// заказчик сам отозвал предложение (`pickAnotherFromAwaiting`) —
+/// иначе кнопка вечно «отправлена», даже когда мэтча уже нет.
+///
+/// Источник правды — БД (loadFromDb синхронизирует множество с
+/// фактическими `awaitingExecutor`-мэтчами заказчика). Локальный
+/// mark/unmark — только для мгновенного отклика UI до следующей
+/// перезагрузки.
 class OfferSubmissions {
   OfferSubmissions._();
 
   static final Set<String> _offered = <String>{};
   static final ValueNotifier<int> revision = ValueNotifier<int>(0);
 
-  static bool isOffered(String executorOrderId) =>
-      _offered.contains(executorOrderId);
+  static bool isOffered(String executorId) =>
+      _offered.contains(executorId);
 
-  static void mark(String executorOrderId) {
-    if (_offered.add(executorOrderId)) revision.value++;
+  static void mark(String executorId) {
+    if (_offered.add(executorId)) revision.value++;
+  }
+
+  /// Снять отметку для конкретного исполнителя. Используется когда
+  /// предложение этому исполнителю отозвано или мэтч закрыт.
+  static void unmark(String executorId) {
+    if (_offered.remove(executorId)) revision.value++;
+  }
+
+  /// Заменить весь набор отмеченных. Вызывается из `MyOrdersStore`
+  /// после загрузки из БД — там собираются executor_id всех текущих
+  /// awaitingExecutor-мэтчей заказчика.
+  static void replaceWith(Set<String> activeExecutorIds) {
+    if (_offered.length == activeExecutorIds.length &&
+        _offered.containsAll(activeExecutorIds)) {
+      return;
+    }
+    _offered
+      ..clear()
+      ..addAll(activeExecutorIds);
+    revision.value++;
   }
 
   /// Полный сброс истории предложенных заказов — для logout.
@@ -400,7 +428,6 @@ class _OrderOfferTile extends StatelessWidget {
                     style: AppTextStyles.body.copyWith(
                       fontSize: 12.sp,
                       color: AppColors.textPrimary,
-                      decoration: TextDecoration.underline,
                     ),
                   ),
                 ],

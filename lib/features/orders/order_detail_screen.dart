@@ -350,7 +350,16 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                         ),
                       ),
                     ),
-                    if (executorPhone != null &&
+                    // Контакты исполнителя раскрываем только после
+                    // мэтча (accepted/completed). До этого, в т.ч. в
+                    // awaitingExecutor / awaitingCustomer, контакты
+                    // могут оставаться в локальном кэше от предыдущего
+                    // accepted-состояния — и без явной проверки статуса
+                    // пользователь видел бы телефон и email уже на
+                    // «Ждёт подтверждения», что нарушает RLS-семантику.
+                    if ((status == MyOrderStatus.accepted ||
+                            status == MyOrderStatus.completed) &&
+                        executorPhone != null &&
                         executorPhone.trim().isNotEmpty) ...<Widget>[
                       SizedBox(height: 12.h),
                       Text(
@@ -370,7 +379,9 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                             .copyWith(fontWeight: FontWeight.w400),
                       ),
                     ],
-                    if (executorEmail != null &&
+                    if ((status == MyOrderStatus.accepted ||
+                            status == MyOrderStatus.completed) &&
+                        executorEmail != null &&
                         executorEmail.trim().isNotEmpty) ...<Widget>[
                       SizedBox(height: 12.h),
                       Text(

@@ -192,6 +192,7 @@ class _CatalogCategoriesScreenState extends State<CatalogCategoriesScreen> {
               clipBehavior: Clip.antiAlias,
               child: OrderCard(
                 name: e.name,
+                avatarUrl: e.avatarUrl,
                 rating: e.ratingAsExecutor,
                 equipment: e.machineryTitles,
                 categories: e.categoryTitles,

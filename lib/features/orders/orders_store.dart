@@ -6,6 +6,8 @@ import 'package:dispatcher_1/core/catalog/format.dart';
 import 'package:dispatcher_1/core/customer_orders/customer_orders_service.dart';
 import 'package:dispatcher_1/core/customer_orders/models.dart';
 
+import 'package:dispatcher_1/features/catalog/select_order_for_executor_screen.dart'
+    show OfferSubmissions;
 import 'package:dispatcher_1/features/orders/widgets/order_status_pill.dart';
 
 /// True, если строка похожа на UUID и заказ скорее всего реальный
@@ -325,16 +327,16 @@ class MyOrdersStore {
 
   /// Заказы, которые можно предложить исполнителю из каталога:
   ///   * `waiting` — откликов пока нет;
-  ///   * `awaitingExecutor` — уже предложен кому-то, но заказчик
-  ///     вправе предложить тому же или другому исполнителю ещё раз;
   ///   * `executorDeclinedWaiting` — предыдущий отказался, снова
   ///     ищем через каталог.
-  /// Исключены `waitingChoose` / `executorDeclined` — там есть
-  /// отклики, заказчик выбирает из них, а не ищет сам в каталоге.
+  /// Исключены: `waitingChoose` / `executorDeclined` — там есть
+  /// отклики, заказчик выбирает из них; `awaitingExecutor` — заказ
+  /// уже предложен одному исполнителю и ждёт его ответа, второму
+  /// одновременно предложить нельзя (иначе у заказа окажется два
+  /// awaiting_executor-мэтча, оба покажут «Отклик уже отправлен»).
   static List<OrderMock> get offerable => newOrders
       .where((OrderMock o) =>
           o.status == MyOrderStatus.waiting ||
-          o.status == MyOrderStatus.awaitingExecutor ||
           o.status == MyOrderStatus.executorDeclinedWaiting)
       .toList();
 
@@ -458,6 +460,19 @@ class MyOrdersStore {
           newOrders.add(mock);
         }
       }
+      // Синхронизируем `OfferSubmissions` с реальным состоянием БД:
+      // в множестве остаются только executor_id'ы, у которых сейчас
+      // есть мой awaitingExecutor-мэтч. Это сбрасывает «зависшую»
+      // отметку «Предложение уже отправлено» после того, как
+      // исполнитель отказался или мэтч истёк.
+      final Set<String> activeProposes = <String>{
+        for (final OrderMock o in newOrders)
+          if (o.status == MyOrderStatus.awaitingExecutor &&
+              o.executorId != null &&
+              o.executorId!.isNotEmpty)
+            o.executorId!,
+      };
+      OfferSubmissions.replaceWith(activeProposes);
       _bump();
     } catch (_) {
       // БД упала — оставляем то, что есть в памяти.
@@ -503,16 +518,40 @@ class MyOrdersStore {
   /// локальный архив всё равно обновится — но мы оповещаем UI через
   /// [onError], чтобы пользователь видел snackbar и мог повторить.
   static void moveToRejected(OrderMock o, MyOrderStatus newStatus) {
-    newOrders.remove(o);
-    accepted.remove(o);
+    final bool wasInNew = newOrders.remove(o);
+    final bool wasInAccepted = accepted.remove(o);
     rejected.insert(0, o.copyWith(status: newStatus));
     _bump();
     if (_looksLikeUuid(o.id)) {
-      unawaited(
-        CustomerOrdersService.instance
-            .cancelOrder(o.id)
-            .catchError((Object e) => onError?.call(e)),
-      );
+      unawaited(_cancelOrderWithRollback(
+        order: o,
+        wasInNew: wasInNew,
+        wasInAccepted: wasInAccepted,
+      ));
+    }
+  }
+
+  /// Откат локального переноса в архив, если серверный `cancelOrder`
+  /// упал. Без этого заказ оставался бы в БД как `published`, а в
+  /// клиентском кэше — в `Архиве`, и пользователь видел бы свой
+  /// «отменённый» заказ как живой при следующем `loadFromDb`.
+  static Future<void> _cancelOrderWithRollback({
+    required OrderMock order,
+    required bool wasInNew,
+    required bool wasInAccepted,
+  }) async {
+    try {
+      await CustomerOrdersService.instance.cancelOrder(order.id);
+    } catch (e) {
+      // Откатываем: убираем из архива, возвращаем в исходный список.
+      rejected.removeWhere((OrderMock x) => x.id == order.id);
+      if (wasInNew) {
+        newOrders.insert(0, order);
+      } else if (wasInAccepted) {
+        accepted.insert(0, order);
+      }
+      _bump();
+      onError?.call(e);
     }
   }
 
@@ -530,28 +569,56 @@ class MyOrdersStore {
         : MyOrderStatus.waiting;
     final int idx = newOrders.indexWhere((OrderMock x) => x.id == o.id);
     if (idx < 0) return newStatus;
+    final OrderMock prev = newOrders[idx];
     // Прежнее предложение тоже надо отозвать в БД, иначе исполнитель
     // увидит призрачный «awaiting_executor» с заказа, от которого его
-    // уже отвели. matchId известен только если предложение было сделано
-    // в этой сессии (через proposeToExecutor) — иначе fire-and-forget
-    // пропустим.
-    final String? prevMatchId = newOrders[idx].matchId;
+    // уже отвели. FSM-триггер не разрешает awaiting_executor →
+    // rejected_by_customer — используем `withdrawProposal`, который
+    // переводит мэтч в `expired` (валидный для FSM терминал).
+    final String? prevMatchId = prev.matchId;
     if (prevMatchId != null && prevMatchId.isNotEmpty) {
-      unawaited(
-        CustomerOrdersService.instance
-            .rejectResponse(prevMatchId)
-            .catchError((Object e) => onError?.call(e)),
-      );
+      unawaited(_withdrawProposalWithRollback(
+        order: prev,
+        matchId: prevMatchId,
+        idx: idx,
+      ));
     }
     // Сбрасываем контакты ранее предложенного исполнителя — он больше
     // не ассоциирован с заказом. Иначе его имя и телефон тихо
     // переехали бы в следующий матч.
-    newOrders[idx] = newOrders[idx].copyWith(
+    newOrders[idx] = prev.copyWith(
       status: newStatus,
       clearContacts: true,
     );
+    // Снимаем отметку «Предложение уже отправлено» — теперь этому
+    // исполнителю снова можно предлагать (после loadFromDb состояние
+    // подтвердится из БД).
+    final String? prevExecutorId = prev.executorId;
+    if (prevExecutorId != null && prevExecutorId.isNotEmpty) {
+      OfferSubmissions.unmark(prevExecutorId);
+    }
     _bump();
     return newStatus;
+  }
+
+  /// Если БД отвергла withdrawProposal, возвращаем мэтч и контакты в
+  /// исходное состояние, чтобы локальный кэш не противоречил БД.
+  static Future<void> _withdrawProposalWithRollback({
+    required OrderMock order,
+    required String matchId,
+    required int idx,
+  }) async {
+    try {
+      await CustomerOrdersService.instance.withdrawProposal(matchId);
+    } catch (e) {
+      final int curIdx =
+          newOrders.indexWhere((OrderMock x) => x.id == order.id);
+      if (curIdx >= 0) {
+        newOrders[curIdx] = order;
+        _bump();
+      }
+      onError?.call(e);
+    }
   }
 
   /// Предложение заказа конкретному исполнителю из каталога: заказ
@@ -644,7 +711,13 @@ class MyOrdersStore {
         customerEmail: c.email,
       );
       _bump();
-    } catch (_) {/* RLS не пустил — UI оставит карточку без телефона */}
+    } catch (e) {
+      // RLS не пустил (например, мэтч отозван параллельно другим
+      // клиентом) — карточка останется без телефона. Логируем для
+      // диагностики, чтобы пустой блок «Номер телефона» не казался
+      // загадкой.
+      debugPrint('_fetchAndPatchContacts failed: $e');
+    }
   }
 
   /// Помечает заказ как тот, по которому уже оставлен отзыв.
@@ -663,35 +736,61 @@ class MyOrdersStore {
   /// Возвращает архивный заказ обратно в «Ожидает» со статусом
   /// `waiting` (после нажатия «Опубликовать заново»). Параллельно
   /// возвращает БД-заказ в `published`.
+  ///
+  /// `clearContacts: true` обнуляет данные прошлого исполнителя
+  /// (имя/телефон/email/аватарка, matchId, executorId, рейтинг и
+  /// review-count). Без этого после reпубликации заказа со статуса
+  /// «Свяжитесь с исполнителем» в карточке оставались контакты ранее
+  /// принятого исполнителя, хотя статус «Откликов пока нет» подразумевает
+  /// чистый старт.
+  ///
+  /// При сетевой ошибке откатываем локальный перенос — иначе заказ
+  /// видится опубликованным в UI, но в БД остаётся `cancelled`, и при
+  /// следующем `loadFromDb` всё снова исчезает.
   static void republish(OrderMock o) {
     rejected.remove(o);
-    newOrders.insert(0, o.copyWith(status: MyOrderStatus.waiting));
+    newOrders.insert(
+      0,
+      o.copyWith(status: MyOrderStatus.waiting, clearContacts: true),
+    );
     _bump();
     if (_looksLikeUuid(o.id)) {
-      unawaited(
-        CustomerOrdersService.instance
-            .republishOrder(o.id)
-            .catchError((Object e) => onError?.call(e)),
-      );
+      unawaited(_republishWithRollback(o));
+    }
+  }
+
+  static Future<void> _republishWithRollback(OrderMock order) async {
+    try {
+      await CustomerOrdersService.instance.republishOrder(order.id);
+    } catch (e) {
+      newOrders.removeWhere((OrderMock x) => x.id == order.id);
+      rejected.insert(0, order);
+      _bump();
+      onError?.call(e);
     }
   }
 
   /// При блокировке аккаунта переносит активные заказы в архив со
-  /// статусом «Отменён», сохраняя исходный статус в `prevStatus` —
-  /// чтобы при разблокировке можно было вернуть обратно.
+  /// статусом «Отменён» в локальном кэше — для мгновенной реакции UI,
+  /// и параллельно отправляет на сервер атомарный
+  /// `block_user_orders` (UPDATE orders → cancelled, активные мэтчи
+  /// в терминальные статусы), чтобы исполнители не видели заказы
+  /// заблокированного заказчика как живые.
+  ///
+  /// `prevStatus` больше не сохраняем — после разблокировки заказы
+  /// остаются `cancelled` в БД, и пользователь решает, что
+  /// «опубликовать заново», а что нет. Локальное «восстановление»
+  /// привело бы к расхождению с БД.
   static void archiveActiveOrdersOnBlock() {
     final List<OrderMock> removed = <OrderMock>[];
     for (final OrderMock o in newOrders) {
-      removed.add(o.copyWith(
-        status: MyOrderStatus.rejectedDeclined,
-        prevStatus: o.status,
-      ));
+      removed.add(o.copyWith(status: MyOrderStatus.rejectedDeclined));
     }
     for (final OrderMock o in accepted) {
       if (o.status == MyOrderStatus.completed) continue;
       removed.add(o.copyWith(
         status: MyOrderStatus.rejectedDeclined,
-        prevStatus: o.status,
+        clearContacts: true,
       ));
     }
     newOrders.clear();
@@ -699,34 +798,21 @@ class MyOrdersStore {
         (OrderMock o) => o.status != MyOrderStatus.completed);
     rejected.insertAll(0, removed);
     _bump();
+
+    // Серверная синхронизация — fire-and-forget с тоастом при ошибке.
+    unawaited(
+      CustomerOrdersService.instance
+          .blockUserOrders()
+          .catchError((Object e) => onError?.call(e)),
+    );
   }
 
-  /// После разблокировки возвращает из архива заказы, которые туда
-  /// положила блокировка (`prevStatus != null`) и дата аренды которых
-  /// ещё не прошла. Истёкшие — остаются в архиве со статусом
-  /// «Отменён».
-  static void restoreActiveOrdersOnUnblock() {
-    final List<OrderMock> stillArchived = <OrderMock>[];
-    for (final OrderMock o in rejected) {
-      if (o.prevStatus == null || o.isExpired) {
-        stillArchived.add(o.copyWith(prevStatus: null));
-        continue;
-      }
-      final OrderMock restored = o.copyWith(
-        status: o.prevStatus!,
-        prevStatus: null,
-      );
-      if (restored.status == MyOrderStatus.accepted) {
-        accepted.insert(0, restored);
-      } else {
-        newOrders.insert(0, restored);
-      }
-    }
-    rejected
-      ..clear()
-      ..addAll(stillArchived);
-    _bump();
-  }
+  /// После разблокировки достаточно просто перезагрузить из БД —
+  /// заказы остались `cancelled`, заказчик увидит их в «Архиве» и
+  /// сможет нажать «Опубликовать заново», если хочет. Раньше здесь
+  /// был локальный rollback по `prevStatus`, но он расходился с БД
+  /// (сервер уже всё закрыл) и порождал «висячие» состояния.
+  static Future<void> restoreActiveOrdersOnUnblock() => loadFromDb();
 
   static void _bump() {
     revision.value++;

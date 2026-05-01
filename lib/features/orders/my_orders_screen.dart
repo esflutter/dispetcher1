@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 
@@ -82,12 +84,22 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
     // мог снова создавать 30 заказов, а серверный триггер отбивал
     // лишь после `INSERT` уже заполненной формы.
     DailyOrderLimit.primeCountFromDb();
+    // Авто-снятие просроченного блока. `isBlocked` теперь чистый
+    // getter без побочных эффектов, поэтому проверяем срок раз в
+    // минуту здесь.
+    AccountBlock.tickExpiry();
+    _blockExpiryTimer = Timer.periodic(
+      const Duration(minutes: 1),
+      (_) => AccountBlock.tickExpiry(),
+    );
     if (AccountBlock.isBlocked) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         MyOrdersStore.archiveActiveOrdersOnBlock();
       });
     }
   }
+
+  Timer? _blockExpiryTimer;
 
   void _onStoreError(Object e) {
     if (!mounted) return;
@@ -103,6 +115,7 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
     if (MyOrdersStore.onError == _onStoreError) {
       MyOrdersStore.onError = null;
     }
+    _blockExpiryTimer?.cancel();
     _tab.dispose();
     _waitingScrollCtrl.dispose();
     super.dispose();
@@ -121,7 +134,10 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
       MyOrdersStore.archiveActiveOrdersOnBlock();
     } else {
       DailyOrderLimit.resetToday();
-      MyOrdersStore.restoreActiveOrdersOnUnblock();
+      // restoreActiveOrdersOnUnblock теперь возвращает Future (внутри
+      // loadFromDb). Запускаем fire-and-forget — UI обновится через
+      // `MyOrdersStore.revision` listener.
+      unawaited(MyOrdersStore.restoreActiveOrdersOnUnblock());
     }
   }
 
