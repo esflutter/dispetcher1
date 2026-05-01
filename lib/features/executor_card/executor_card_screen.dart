@@ -10,6 +10,7 @@ import 'package:dispatcher_1/core/utils/plural.dart';
 import 'package:dispatcher_1/core/widgets/dark_sub_app_bar.dart';
 import 'package:dispatcher_1/core/widgets/primary_button.dart';
 import 'package:dispatcher_1/features/catalog/widgets/catalog_search_bar.dart';
+import 'package:dispatcher_1/core/widgets/avatar_circle.dart';
 import 'package:dispatcher_1/core/widgets/cropped_avatar.dart';
 import 'package:dispatcher_1/features/auth/photo_crop_screen.dart';
 import 'package:dispatcher_1/features/profile/account_block.dart';
@@ -33,6 +34,14 @@ class _ExecutorCardScreenState extends State<ExecutorCardScreen> {
   void initState() {
     super.initState();
     AccountBlock.notifier.addListener(_refresh);
+    ProfileService.changeBeacon.addListener(_onProfileChanged);
+    _loadFromDb();
+  }
+
+  void _onProfileChanged() {
+    if (!mounted) return;
+    // Любое сохранение в edit-карточке/edit-профиле бьёт по changeBeacon
+    // → перечитываем DB, чтобы не залипать на старом аватаре/about/статусе.
     _loadFromDb();
   }
 
@@ -40,20 +49,23 @@ class _ExecutorCardScreenState extends State<ExecutorCardScreen> {
     try {
       final MyProfile? p = await ProfileService.instance.loadMine();
       if (p == null || !mounted) return;
-      // Карточку считаем созданной, только если оба содержательных
-      // поля заполнены — `about` и `legal_status`. Раньше было «или»:
-      // достаточно одного, чтобы экран считал карточку созданной, а
-      // на edit-screen всё равно были пробелы. Теперь критерий жёстче.
-      final bool filled = p.about != null &&
-          p.about!.trim().isNotEmpty &&
-          p.legalStatus != null &&
-          p.legalStatus!.trim().isNotEmpty;
+      // Карточка считается созданной, если юзер хоть раз нажал
+      // «Сохранить» (customer_card_saved_at != null). Поля about и
+      // legal_status опциональные, гадать «filled» по их содержимому
+      // нельзя — иначе пустое сохранение оставляло юзера в empty-state.
+      final bool filled = p.customerCardSavedAt != null;
       ExecutorCardData.about = p.about;
       ExecutorCardData.status = _legalLabel(p.legalStatus);
       ExecutorCardScreen.cardCreated = filled;
-      if (filled) AccountBlock.setUntil(p.blockedUntil);
+      // Статус блокировки никак не привязан к статусу карточки —
+      // подтягиваем `blocked_until` всегда. Раньше стоял `if (filled)`,
+      // и пользователь без созданной карточки получал диалог
+      // блокировки с дефолтным текстом «на 30 дней» вместо реальной
+      // даты, потому что AccountBlock._until оставался null.
+      AccountBlock.setUntil(p.blockedUntil);
       ExecutorCardData.ratingAsCustomer = p.ratingAsCustomer;
       ExecutorCardData.reviewCountAsCustomer = p.reviewCountAsCustomer;
+      ExecutorCardData.avatarUrl = p.avatarUrl;
       if (mounted) setState(() {});
     } catch (_) {/* silent */}
   }
@@ -76,6 +88,7 @@ class _ExecutorCardScreenState extends State<ExecutorCardScreen> {
   @override
   void dispose() {
     AccountBlock.notifier.removeListener(_refresh);
+    ProfileService.changeBeacon.removeListener(_onProfileChanged);
     super.dispose();
   }
 
@@ -126,7 +139,13 @@ class _ExecutorCardScreenState extends State<ExecutorCardScreen> {
                       label: 'Редактировать',
                       onPressed: () async {
                         await context.push('/executor-card/edit');
-                        if (mounted) setState(() {});
+                        if (!mounted) return;
+                        // Перетягиваем avatar_url/about/legal_status из БД —
+                        // в edit-экране они уже сохранены (saveCustomerCard
+                        // + uploadAvatar), но локальный ExecutorCardData
+                        // мог не успеть обновиться, если аплоад был
+                        // в полёте на момент закрытия экрана.
+                        await _loadFromDb();
                       },
                     )
                   : PrimaryButton(
@@ -209,6 +228,13 @@ class ExecutorCardData {
   static double ratingAsCustomer = 0;
   static int reviewCountAsCustomer = 0;
 
+  /// URL аватарки из `profiles.avatar_url`. Нужен для шапки карточки,
+  /// когда `CropResult.saved` пуст (после рестарта приложения in-memory
+  /// крон сбрасывается, а сетевую аватарку всё равно надо показывать).
+  /// Без этого поля «Моя карточка заказчика» после перезапуска показывала
+  /// серый плейсхолдер, хотя в профиле аватар был.
+  static String? avatarUrl;
+
   /// Сбросить все поля карточки — для logout.
   static void clear() {
     location = null;
@@ -220,6 +246,7 @@ class ExecutorCardData {
     about = null;
     ratingAsCustomer = 0;
     reviewCountAsCustomer = 0;
+    avatarUrl = null;
   }
 }
 
@@ -281,10 +308,16 @@ class _HeaderRow extends StatelessWidget {
     final String ratingText = rating > 0
         ? rating.toStringAsFixed(1).replaceAll('.', ',')
         : '—';
+    // Если в этой сессии юзер только что выбрал/обрезал новое фото —
+    // показываем live-preview из памяти. Иначе — сетевая аватарка из
+    // БД, чтобы после рестарта приложения карточка не теряла фото.
+    final Widget avatar = CropResult.saved != null
+        ? CroppedAvatar(size: 72.r)
+        : AvatarCircle(size: 72.r, avatarUrl: ExecutorCardData.avatarUrl);
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: <Widget>[
-        CroppedAvatar(size: 72.r),
+        avatar,
         SizedBox(width: 12.w),
         Expanded(
           child: Column(
@@ -299,11 +332,13 @@ class _HeaderRow extends StatelessWidget {
               SizedBox(height: 4.h),
               Row(
                 children: <Widget>[
-                  Image.asset('assets/images/catalog/star.webp',
-                      width: 20.r, height: 20.r),
-                  SizedBox(width: 4.w),
-                  Text(ratingText, style: AppTextStyles.body),
-                  SizedBox(width: 16.w),
+                  if (reviewsCount > 0) ...<Widget>[
+                    Image.asset('assets/images/catalog/star.webp',
+                        width: 20.r, height: 20.r),
+                    SizedBox(width: 4.w),
+                    Text(ratingText, style: AppTextStyles.body),
+                    SizedBox(width: 16.w),
+                  ],
                   GestureDetector(
                     onTap: () => context.push('/profile/reviews'),
                     child: Text(
@@ -439,7 +474,7 @@ Future<void> showBlockedProfileDialog(BuildContext context) {
             ),
             SizedBox(height: 20.h),
             Text(
-              'Ваш профиль заблокирован\nна 30 дней',
+              'Ваш профиль заблокирован\n${AccountBlock.blockedUntilText ?? "на 30 дней"}',
               textAlign: TextAlign.center,
               style:
                   AppTextStyles.titleL.copyWith(fontWeight: FontWeight.w700),

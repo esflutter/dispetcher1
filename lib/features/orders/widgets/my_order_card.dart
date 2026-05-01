@@ -1,9 +1,7 @@
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 
 import 'package:dispatcher_1/core/theme/app_colors.dart';
-import 'package:dispatcher_1/core/utils/yandex_maps.dart';
 import 'package:dispatcher_1/core/widgets/avatar_circle.dart';
 import 'package:dispatcher_1/features/auth/photo_crop_screen.dart';
 import 'package:dispatcher_1/features/orders/widgets/order_status_pill.dart';
@@ -22,6 +20,7 @@ class MyOrderCard extends StatelessWidget {
     required this.address,
     required this.timeAgo,
     this.statusCount,
+    this.reviewLeft = false,
     this.customerName,
     this.customerPhone,
     this.customerEmail,
@@ -35,6 +34,10 @@ class MyOrderCard extends StatelessWidget {
   /// Опциональный счётчик рядом со статусом (например, количество
   /// откликов для waitingChoose — «Выберите исполнителя (3)»).
   final int? statusCount;
+
+  /// Для completed-карточки: если отзыв уже оставлен — пилюля
+  /// показывает короткое «Завершён» вместо «Завершён. Оставьте отзыв».
+  final bool reviewLeft;
   final String title;
   final List<String> equipment;
   final String rentDate;
@@ -48,7 +51,9 @@ class MyOrderCard extends StatelessWidget {
   final VoidCallback? onContact;
 
   bool get _showCustomerRow =>
-      status == MyOrderStatus.accepted && customerName != null;
+      (status == MyOrderStatus.accepted ||
+          status == MyOrderStatus.completed) &&
+      customerName != null;
 
   @override
   Widget build(BuildContext context) {
@@ -69,7 +74,11 @@ class MyOrderCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            OrderStatusPill(status: status, count: statusCount),
+            OrderStatusPill(
+              status: status,
+              count: statusCount,
+              reviewLeft: reviewLeft,
+            ),
             SizedBox(height: 6.h),
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -100,19 +109,21 @@ class MyOrderCard extends StatelessWidget {
             SizedBox(height: 8.h),
             _LabelLine(label: 'Дата аренды:', value: rentDate),
             SizedBox(height: 5.h),
-            _LabelLine(
-              label: 'Адрес:',
-              value: address,
-              valueUnderlined: true,
-              isAddress: true,
-            ),
+            // В карточке списка адрес — обычный текст без подчёркивания
+            // и без тапа: тап по самой карточке открывает деталь, где
+            // адрес уже становится кликабельным.
+            _LabelLine(label: 'Адрес:', value: address),
             if (_showCustomerRow) ...<Widget>[
               SizedBox(height: 12.h),
               _CustomerRow(
                 name: customerName!,
                 phone: customerPhone ?? '',
                 avatar: customerAvatar,
-                onContact: onContact,
+                // В статусе «Завершён» связываться с исполнителем по
+                // заказу уже не нужно — кнопку вызова прячем (тот же
+                // паттерн, что в карточке списка приложения исполнителя).
+                onContact:
+                    status == MyOrderStatus.completed ? null : onContact,
               ),
             ],
           ],
@@ -123,17 +134,10 @@ class MyOrderCard extends StatelessWidget {
 }
 
 class _LabelLine extends StatelessWidget {
-  const _LabelLine({
-    required this.label,
-    required this.value,
-    this.valueUnderlined = false,
-    this.isAddress = false,
-  });
+  const _LabelLine({required this.label, required this.value});
 
   final String label;
   final String value;
-  final bool valueUnderlined;
-  final bool isAddress;
 
   @override
   Widget build(BuildContext context) {
@@ -154,18 +158,10 @@ class _LabelLine extends StatelessWidget {
           ),
           TextSpan(
             text: value,
-            style: TextStyle(
+            style: const TextStyle(
               fontWeight: FontWeight.w400,
               color: AppColors.textSecondary,
-              decoration: valueUnderlined
-                  ? TextDecoration.underline
-                  : TextDecoration.none,
             ),
-            recognizer: isAddress
-                ? (TapGestureRecognizer()
-                  ..onTap =
-                      () => openAddressInYandexMaps(context, value))
-                : null,
           ),
         ],
       ),
@@ -220,23 +216,25 @@ class _CustomerRow extends StatelessWidget {
             ],
           ),
         ),
-        SizedBox(width: 8.w),
-        GestureDetector(
-          onTap: onContact,
-          child: Container(
-            width: 40.r,
-            height: 40.r,
-            decoration: BoxDecoration(
-              color: AppColors.primary,
-              borderRadius: BorderRadius.circular(10.r),
-            ),
-            child: Icon(
-              Icons.phone,
-              color: Colors.white,
-              size: 22.r,
+        if (onContact != null) ...<Widget>[
+          SizedBox(width: 8.w),
+          GestureDetector(
+            onTap: onContact,
+            child: Container(
+              width: 40.r,
+              height: 40.r,
+              decoration: BoxDecoration(
+                color: AppColors.primary,
+                borderRadius: BorderRadius.circular(10.r),
+              ),
+              child: Icon(
+                Icons.phone,
+                color: Colors.white,
+                size: 22.r,
+              ),
             ),
           ),
-        ),
+        ],
       ],
     );
   }

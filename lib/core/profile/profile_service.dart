@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// Чтение/запись моего профиля (`public.profiles` + `profiles_private`).
@@ -7,6 +8,15 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 class ProfileService {
   ProfileService._();
   static final ProfileService instance = ProfileService._();
+
+  /// Счётчик «профиль изменился». Инкрементится после любого успешного
+  /// update/saveCustomerCard/updatePrivateEmail. Экраны (Profile,
+  /// ExecutorCard и т.п.) слушают этот ValueNotifier и сами дёргают
+  /// loadMine/loadMyPrivate, чтобы UI не залипал на старых данных
+  /// после правок в дочерних экранах. Раньше после загрузки нового
+  /// аватара через «Моя карточка заказчика» ProfileScreen показывал
+  /// старое фото до hot reload.
+  static final ValueNotifier<int> changeBeacon = ValueNotifier<int>(0);
 
   SupabaseClient get _client => Supabase.instance.client;
 
@@ -20,7 +30,8 @@ class ProfileService {
           'rating_as_executor, review_count_as_executor, '
           'rating_as_customer, review_count_as_customer, '
           'is_executor, is_customer, blocked_until, '
-          'verification_status, agreement_accepted_at, terms_version',
+          'verification_status, agreement_accepted_at, terms_version, '
+          'customer_card_saved_at',
         )
         .eq('id', user.id)
         .maybeSingle();
@@ -66,6 +77,32 @@ class ProfileService {
     };
     if (payload.isEmpty) return;
     await _client.from('profiles').update(payload).eq('id', user.id);
+    changeBeacon.value++;
+  }
+
+  /// Сохранение карточки заказчика. В отличие от обычного [update],
+  /// всегда проставляет `customer_card_saved_at = now()`, чтобы UI
+  /// корректно ушёл из empty-state даже если юзер сохранил пустые
+  /// `about` и `legal_status` — поля опциональные, но факт сохранения
+  /// всё равно фиксируется.
+  ///
+  /// Передаваемые `about`/`legalStatus` пишутся как есть (включая
+  /// `null` — это «очистить поле»), потому что для карточки заказчика
+  /// эти поля редактируются всегда вместе и null означает «пусто».
+  Future<void> saveCustomerCard({
+    String? about,
+    String? legalStatus,
+  }) async {
+    final User? user = _client.auth.currentUser;
+    if (user == null) {
+      throw const AuthException('Нет активной сессии');
+    }
+    await _client.from('profiles').update(<String, dynamic>{
+      'about': about,
+      'legal_status': legalStatus,
+      'customer_card_saved_at': DateTime.now().toUtc().toIso8601String(),
+    }).eq('id', user.id);
+    changeBeacon.value++;
   }
 
   /// UPDATE `profiles_private` — email.
@@ -78,6 +115,7 @@ class ProfileService {
         .from('profiles_private')
         .update(<String, dynamic>{'email': email.isEmpty ? null : email})
         .eq('id', user.id);
+    changeBeacon.value++;
   }
 }
 
@@ -99,6 +137,7 @@ class MyProfile {
     required this.verificationStatus,
     required this.agreementAcceptedAt,
     required this.termsVersion,
+    required this.customerCardSavedAt,
   });
 
   final String id;
@@ -118,6 +157,7 @@ class MyProfile {
   final String verificationStatus;
   final DateTime? agreementAcceptedAt;
   final String? termsVersion;
+  final DateTime? customerCardSavedAt;
 
   factory MyProfile.fromRow(Map<String, dynamic> r) => MyProfile(
         id: r['id'] as String,
@@ -143,6 +183,9 @@ class MyProfile {
             ? null
             : DateTime.parse(r['agreement_accepted_at'] as String),
         termsVersion: r['terms_version'] as String?,
+        customerCardSavedAt: r['customer_card_saved_at'] == null
+            ? null
+            : DateTime.parse(r['customer_card_saved_at'] as String),
       );
 }
 

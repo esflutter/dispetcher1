@@ -18,7 +18,7 @@ import 'package:dispatcher_1/core/utils/photo_source.dart';
 import 'package:dispatcher_1/core/widgets/primary_button.dart';
 import 'package:dispatcher_1/features/catalog/catalog_filter_screen.dart';
 import 'package:dispatcher_1/features/orders/orders_store.dart';
-import 'package:dispatcher_1/features/orders/preview_order_screen.dart';
+import 'package:dispatcher_1/features/orders/order_detail_screen.dart';
 import 'package:dispatcher_1/features/orders/widgets/order_status_pill.dart';
 import 'package:dispatcher_1/features/support/chat_screen.dart';
 
@@ -433,7 +433,7 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
     final OrderDraft draft = _buildDraft();
     final bool? published = await Navigator.of(context).push<bool>(
       MaterialPageRoute<bool>(
-        builder: (_) => CreateOrderPreviewScreen(draft: draft),
+        builder: (_) => OrderDetailScreen(draft: draft),
       ),
     );
     if (!mounted || published != true) return;
@@ -487,7 +487,15 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
     }
 
     setState(() => _creating = false);
-    Navigator.of(context).maybePop();
+    // maybePop читает PopScope.canPop из текущего виджет-дерева. setState
+    // выше только планирует rebuild — на следующий frame. Если вызвать
+    // maybePop тут же синхронно, он увидит canPop=false (от прошлого
+    // build, когда _creating ещё true) и не сработает — юзер останется
+    // на форме, а заказ при этом уже опубликован. Откладываем pop до
+    // конца текущего frame, чтобы PopScope успел перестроиться.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) Navigator.of(context).maybePop();
+    });
   }
 
   /// «1 фото / 2 фото / 5 фото» — в русском «фото» не склоняется по числу,
@@ -507,10 +515,12 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
       categoryTitles: _selCat.toList(),
       machineryTitles: _selMach.toList(),
       works: _works.where(_isWorkFilled).map((_WorkItem w) {
-        final String volStr = w.volumeCtrl.text.trim().replaceAll(',', '.');
+        // volume — свободный текст до 10 символов («22» или «10x30x5»).
+        // Парсинг в double больше не нужен — БД хранит строку.
+        final String volStr = w.volumeCtrl.text.trim();
         return co.WorkDraft(
           name: w.nameCtrl.text.trim(),
-          volume: double.tryParse(volStr),
+          volume: volStr.isEmpty ? null : volStr,
           unit: _unitToAscii(w.unit),
         );
       }).toList(),
@@ -863,15 +873,21 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
                         Expanded(
                           child: _TintField(
                             controller: _works[i].volumeCtrl,
-                            hint: 'Объём работы',
-                            keyboardType: const TextInputType.numberWithOptions(
-                                decimal: true),
-                            maxLength: 7,
+                            // «22» (объём) или «10x30x5» (габариты в м).
+                            // Юнит из соседнего селектора.
+                            hint: '22 или 10x30x5',
+                            keyboardType: TextInputType.text,
+                            // 10 символов — потолок реальных кейсов:
+                            // «100x20x100» (10), «1000x10000» (10).
+                            maxLength: 10,
                             extraFormatters: <TextInputFormatter>[
-                              // Цифры + одна точка/запятая. Запятая на ввод,
-                              // в БД уйдёт точка (replaceAll в _buildDbDraft).
+                              // Цифры, разделители x/X/×/* и одна точка/запятая
+                              // для дробных. Точка/запятая допустимы только
+                              // в числе, между цифрами; формальной валидации
+                              // на полную грамматику не делаем — дальше это
+                              // просто отображается как есть.
                               FilteringTextInputFormatter.allow(
-                                  RegExp(r'^\d+([.,]\d{0,2})?')),
+                                  RegExp(r'[0-9xX×*.,]')),
                             ],
                             fontSize: 14.sp,
                             height: 40.h,

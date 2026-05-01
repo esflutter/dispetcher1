@@ -70,9 +70,14 @@
             <action android:name="android.intent.action.VIEW"/>
             <data android:scheme="https"/>
         </intent>
+        <!-- geo: — стандартная Android-схема для адресов на карте.
+             Все картографические приложения (Яндекс Карты, Google Maps,
+             2ГИС, MAPS.ME и др.) объявляют intent-filter на эту схему,
+             поэтому при нажатии на адрес система сама показывает
+             chooser «Открыть с помощью». -->
         <intent>
             <action android:name="android.intent.action.VIEW"/>
-            <data android:scheme="yandexmaps"/>
+            <data android:scheme="geo"/>
         </intent>
     </queries>
 </manifest>

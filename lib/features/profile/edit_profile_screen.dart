@@ -76,7 +76,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           setState(() => _emailError = null);
         }
       } else {
-        final String value = _emailCtrl.text.trim();
+        // Нормализуем для хранения: email RFC case-insensitive, и без
+        // toLowerCase() в БД могли бы оказаться дубликаты «User@x.com»
+        // и «user@x.com». Контроллер не трогаем — пусть юзер видит
+        // вариант, который он ввёл, до конца текущей сессии редактирования.
+        final String value = _emailCtrl.text.trim().toLowerCase();
         final bool valid = value.isEmpty || _emailRegex.hasMatch(value);
         if (valid) {
           if (value != CropResult.userEmail) {
@@ -103,18 +107,27 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     // когда фокус всё ещё на поле — listener не срабатывал и в БД
     // оставалось старое значение. Дублируем запись здесь
     // (fire-and-forget — экран уже размонтирован).
+    // Оптимистично пишем в локальный кеш, но при ошибке БД откатываем —
+    // иначе при сетевом сбое UI показывал бы новое имя/мейл, а БД хранила
+    // старое, и при следующем loadMine() значение тихо «откатывалось».
     final String name = _nameCtrl.text.trim();
     if (name.isNotEmpty && name != CropResult.userName) {
+      final String prev = CropResult.userName;
       CropResult.userName = name;
       // ignore: discarded_futures
-      ProfileService.instance.update(name: name).catchError((_) {});
+      ProfileService.instance.update(name: name).catchError((Object _) {
+        CropResult.userName = prev;
+      });
     }
-    final String email = _emailCtrl.text.trim();
+    final String email = _emailCtrl.text.trim().toLowerCase();
     if ((email.isEmpty || _emailRegex.hasMatch(email)) &&
         email != CropResult.userEmail) {
+      final String prev = CropResult.userEmail;
       CropResult.userEmail = email;
       // ignore: discarded_futures
-      ProfileService.instance.updatePrivateEmail(email).catchError((_) {});
+      ProfileService.instance.updatePrivateEmail(email).catchError((Object _) {
+        CropResult.userEmail = prev;
+      });
     }
     _nameCtrl.dispose();
     _emailCtrl.dispose();

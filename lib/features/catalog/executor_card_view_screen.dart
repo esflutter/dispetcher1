@@ -113,6 +113,7 @@ class _ExecutorCardViewScreenState extends State<ExecutorCardViewScreen> {
         builder: (_) => SelectOrderForExecutorScreen(
           executorId: e.userId,
           executorName: e.name,
+          executorAvatarUrl: e.avatarUrl,
           executorMachinery: e.machineryTitles,
         ),
       ),
@@ -350,6 +351,7 @@ class _ExecutorCardViewScreenState extends State<ExecutorCardViewScreen> {
                         service: full.services[i],
                         executorId: e.userId,
                         executorName: e.name,
+                        executorAvatarUrl: e.avatarUrl,
                         executorMachinery: e.machineryTitles,
                         selectMode: widget.selectMode,
                         onSelectExecutor: widget.onSelectExecutor,
@@ -398,11 +400,13 @@ class _CustomerHeader extends StatelessWidget {
               SizedBox(height: 4.h),
               Row(
                 children: <Widget>[
-                  Image.asset('assets/images/catalog/star.webp',
-                      width: 20.r, height: 20.r),
-                  SizedBox(width: 4.w),
-                  Text(ratingText, style: AppTextStyles.body),
-                  SizedBox(width: 16.w),
+                  if (reviewsCount > 0) ...<Widget>[
+                    Image.asset('assets/images/catalog/star.webp',
+                        width: 20.r, height: 20.r),
+                    SizedBox(width: 4.w),
+                    Text(ratingText, style: AppTextStyles.body),
+                    SizedBox(width: 16.w),
+                  ],
                   GestureDetector(
                     behavior: HitTestBehavior.opaque,
                     onTap: onReviewsTap,

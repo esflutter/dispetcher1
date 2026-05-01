@@ -53,5 +53,13 @@
 		<true/>
 		<key>UIStatusBarHidden</key>
 		<false/>
+		<!-- Без `yandexmaps` в LSApplicationQueriesSchemes canLaunchUrl
+		     для `yandexmaps://...` всегда возвращает false на iOS 9+,
+		     и наш «открыть в Яндекс Картах если установлены» молча
+		     падает в web-фолбэк даже когда приложение установлено. -->
+		<key>LSApplicationQueriesSchemes</key>
+		<array>
+			<string>yandexmaps</string>
+		</array>
 	</dict>
 </plist>

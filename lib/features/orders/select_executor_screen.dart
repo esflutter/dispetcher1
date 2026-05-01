@@ -33,11 +33,16 @@ class SelectExecutorScreen extends StatefulWidget {
   final VoidCallback onMoveToArchive;
 
   /// Вызывается после успешного UPDATE в `order_matches` — сюда
-  /// передаются id мэтча, имя и id исполнителя, чтобы родитель показал
-  /// его в карточке заказа и впоследствии смог подтянуть контакты из
-  /// `profiles_private` (RLS пускает только после `accepted`).
-  final void Function(String matchId, String executorName, String executorId)
-      onExecutorSelected;
+  /// передаются id мэтча, имя/аватарка и id исполнителя, чтобы
+  /// родитель показал его в карточке заказа и впоследствии смог
+  /// подтянуть контакты из `profiles_private` (RLS пускает только
+  /// после `accepted`).
+  final void Function(
+    String matchId,
+    String executorName,
+    String executorId,
+    String? executorAvatarUrl,
+  ) onExecutorSelected;
 
   @override
   State<SelectExecutorScreen> createState() => _SelectExecutorScreenState();
@@ -58,7 +63,16 @@ class _SelectExecutorScreenState extends State<SelectExecutorScreen> {
     if (_busy) return;
     setState(() => _busy = true);
     try {
-      await CustomerOrdersService.instance.proposeToExecutor(r.matchId);
+      await CustomerOrdersService.instance.acceptResponse(r.matchId);
+    } on MatchAlreadyTakenException {
+      if (!mounted) return;
+      setState(() => _busy = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('По этому заказу уже выбран другой исполнитель.'),
+        ),
+      );
+      return;
     } on PostgrestException catch (e) {
       if (!mounted) return;
       setState(() => _busy = false);
@@ -75,16 +89,24 @@ class _SelectExecutorScreenState extends State<SelectExecutorScreen> {
       return;
     }
 
-    MyOrdersStore.proposeToExecutor(widget.order,
-        name: r.executorName,
-        phone: '',
-        matchId: r.matchId,
-        executorId: r.executorId);
+    MyOrdersStore.acceptResponse(
+      widget.order,
+      name: r.executorName,
+      phone: '',
+      avatarUrl: r.executorAvatarUrl,
+      matchId: r.matchId,
+      executorId: r.executorId,
+    );
 
     if (!mounted) return;
     await showExecutorSelectedDialog(context);
     if (!mounted) return;
-    widget.onExecutorSelected(r.matchId, r.executorName, r.executorId);
+    widget.onExecutorSelected(
+      r.matchId,
+      r.executorName,
+      r.executorId,
+      r.executorAvatarUrl,
+    );
   }
 
   /// Открывает полную карточку исполнителя в режиме «выбор». Кнопка

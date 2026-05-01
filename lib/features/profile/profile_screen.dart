@@ -36,6 +36,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void initState() {
     super.initState();
     AccountBlock.notifier.addListener(_refresh);
+    // Любая правка профиля (аватар/имя/email/about/legal_status в дочерних
+    // экранах) бьёт по этому маяку → ProfileScreen перетянет свежие
+    // _dbAvatarUrl/_dbRating и т.п., не дожидаясь hot reload.
+    ProfileService.changeBeacon.addListener(_onProfileChanged);
+    _loadFromDb();
+  }
+
+  void _onProfileChanged() {
+    if (!mounted) return;
+    // Сбрасываем CropResult.userName/userEmail в пустое не нужно —
+    // _loadFromDb с isEmpty-guard корректно мержит локальные правки
+    // с серверными значениями, не клобя свежеотредактированные.
     _loadFromDb();
   }
 
@@ -43,18 +55,45 @@ class _ProfileScreenState extends State<ProfileScreen> {
     try {
       final MyProfile? p = await ProfileService.instance.loadMine();
       if (p == null || !mounted) return;
-      CropResult.userName = p.name;
+      // Не перезаписываем CropResult.userName/userEmail, если локально
+      // уже есть значение. Иначе после возврата из EditProfileScreen
+      // мы могли затереть только что введённое имя его старым значением
+      // из БД (dispose-write оптимистичный, асинхронный — UPDATE долетит
+      // позже, чем SELECT в loadMine). Проверяем именно «пустое»: cold
+      // start → CropResult пуст → берём из БД; после редактирования →
+      // CropResult свежий → доверяем локальному.
+      if (CropResult.userName.isEmpty) {
+        CropResult.userName = p.name;
+      }
+      // Синхронизируем мок-стор блокировки с БД. Без этой строки
+      // плашка «Доступ ограничен» не появлялась даже при выставленном
+      // в БД blocked_until — AccountBlock жил отдельной жизнью на
+      // фронте, и на старте всегда считал юзера разблокированным.
+      AccountBlock.setUntil(p.blockedUntil);
       setState(() {
         _dbRating = p.ratingAsCustomer;
         _dbReviewCount = p.reviewCountAsCustomer;
         _dbAvatarUrl = p.avatarUrl;
       });
+      // Email живёт в profiles_private — отдельный SELECT. Без него
+      // CropResult.userEmail никем не заполняется при cold start, и
+      // после Hot Restart введённый ранее email пропадал из «Моя
+      // карточка заказчика» и из формы редактирования.
+      if (CropResult.userEmail.isEmpty) {
+        final MyPrivate? priv = await ProfileService.instance.loadMyPrivate();
+        if (!mounted) return;
+        if (priv?.email != null && priv!.email!.isNotEmpty) {
+          CropResult.userEmail = priv.email!;
+          if (mounted) setState(() {});
+        }
+      }
     } catch (_) {/* silent */}
   }
 
   @override
   void dispose() {
     AccountBlock.notifier.removeListener(_refresh);
+    ProfileService.changeBeacon.removeListener(_onProfileChanged);
     super.dispose();
   }
 
@@ -125,7 +164,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               const BlockedPill(),
               SizedBox(height: 8.h),
               Text(
-                'Ваш рейтинг ниже 2 звёзд, поэтому доступ\nвременно ограничен на 30 дней',
+                'Ваш рейтинг ниже 2 звёзд, поэтому доступ\nвременно ограничен ${AccountBlock.blockedUntilText ?? "на 30 дней"}',
                 style: AppTextStyles.subBody.copyWith(
                   color: AppColors.textPrimary,
                   fontWeight: FontWeight.w400,
@@ -193,11 +232,15 @@ class _Header extends StatelessWidget {
                 behavior: HitTestBehavior.opaque,
                 child: Row(
                   children: <Widget>[
-                    Image.asset('assets/images/catalog/star.webp',
-                        width: 20.r, height: 20.r),
-                    SizedBox(width: 4.w),
-                    Text(ratingText, style: AppTextStyles.body),
-                    SizedBox(width: 16.w),
+                    // При нуле отзывов рейтинг бессмысленен — звезду и
+                    // число прячем, оставляем только подчёркнутый счётчик.
+                    if (reviewsCount > 0) ...<Widget>[
+                      Image.asset('assets/images/catalog/star.webp',
+                          width: 20.r, height: 20.r),
+                      SizedBox(width: 4.w),
+                      Text(ratingText, style: AppTextStyles.body),
+                      SizedBox(width: 16.w),
+                    ],
                     Text(
                       '$reviewsCount ${reviewsWord(reviewsCount)}',
                       style: AppTextStyles.body.copyWith(

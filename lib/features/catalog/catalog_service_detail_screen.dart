@@ -45,6 +45,7 @@ class CatalogServiceDetailScreen extends StatefulWidget {
     required this.executorId,
     required this.executorName,
     required this.executorMachinery,
+    this.executorAvatarUrl,
     this.selectMode = false,
     this.onSelectExecutor,
   }) : assert(
@@ -55,6 +56,7 @@ class CatalogServiceDetailScreen extends StatefulWidget {
   final ExecutorService service;
   final String executorId;
   final String executorName;
+  final String? executorAvatarUrl;
   final List<String> executorMachinery;
   final bool selectMode;
   final VoidCallback? onSelectExecutor;
@@ -110,6 +112,7 @@ class _CatalogServiceDetailScreenState
         builder: (_) => SelectOrderForExecutorScreen(
           executorId: widget.executorId,
           executorName: widget.executorName,
+          executorAvatarUrl: widget.executorAvatarUrl,
           executorMachinery: widget.executorMachinery,
         ),
       ),

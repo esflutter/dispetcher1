@@ -45,15 +45,27 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
       // Грузим аватар в Storage ДО вызова completeRegistration, чтобы
       // avatar_url сразу попал в UPDATE profiles одним запросом.
       String? avatarUrl;
+      String? avatarFailMsg;
       final String? avatarPath = _cropResult?.imagePath;
       if (avatarPath != null && !avatarPath.startsWith('assets/')) {
         try {
           avatarUrl = await StorageService.instance
               .uploadAvatar(File(avatarPath));
-        } catch (_) {/* пропускаем неудачную загрузку */}
+        } on FileTooLargeException catch (e) {
+          avatarFailMsg =
+              'Фото больше ${e.maxMb.toStringAsFixed(0)} МБ. Профиль сохранён без аватара — добавьте фото поменьше в настройках.';
+        } catch (_) {
+          avatarFailMsg =
+              'Не удалось загрузить фото. Профиль сохранён без аватара — добавьте его позже в настройках.';
+        }
       }
       await AuthService.instance
           .completeRegistration(name: name, avatarUrl: avatarUrl);
+      if (avatarFailMsg != null && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(avatarFailMsg)),
+        );
+      }
       if (!mounted) return;
       CropResult.saved = _cropResult;
       CropResult.userName = name;

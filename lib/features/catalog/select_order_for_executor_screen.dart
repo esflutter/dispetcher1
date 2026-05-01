@@ -8,6 +8,7 @@ import 'package:dispatcher_1/core/theme/app_text_styles.dart';
 import 'package:dispatcher_1/core/widgets/primary_button.dart';
 import 'package:dispatcher_1/features/catalog/widgets/catalog_search_bar.dart';
 import 'package:dispatcher_1/features/catalog/widgets/respond_bottom_sheet.dart';
+import 'package:dispatcher_1/features/orders/create_order_screen.dart';
 import 'package:dispatcher_1/features/orders/orders_store.dart';
 
 /// Трекер отправленных откликов по executor-order id. После отправки
@@ -42,6 +43,7 @@ class SelectOrderForExecutorScreen extends StatefulWidget {
     super.key,
     required this.executorId,
     required this.executorName,
+    this.executorAvatarUrl,
     this.executorMachinery = const <String>[],
   });
 
@@ -52,6 +54,12 @@ class SelectOrderForExecutorScreen extends StatefulWidget {
   /// Имя исполнителя — нужно только для локального обновления стора,
   /// чтобы карточка моего заказа сразу подсветила выбранного.
   final String executorName;
+
+  /// URL аватара исполнителя из каталога — нужен, чтобы при создании
+  /// `awaiting_executor`-мэтча карточка моего заказа в «Ждёт
+  /// подтверждения» сразу показывала аватарку, а не серый силуэт до
+  /// следующего `loadFromDb`.
+  final String? executorAvatarUrl;
 
   /// Названия техники, которой владеет исполнитель в каталоге. Если
   /// список пуст — фильтр по совпадению техники не применяется.
@@ -122,6 +130,19 @@ class _SelectOrderForExecutorScreenState
         orderId: selected.id,
         executorId: widget.executorId,
       );
+    } on MatchAlreadyTakenException {
+      if (!mounted) return;
+      setState(() => _busy = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Этот заказ уже предлагался этому исполнителю или он '
+            'по нему откликался — повторно предложить нельзя.',
+          ),
+          duration: Duration(seconds: 4),
+        ),
+      );
+      return;
     } catch (e) {
       if (!mounted) return;
       setState(() => _busy = false);
@@ -141,6 +162,7 @@ class _SelectOrderForExecutorScreenState
       selected,
       name: widget.executorName,
       phone: '',
+      avatarUrl: widget.executorAvatarUrl,
       matchId: result.matchId,
       executorId: widget.executorId,
     );
@@ -192,51 +214,102 @@ class _SelectOrderForExecutorScreenState
         child: AiAssistantFab(onTap: () => context.push('/assistant/chat')),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
-      body: Column(
-        children: <Widget>[
-          Expanded(
-            child: ListView.separated(
-              padding: EdgeInsets.zero,
-              itemCount: items.length,
-              separatorBuilder: (_, _) => Divider(
-                height: 1,
-                thickness: 1,
-                color: AppColors.primary.withValues(alpha: 0.3),
-              ),
-              itemBuilder: (_, int i) {
-                final OrderMock o = items[i];
-                final bool selected = _selectedId == o.id;
-                return _OrderOfferTile(
-                  order: o,
-                  selected: selected,
-                  onTap: () => setState(() => _selectedId = o.id),
-                );
-              },
-            ),
-          ),
-          Container(
-            decoration: BoxDecoration(
-              color: AppColors.background,
-              boxShadow: <BoxShadow>[
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.08),
-                  blurRadius: 8,
-                  offset: const Offset(0, -2),
+      body: items.isEmpty
+          ? const _NoSuitableOrders()
+          : Column(
+              children: <Widget>[
+                Expanded(
+                  child: ListView.separated(
+                    padding: EdgeInsets.zero,
+                    itemCount: items.length,
+                    separatorBuilder: (_, _) => Divider(
+                      height: 1,
+                      thickness: 1,
+                      color: AppColors.primary.withValues(alpha: 0.3),
+                    ),
+                    itemBuilder: (_, int i) {
+                      final OrderMock o = items[i];
+                      final bool selected = _selectedId == o.id;
+                      return _OrderOfferTile(
+                        order: o,
+                        selected: selected,
+                        onTap: () => setState(() => _selectedId = o.id),
+                      );
+                    },
+                  ),
+                ),
+                Container(
+                  decoration: BoxDecoration(
+                    color: AppColors.background,
+                    boxShadow: <BoxShadow>[
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.08),
+                        blurRadius: 8,
+                        offset: const Offset(0, -2),
+                      ),
+                    ],
+                  ),
+                  padding: EdgeInsets.fromLTRB(
+                    16.w,
+                    12.h,
+                    16.w,
+                    16.h + MediaQuery.of(context).padding.bottom,
+                  ),
+                  child: PrimaryButton(
+                    label: 'Предложить заказ',
+                    enabled: _selectedId != null && !_busy,
+                    onPressed:
+                        (_selectedId == null || _busy) ? null : _onRespond,
+                  ),
                 ),
               ],
             ),
-            padding: EdgeInsets.fromLTRB(
-              16.w,
-              12.h,
-              16.w,
-              16.h + MediaQuery.of(context).padding.bottom,
+    );
+  }
+}
+
+/// Empty-state, когда у заказчика нет ни одного offerable-заказа,
+/// который подходит этому исполнителю по технике. Совпадает по
+/// верстке с `_EmptyOrders` экрана «Мои заказы», только заголовок и
+/// подсказка переписаны под контекст «выбора заказа для исполнителя».
+class _NoSuitableOrders extends StatelessWidget {
+  const _NoSuitableOrders();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          Text(
+            'Нет подходящих заказов',
+            style: TextStyle(
+              fontFamily: 'Roboto',
+              fontSize: 20.sp,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textPrimary,
+              height: 1.3,
             ),
-            child: PrimaryButton(
-              label: 'Предложить заказ',
-              enabled: _selectedId != null && !_busy,
-              onPressed:
-                  (_selectedId == null || _busy) ? null : _onRespond,
+            textAlign: TextAlign.center,
+          ),
+          SizedBox(height: 6.h),
+          Text(
+            'Создайте новый заказ\nс подходящей спецтехникой',
+            style: TextStyle(
+              fontFamily: 'Roboto',
+              fontSize: 16.sp,
+              fontWeight: FontWeight.w400,
+              height: 1.3,
+              color: AppColors.textTertiary,
             ),
+            textAlign: TextAlign.center,
+          ),
+          SizedBox(height: 26.h),
+          PrimaryButton(
+            label: 'Создать заказ',
+            onPressed: () => DailyOrderLimit.openCreateOrAlert(context),
           ),
         ],
       ),

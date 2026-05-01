@@ -1,13 +1,17 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:dispatcher_1/core/profile/profile_service.dart';
+import 'package:dispatcher_1/core/storage/storage_service.dart';
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_spacing.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
 import 'package:dispatcher_1/core/utils/photo_source.dart';
 import 'package:dispatcher_1/core/widgets/dark_sub_app_bar.dart';
+import 'package:dispatcher_1/core/widgets/avatar_circle.dart';
 import 'package:dispatcher_1/core/widgets/cropped_avatar.dart';
 import 'package:dispatcher_1/core/widgets/primary_button.dart';
 import 'package:dispatcher_1/features/auth/photo_crop_screen.dart';
@@ -83,18 +87,24 @@ class _EditExecutorCardScreenState extends State<EditExecutorCardScreen> {
     _emailCtrl = TextEditingController(text: CropResult.userEmail);
     _selectedStatus = ExecutorCardData.status;
 
-    _nameFocus.addListener(() {
+    _nameFocus.addListener(() async {
       if (!_nameFocus.hasFocus) {
         final String value = _nameCtrl.text.trim();
         if (value.isEmpty) {
           // Пустое имя не сохраняем — откатываем к последнему валидному.
           _nameCtrl.text = ExecutorCardData.name;
-        } else {
+        } else if (value != ExecutorCardData.name) {
+          // Оптимистично пишем в локальный кеш + UPDATE в БД. Раньше
+          // изменение имени в этой форме не уходило в БД вовсе — после
+          // Hot Restart новое имя пропадало.
           ExecutorCardData.name = value;
+          try {
+            await ProfileService.instance.update(name: value);
+          } catch (_) {/* silent — UI не блокируем, при ошибке откатится при следующем loadMine */}
         }
       }
     });
-    _emailFocus.addListener(() {
+    _emailFocus.addListener(() async {
       if (_emailFocus.hasFocus) {
         // Пользователь вернулся в поле редактировать — убираем подсказку
         // об ошибке, пока не оценим снова на следующем blur.
@@ -102,10 +112,18 @@ class _EditExecutorCardScreenState extends State<EditExecutorCardScreen> {
           setState(() => _emailError = null);
         }
       } else {
-        final String value = _emailCtrl.text.trim();
+        // Нормализуем регистр для хранения — иначе один и тот же ящик
+        // может оказаться в БД дважды («User@x.com» / «user@x.com»).
+        // Контроллер не трогаем — пусть юзер видит вариант «как ввёл».
+        final String value = _emailCtrl.text.trim().toLowerCase();
         final bool valid = value.isEmpty || _emailRegex.hasMatch(value);
         if (valid) {
-          CropResult.userEmail = value;
+          if (value != CropResult.userEmail) {
+            CropResult.userEmail = value;
+            try {
+              await ProfileService.instance.updatePrivateEmail(value);
+            } catch (_) {/* silent */}
+          }
           if (_emailError != null) setState(() => _emailError = null);
         } else {
           // Невалидное значение не сохраняем в CropResult. Текст в поле
@@ -130,13 +148,27 @@ class _EditExecutorCardScreenState extends State<EditExecutorCardScreen> {
 
   @override
   void dispose() {
-    // Фикс на случай, если пользователь ушёл со экрана, не сняв фокус.
-    // Имя синхронизируется с профилем через сеттер [ExecutorCardData.name].
+    // Если пользователь ушёл с экрана не сняв фокус — listener не успел
+    // ни сохранить локально, ни записать в БД. Дублируем оба действия
+    // здесь с тем же rollback-паттерном, что в edit_profile_screen.
     final String name = _nameCtrl.text.trim();
-    if (name.isNotEmpty) ExecutorCardData.name = name;
-    final String email = _emailCtrl.text.trim();
-    if (email.isEmpty || _emailRegex.hasMatch(email)) {
+    if (name.isNotEmpty && name != ExecutorCardData.name) {
+      final String prev = ExecutorCardData.name;
+      ExecutorCardData.name = name;
+      // ignore: discarded_futures
+      ProfileService.instance.update(name: name).catchError((Object _) {
+        ExecutorCardData.name = prev;
+      });
+    }
+    final String email = _emailCtrl.text.trim().toLowerCase();
+    if ((email.isEmpty || _emailRegex.hasMatch(email)) &&
+        email != CropResult.userEmail) {
+      final String prev = CropResult.userEmail;
       CropResult.userEmail = email;
+      // ignore: discarded_futures
+      ProfileService.instance.updatePrivateEmail(email).catchError((Object _) {
+        CropResult.userEmail = prev;
+      });
     }
     _about.dispose();
     _nameCtrl.dispose();
@@ -365,7 +397,10 @@ class _EditExecutorCardScreenState extends State<EditExecutorCardScreen> {
                     _ => null,
                   };
                   try {
-                    await ProfileService.instance.update(
+                    // Всегда выставляет customer_card_saved_at = now(),
+                    // чтобы UI ушёл из empty-state даже когда оба поля
+                    // (about/legal_status) пустые — они опциональные.
+                    await ProfileService.instance.saveCustomerCard(
                       about: _about.text.trim().isEmpty
                           ? null
                           : _about.text.trim(),
@@ -419,7 +454,26 @@ class _HeaderRowState extends State<_HeaderRow> {
     );
     if (result != null && mounted) {
       setState(() => CropResult.saved = result);
+      // Аватар нужно реально залить в Storage и записать URL в БД,
+      // иначе после Hot Restart загруженное фото исчезает: in-memory
+      // CropResult.saved сбрасывается, а сетевая аватарка не была
+      // обновлена. Раньше этот шаг отсутствовал в карточке заказчика
+      // (в edit_profile_screen он есть — здесь зеркалим логику).
+      final String? path = result.imagePath;
+      if (path != null && !path.startsWith('assets/')) {
+        // ignore: discarded_futures
+        _uploadAvatar(path);
+      }
     }
+  }
+
+  Future<void> _uploadAvatar(String path) async {
+    try {
+      final String url =
+          await StorageService.instance.uploadAvatar(File(path));
+      await ProfileService.instance.update(avatarUrl: url);
+      if (mounted) setState(() => ExecutorCardData.avatarUrl = url);
+    } catch (_) {/* silent */}
   }
 
   @override
@@ -434,7 +488,13 @@ class _HeaderRowState extends State<_HeaderRow> {
             height: 80.r,
             child: Stack(
               children: [
-                CroppedAvatar(size: 80.r),
+                // Live-preview из памяти (если только что выбрали фото)
+                // или сетевая аватарка из БД — иначе после рестарта
+                // экран редактирования показывал серый плейсхолдер.
+                if (CropResult.saved != null)
+                  CroppedAvatar(size: 80.r)
+                else
+                  AvatarCircle(size: 80.r, avatarUrl: ExecutorCardData.avatarUrl),
                 Positioned(
                   right: -1.w,
                   bottom: 0,
@@ -462,18 +522,18 @@ class _HeaderRowState extends State<_HeaderRow> {
               SizedBox(height: 4.h),
               Row(
                 children: [
-                  Image.asset('assets/images/catalog/star.webp',
-                      width: 20.r, height: 20.r),
-                  SizedBox(width: 4.w),
-                  Text(
-                    widget.rating > 0
-                        ? widget.rating
-                            .toStringAsFixed(1)
-                            .replaceAll('.', ',')
-                        : '—',
-                    style: AppTextStyles.body,
-                  ),
-                  SizedBox(width: 16.w),
+                  if (widget.reviewCount > 0) ...[
+                    Image.asset('assets/images/catalog/star.webp',
+                        width: 20.r, height: 20.r),
+                    SizedBox(width: 4.w),
+                    Text(
+                      widget.rating
+                          .toStringAsFixed(1)
+                          .replaceAll('.', ','),
+                      style: AppTextStyles.body,
+                    ),
+                    SizedBox(width: 16.w),
+                  ],
                   GestureDetector(
                     onTap: () => context.push('/profile/reviews'),
                     child: Text(

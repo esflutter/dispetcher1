@@ -100,34 +100,32 @@ class OrderCard extends StatelessWidget {
                         ),
                       ),
                       SizedBox(height: 4.h),
-                      Row(
-                        children: <Widget>[
-                          Image.asset(
-                            'assets/images/catalog/star.webp',
-                            width: 16.r,
-                            height: 16.r,
-                          ),
-                          SizedBox(width: 4.w),
-                          Text(
-                            // У исполнителя без отзывов рейтинг 0,0
-                            // выглядит как «плохой». В остальных местах
-                            // в обоих приложениях такой рейтинг
-                            // показывается как «—»; приводим к тому же.
-                            rating > 0
-                                ? rating
-                                    .toStringAsFixed(1)
-                                    .replaceAll('.', ',')
-                                : '—',
-                            style: TextStyle(
-                              fontFamily: 'Roboto',
-                              fontSize: 14.sp,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.textPrimary,
-                              height: 1.25,
+                      // Без отзывов (rating <= 0) звезду и число не
+                      // показываем — тот же UX, что в карточках профилей.
+                      // Сама строка остаётся пустой; её схлопывает Column.
+                      if (rating > 0)
+                        Row(
+                          children: <Widget>[
+                            Image.asset(
+                              'assets/images/catalog/star.webp',
+                              width: 16.r,
+                              height: 16.r,
                             ),
-                          ),
-                        ],
-                      ),
+                            SizedBox(width: 4.w),
+                            Text(
+                              rating
+                                  .toStringAsFixed(1)
+                                  .replaceAll('.', ','),
+                              style: TextStyle(
+                                fontFamily: 'Roboto',
+                                fontSize: 14.sp,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.textPrimary,
+                                height: 1.25,
+                              ),
+                            ),
+                          ],
+                        ),
                     ],
                   ),
                 ),

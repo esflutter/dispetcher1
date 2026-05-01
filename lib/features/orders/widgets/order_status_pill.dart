@@ -41,6 +41,10 @@ enum MyOrderStatus {
 }
 
 extension MyOrderStatusX on MyOrderStatus {
+  /// Базовая подпись пилюли. Для [MyOrderStatus.completed] возвращает
+  /// дефолтный «Завершён. Оставьте отзыв» — т.е. как будто отзыв ещё не
+  /// оставлен. Когда отзыв уже оставлен, виджет [OrderStatusPill]
+  /// подменяет надпись на «Завершён» через параметр `reviewLeft`.
   String get label {
     switch (this) {
       case MyOrderStatus.waiting:
@@ -56,7 +60,7 @@ extension MyOrderStatusX on MyOrderStatus {
       case MyOrderStatus.executorDeclinedWaiting:
         return 'Исполнитель отказался. Откликов пока нет';
       case MyOrderStatus.completed:
-        return 'Завершён';
+        return 'Завершён. Оставьте отзыв';
       case MyOrderStatus.rejectedOther:
         return 'Исполнитель не найден';
       case MyOrderStatus.rejectedDeclined:
@@ -107,6 +111,7 @@ class OrderStatusPill extends StatelessWidget {
     super.key,
     required this.status,
     this.count,
+    this.reviewLeft = false,
   });
 
   final MyOrderStatus status;
@@ -116,10 +121,19 @@ class OrderStatusPill extends StatelessWidget {
   /// количества откликнувшихся исполнителей — «Выберите исполнителя (3)».
   final int? count;
 
+  /// Для [MyOrderStatus.completed]: если отзыв уже оставлен — показываем
+  /// короткое «Завершён» без призыва. По умолчанию `false`, т.е. дефолт
+  /// — «Завершён. Оставьте отзыв».
+  final bool reviewLeft;
+
   @override
   Widget build(BuildContext context) {
+    final String baseLabel =
+        (status == MyOrderStatus.completed && reviewLeft)
+            ? 'Завершён'
+            : status.label;
     final String label =
-        count != null ? '${status.label} ($count)' : status.label;
+        count != null ? '$baseLabel ($count)' : baseLabel;
     return Container(
       width: double.infinity,
       height: 25.h,

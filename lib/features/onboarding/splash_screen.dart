@@ -5,8 +5,12 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../core/auth/phone_format.dart';
+import '../../core/profile/profile_service.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
+import '../auth/photo_crop_screen.dart';
+import '../executor_card/executor_card_screen.dart' show ExecutorCardScreen;
 
 /// Сплеш-экран приложения «Диспетчер №1».
 /// Через 1.5 секунды отправляем пользователя:
@@ -51,6 +55,43 @@ class _SplashScreenState extends State<SplashScreen> {
       if (mounted) context.go('/onboarding');
       return;
     }
+    // Восстанавливаем телефон в CropResult из auth-сессии. Поле
+    // заполнялось только во время OTP-флоу (phone_input_screen), и
+    // после рестарта приложения с валидной сессией оставалось пустым —
+    // юзер заходил в «Редактирование профиля» и видел пустую плашку
+    // вместо своего номера.
+    final String? rawPhone = session.user.phone;
+    if (rawPhone != null && rawPhone.isNotEmpty) {
+      final String e164 = rawPhone.startsWith('+') ? rawPhone : '+$rawPhone';
+      CropResult.userPhoneE164 = e164;
+      CropResult.userPhone = PhoneFormat.toPretty(e164);
+    }
+    // Имя/email из БД — без этого после Hot Restart in-memory кеш
+    // CropResult очищается, и на «Профиле» / «Моей карточке заказчика»
+    // вместо ранее сохранённых значений показывается «—». Грузим
+    // оба разом, чтобы на старте был полный профиль; ошибки
+    // глотаем — экраны сами догрузят при необходимости.
+    try {
+      final MyProfile? p = await ProfileService.instance.loadMine();
+      if (p != null) {
+        if (CropResult.userName.isEmpty) {
+          CropResult.userName = p.name;
+        }
+        // Флаг "карточка заказчика создана" нужен в каталоге исполнителей:
+        // тап «Предложить заказ» гейтит обязательное наличие карточки.
+        // Без bootstrap'а после Hot Restart флаг сбрасывался в false до
+        // первого захода на «Моя карточка заказчика», и юзер с уже
+        // сохранённой карточкой получал попап «создайте карточку».
+        ExecutorCardScreen.cardCreated = p.customerCardSavedAt != null;
+      }
+    } catch (_) {/* silent */}
+    try {
+      final MyPrivate? priv = await ProfileService.instance.loadMyPrivate();
+      if (priv?.email != null && priv!.email!.isNotEmpty &&
+          CropResult.userEmail.isEmpty) {
+        CropResult.userEmail = priv.email!;
+      }
+    } catch (_) {/* silent */}
     bool needsRegistration = false;
     try {
       final Map<String, dynamic>? row = await Supabase.instance.client
@@ -90,8 +131,8 @@ class _SplashScreenState extends State<SplashScreen> {
                 children: [
                   Image.asset(
                     'assets/images/onboarding/splash_logo.webp',
-                    width: 130.r,
-                    height: 130.r,
+                    width: 100.r,
+                    height: 100.r,
                     fit: BoxFit.contain,
                     errorBuilder: (BuildContext _, Object _, StackTrace? _) => Icon(
                       Icons.engineering,

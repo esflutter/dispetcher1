@@ -1,15 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import 'package:dispatcher_1/core/customer_orders/customer_orders_service.dart';
 import 'package:dispatcher_1/core/theme/app_colors.dart';
+import 'package:dispatcher_1/core/utils/phone_dial.dart';
 import 'package:dispatcher_1/core/widgets/primary_button.dart';
-import 'package:dispatcher_1/features/auth/photo_crop_screen.dart';
 import 'package:dispatcher_1/features/orders/create_order_screen.dart';
 import 'package:dispatcher_1/features/orders/order_detail_screen.dart';
 import 'package:dispatcher_1/features/orders/orders_store.dart';
-import 'package:dispatcher_1/features/orders/preview_order_screen.dart';
 import 'package:dispatcher_1/features/orders/review_screen.dart';
 import 'package:dispatcher_1/features/orders/select_executor_screen.dart';
 import 'package:dispatcher_1/features/orders/widgets/my_order_card.dart';
@@ -149,30 +147,36 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
           ),
         ),
         actions: <Widget>[
-          IconButton(
-            onPressed: _blocked
-                ? null
-                : () async {
-                    final int before = MyOrdersStore.newOrders.length;
-                    await DailyOrderLimit.openCreateOrAlert(context);
-                    if (!mounted) return;
-                    if (MyOrdersStore.newOrders.length > before) {
-                      _tab.animateTo(0);
-                      WidgetsBinding.instance.addPostFrameCallback((_) {
-                        if (_waitingScrollCtrl.hasClients) {
-                          _waitingScrollCtrl.animateTo(
-                            0,
-                            duration: const Duration(milliseconds: 300),
-                            curve: Curves.easeOut,
-                          );
-                        }
-                      });
-                    }
-                  },
-            icon: Icon(Icons.add, size: 32.r, color: Colors.white),
-            tooltip: 'Создать заказ',
-          ),
-          SizedBox(width: 8.w),
+          // Плюсик нужен только когда уже есть хотя бы один заказ —
+          // в empty-state создание заказа делается через большую
+          // кнопку «Создать заказ» в центре экрана, дублировать её
+          // плюсиком в шапке избыточно.
+          if (!_isEmpty) ...<Widget>[
+            IconButton(
+              onPressed: _blocked
+                  ? null
+                  : () async {
+                      final int before = MyOrdersStore.newOrders.length;
+                      await DailyOrderLimit.openCreateOrAlert(context);
+                      if (!mounted) return;
+                      if (MyOrdersStore.newOrders.length > before) {
+                        _tab.animateTo(0);
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          if (_waitingScrollCtrl.hasClients) {
+                            _waitingScrollCtrl.animateTo(
+                              0,
+                              duration: const Duration(milliseconds: 300),
+                              curve: Curves.easeOut,
+                            );
+                          }
+                        });
+                      }
+                    },
+              icon: Icon(Icons.add, size: 32.r, color: Colors.white),
+              tooltip: 'Создать заказ',
+            ),
+            SizedBox(width: 8.w),
+          ],
         ],
       ),
       body: _isEmpty
@@ -242,6 +246,7 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
                         o.status == MyOrderStatus.executorDeclined)
                     ? o.respondersCount
                     : null,
+                reviewLeft: o.reviewLeft,
                 title: o.title,
                 equipment: o.equipment,
                 rentDate: o.rentDate,
@@ -249,6 +254,7 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
                 timeAgo: o.timeAgo,
                 customerName: o.customerName,
                 customerPhone: o.customerPhone,
+                customerAvatar: o.customerAvatarUrl,
                 onTap: () => _openOrderDetail(context, o),
                 onContact: () => _dialPhone(o.customerPhone),
               ),
@@ -305,22 +311,27 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
                   o, MyOrderStatus.rejectedDeclined);
               Navigator.of(ctx).maybePop();
             },
-            onExecutorSelected:
-                (String matchId, String name, String executorId) {
-              // БД-статус — `awaiting_executor` (UI: «Ждёт подтверждения
-              // исполнителя»). Заказ остаётся во вкладке «Ожидает» —
-              // переводим его туда в этом же статусе, не в accepted.
-              // Реальный accepted придёт после `_syncFromDb` в деталях
-              // заказа, когда исполнитель подтвердит.
-              MyOrdersStore.proposeToExecutor(o,
+            onExecutorSelected: (
+              String matchId,
+              String name,
+              String executorId,
+              String? avatarUrl,
+            ) {
+              // Заказчик принял откликнувшегося — БД переводит мэтч
+              // в `accepted` (CustomerOrdersService.acceptResponse).
+              // Локально сразу ставим тот же статус, чтобы заказ
+              // переехал в «В работе» без ожидания следующего
+              // `loadFromDb`.
+              MyOrdersStore.acceptResponse(o,
                   name: name,
                   phone: '',
+                  avatarUrl: avatarUrl,
                   matchId: matchId,
                   executorId: executorId);
               final OrderMock updated = MyOrdersStore.newOrders.firstWhere(
                 (OrderMock x) => x.id == o.id,
                 orElse: () => o.copyWith(
-                  status: MyOrderStatus.awaitingExecutor,
+                  status: MyOrderStatus.accepted,
                   customerName: name,
                   customerPhone: '',
                   matchId: matchId,
@@ -334,95 +345,70 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
       );
       return;
     }
-    final bool isUserCreated = o.number != null;
-    if (isUserCreated) {
-      final OrderDraft draft = OrderDraft(
-        number: o.number!,
-        title: o.title,
-        description: o.description,
-        rentDate: o.rentDate,
-        address: o.address,
-        machinery: o.equipment,
-        categories: o.categories,
-        works: o.works,
-        photos: o.photos,
-      );
-      Navigator.of(context).push<void>(
-        MaterialPageRoute<void>(
-          builder: (BuildContext ctx) => CreateOrderPreviewScreen(
-            draft: draft,
-            status: o.status,
-            reviewLeft: o.reviewLeft,
-            onOpenCatalog: () {
-              Navigator.of(ctx).maybePop();
-              widget.onGoToCatalog?.call();
-            },
-            onPickAnother: () => _handlePickAnotherFromAwaiting(ctx, o),
-            onMoveToArchive: () {
-              MyOrdersStore.moveToRejected(o, MyOrderStatus.rejectedDeclined);
-              Navigator.of(ctx).maybePop();
-            },
-            onLeaveReview: () async {
-              final bool? submitted =
-                  await Navigator.of(ctx).push<bool>(
-                MaterialPageRoute<bool>(
-                  builder: (_) => ReviewScreen(
-                    targetUserId: o.executorId,
-                    matchId: o.matchId,
-                  ),
-                ),
-              );
-              if (submitted == true && mounted) {
-                MyOrdersStore.markReviewLeft(o.id);
-                // Закрываем превью, чтобы при следующем открытии экран
-                // сразу собрался уже без кнопки «Оставить отзыв».
-                if (ctx.mounted) Navigator.of(ctx).maybePop();
-              }
-            },
-            onRepublish: () {
-              MyOrdersStore.republish(o);
-              Navigator.of(ctx).maybePop();
-            },
-          ),
-        ),
-      );
-      return;
-    }
+    // Все заказы из БД имеют `display_number` → ветка с моковыми
+    // заказами без номера давно мертва. Открываем единственный экран
+    // деталей.
+    final OrderDraft draft = OrderDraft(
+      number: o.displayNumber,
+      title: o.title,
+      description: o.description,
+      rentDate: o.rentDate,
+      address: o.address,
+      machinery: o.equipment,
+      categories: o.categories,
+      works: o.works,
+      photos: o.photos,
+    );
     Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
-        builder: (BuildContext ctx) => MyOrderDetailScreen(
-          title: o.title,
-          equipment: o.equipment,
-          workCategories: o.categories,
-          workDescription: o.works,
-          rentDate: o.rentDate,
-          address: o.address,
-          timeAgo: o.timeAgo,
-          description: o.description,
-          photos: o.photos,
-          orderNumber: o.displayNumber,
-          customerName: o.customerName ?? CropResult.namePlaceholder,
-          customerPhone: o.customerPhone ?? '',
-          customerEmail: o.customerEmail,
-          matchId: o.matchId,
+        builder: (BuildContext ctx) => OrderDetailScreen(
+          draft: draft,
+          status: o.status,
+          reviewLeft: o.reviewLeft,
           executorId: o.executorId,
+          executorName: o.customerName,
+          executorAvatarUrl: o.customerAvatarUrl,
+          executorPhone: o.customerPhone,
+          executorEmail: o.customerEmail,
           executorRating: o.executorRating,
           executorReviewCount: o.executorReviewCount,
-          state: _detailStateForCard(o.status),
-          rejectedStatus: o.status,
-          waitingStatus: o.status,
-          onDecline: () => MyOrdersStore.moveToRejected(
-              o, MyOrderStatus.rejectedDeclined),
-          onRefuse: () => MyOrdersStore.moveToRejected(
-              o, MyOrderStatus.rejectedDeclined),
-          onConfirm: () => MyOrdersStore.moveToAccepted(o),
-          isBlocked: widget.isBlocked,
-          reviewLeft: o.reviewLeft,
-          onReviewLeft: () => MyOrdersStore.markReviewLeft(o.id),
-          onPickAnother: () => _handlePickAnotherFromAwaiting(ctx, o),
           onOpenCatalog: () {
             Navigator.of(ctx).maybePop();
             widget.onGoToCatalog?.call();
+          },
+          onPickAnother: () => _handlePickAnotherFromAwaiting(ctx, o),
+          onMoveToArchive: () {
+            MyOrdersStore.moveToRejected(o, MyOrderStatus.rejectedDeclined);
+            Navigator.of(ctx).maybePop();
+          },
+          onLeaveReview: () async {
+            final bool? submitted =
+                await Navigator.of(ctx).push<bool>(
+              MaterialPageRoute<bool>(
+                builder: (_) => ReviewScreen(
+                  targetUserId: o.executorId,
+                  matchId: o.matchId,
+                ),
+              ),
+            );
+            if (submitted == true && mounted) {
+              MyOrdersStore.markReviewLeft(o.id);
+              // Перезапрашиваем заказы из БД — триггер на reviews уже
+              // обновил `profiles.rating_as_executor` и
+              // `review_count_as_executor`, и без свежей загрузки в
+              // кэше OrderMock останутся старые executorRating=0/
+              // reviewCount=0, и шапка отзыва на следующем открытии
+              // покажет «0 отзывов» рядом с реально оставленным
+              // отзывом.
+              await MyOrdersStore.loadFromDb();
+              // Закрываем превью, чтобы при следующем открытии экран
+              // сразу собрался уже без кнопки «Оставить отзыв».
+              if (ctx.mounted) Navigator.of(ctx).maybePop();
+            }
+          },
+          onRepublish: () {
+            MyOrdersStore.republish(o);
+            Navigator.of(ctx).maybePop();
           },
         ),
       ),
@@ -436,82 +422,65 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
   /// карточки принятого заказа ведёт сразу в список «Мои заказы».
   void _swapToAcceptedOrderDetail(OrderMock o) {
     if (!mounted) return;
+    final OrderDraft draft = OrderDraft(
+      number: o.displayNumber,
+      title: o.title,
+      description: o.description,
+      rentDate: o.rentDate,
+      address: o.address,
+      machinery: o.equipment,
+      categories: o.categories,
+      works: o.works,
+      photos: o.photos,
+    );
     Navigator.of(context, rootNavigator: true).pushAndRemoveUntil<void>(
       MaterialPageRoute<void>(
-        builder: (BuildContext ctx) => MyOrderDetailScreen(
-          title: o.title,
-          equipment: o.equipment,
-          workCategories: o.categories,
-          workDescription: o.works,
-          rentDate: o.rentDate,
-          address: o.address,
-          timeAgo: o.timeAgo,
-          description: o.description,
-          photos: o.photos,
-          orderNumber: o.displayNumber,
-          customerName: o.customerName ?? CropResult.namePlaceholder,
-          customerPhone: o.customerPhone ?? '',
-          customerEmail: o.customerEmail,
-          matchId: o.matchId,
+        builder: (BuildContext ctx) => OrderDetailScreen(
+          draft: draft,
+          status: o.status,
+          reviewLeft: o.reviewLeft,
           executorId: o.executorId,
+          executorName: o.customerName,
+          executorAvatarUrl: o.customerAvatarUrl,
+          executorPhone: o.customerPhone,
+          executorEmail: o.customerEmail,
           executorRating: o.executorRating,
           executorReviewCount: o.executorReviewCount,
-          state: _detailStateForCard(o.status),
-          rejectedStatus: o.status,
-          waitingStatus: o.status,
-          onDecline: () => MyOrdersStore.moveToRejected(
-              o, MyOrderStatus.rejectedDeclined),
-          onRefuse: () => MyOrdersStore.moveToRejected(
-              o, MyOrderStatus.rejectedDeclined),
-          onConfirm: () => MyOrdersStore.moveToAccepted(o),
-          isBlocked: widget.isBlocked,
-          reviewLeft: o.reviewLeft,
-          onReviewLeft: () => MyOrdersStore.markReviewLeft(o.id),
           onPickAnother: () => _handlePickAnotherFromAwaiting(ctx, o),
+          onMoveToArchive: () {
+            MyOrdersStore.moveToRejected(o, MyOrderStatus.rejectedDeclined);
+            Navigator.of(ctx).maybePop();
+          },
+          onLeaveReview: () async {
+            final bool? submitted = await Navigator.of(ctx).push<bool>(
+              MaterialPageRoute<bool>(
+                builder: (_) => ReviewScreen(
+                  targetUserId: o.executorId,
+                  matchId: o.matchId,
+                ),
+              ),
+            );
+            if (submitted == true && mounted) {
+              MyOrdersStore.markReviewLeft(o.id);
+              await MyOrdersStore.loadFromDb();
+              if (ctx.mounted) Navigator.of(ctx).maybePop();
+            }
+          },
+          onRepublish: () {
+            MyOrdersStore.republish(o);
+            Navigator.of(ctx).maybePop();
+          },
+          onOpenCatalog: () {
+            Navigator.of(ctx).maybePop();
+            widget.onGoToCatalog?.call();
+          },
         ),
       ),
       (Route<dynamic> r) => r.isFirst,
     );
   }
 
-  /// Открывает системный номеронабиратель с предзаполненным номером.
-  /// Не звонит автоматически — пользователю нужно нажать кнопку вызова
-  /// в самом приложении телефона. Используется `tel:`-схема, это
-  /// стандартное поведение и на iOS, и на Android.
-  Future<void> _dialPhone(String? phone) async {
-    if (phone == null || phone.trim().isEmpty) return;
-    // Оставляем только цифры и плюс — пробелы и дефисы номеронабиратель
-    // не портят, но некоторые лаунчеры капризничают.
-    final String cleaned = phone.replaceAll(RegExp(r'[^\d+]'), '');
-    final Uri uri = Uri.parse('tel:$cleaned');
-    final bool ok = await launchUrl(uri);
-    if (!ok && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Не удалось открыть приложение телефона'),
-          duration: Duration(seconds: 2),
-        ),
-      );
-    }
-  }
-
-  MyOrderDetailState _detailStateForCard(MyOrderStatus s) {
-    switch (s) {
-      case MyOrderStatus.waiting:
-      case MyOrderStatus.awaitingExecutor:
-      case MyOrderStatus.waitingChoose:
-      case MyOrderStatus.executorDeclined:
-      case MyOrderStatus.executorDeclinedWaiting:
-        return MyOrderDetailState.waitingConfirm;
-      case MyOrderStatus.accepted:
-        return MyOrderDetailState.confirmed;
-      case MyOrderStatus.completed:
-        return MyOrderDetailState.completed;
-      case MyOrderStatus.rejectedOther:
-      case MyOrderStatus.rejectedDeclined:
-        return MyOrderDetailState.rejected;
-    }
-  }
+  Future<void> _dialPhone(String? phone) => dialPhone(context, phone);
 }
 
 /// Pill-сегмент «Новые / Принятые / Не принятые». Оранжевая обводка,

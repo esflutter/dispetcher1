@@ -31,6 +31,7 @@ class OrderMock {
     this.customerName,
     this.customerPhone,
     this.customerEmail,
+    this.customerAvatarUrl,
     this.matchId,
     this.executorId,
     this.executorRating = 0,
@@ -60,6 +61,10 @@ class OrderMock {
   final DateTime statusUpdatedAt;
 
   String get timeAgo {
+    // Единый стиль «N минут/часов/дней назад». Раньше для прошлого
+    // календарного дня выводилось «Вчера в HH:MM» — это выбивалось
+    // из общего ряда «2 часа назад / 2 дня назад», и пользователь
+    // видел рядом два разных формата времени.
     final DateTime now = DateTime.now();
     final Duration diff = now.difference(statusUpdatedAt);
     if (diff.inSeconds < 60) return 'Только что';
@@ -71,15 +76,7 @@ class OrderMock {
       final int h = diff.inHours;
       return '$h ${_pluralH(h)} назад';
     }
-    final DateTime today = DateTime(now.year, now.month, now.day);
-    final DateTime upDay =
-        DateTime(statusUpdatedAt.year, statusUpdatedAt.month, statusUpdatedAt.day);
-    if (upDay == today.subtract(const Duration(days: 1))) {
-      final String hh = statusUpdatedAt.hour.toString().padLeft(2, '0');
-      final String mm = statusUpdatedAt.minute.toString().padLeft(2, '0');
-      return 'Вчера в $hh:$mm';
-    }
-    final int d = today.difference(upDay).inDays;
+    final int d = diff.inDays;
     return '$d ${_pluralD(d)} назад';
   }
 
@@ -127,6 +124,12 @@ class OrderMock {
   /// заказчика со стороны исполнителя). Показывается в карточках с
   /// контактами только если заполнен — email опциональное поле.
   final String? customerEmail;
+
+  /// URL аватара партнёра по мэтчу (исполнителя в контексте заказчика).
+  /// Берётся из `profiles.avatar_url`, доступен на любом статусе мэтча.
+  /// Используется в шапке деталей заказа в статусах «В работе» и
+  /// «Завершён» — без него у исполнителя всегда серый силуэт.
+  final String? customerAvatarUrl;
 
   /// `order_matches.id` выбранного мэтча. Нужен экрану деталей, чтобы
   /// проверить актуальный статус в БД и подгрузить контакты, когда
@@ -182,6 +185,7 @@ class OrderMock {
     String? customerName,
     String? customerPhone,
     String? customerEmail,
+    String? customerAvatarUrl,
     String? matchId,
     String? executorId,
     bool clearContacts = false,
@@ -206,6 +210,9 @@ class OrderMock {
           clearContacts ? null : (customerPhone ?? this.customerPhone),
       customerEmail:
           clearContacts ? null : (customerEmail ?? this.customerEmail),
+      customerAvatarUrl: clearContacts
+          ? null
+          : (customerAvatarUrl ?? this.customerAvatarUrl),
       matchId: clearContacts ? null : (matchId ?? this.matchId),
       executorId: clearContacts ? null : (executorId ?? this.executorId),
       executorRating: clearContacts ? 0 : executorRating,
@@ -372,24 +379,46 @@ class MyOrdersStore {
     return MyOrderStatus.waiting;
   }
 
-  /// Подгружает реальные заказы текущего заказчика из БД. Не очищает
-  /// списки — наоборот, мержит свежие записи к тому, что уже есть в
-  /// памяти (см. `knownIds` ниже), чтобы не потерять только что
-  /// созданный через `addCreated` заказ, ещё не попавший в БД.
+  /// Подгружает реальные заказы текущего заказчика из БД и **полностью
+  /// пересобирает** локальные списки. Раньше тут был merge-only режим
+  /// (`if (knownIds.contains) continue;`), из-за которого OrderMock,
+  /// уже лежавший в памяти, никогда не обновлялся свежими данными от
+  /// `listMine`. Это приводило к расхождению UI: после auto-archive
+  /// мэтча (`accepted` → `expired` через cron) сервис уже отдавал
+  /// заказ без executor-данных, но в кэше оставались старые phone/
+  /// email/avatar — карточка «Исполнитель не найден» рендерилась
+  /// с чужим профилем.
+  ///
+  /// Теперь всё, что присутствует в ответе БД, переписывается заново;
+  /// заказы, которых в БД нет (например, только что созданный через
+  /// `addCreated` и ещё не дошедший до неё), сохраняются как есть.
   static Future<void> loadFromDb() async {
     try {
       final List<CustomerOrderListItem> rows =
           await CustomerOrdersService.instance.listMine();
-      // Оставляем только заказы, которых ещё нет в локальном списке —
-      // `addCreated` мог положить туда свежесозданный заказ до того,
-      // как экран успел перезапросить БД.
-      final Set<String> knownIds = <String>{
-        for (final OrderMock o in newOrders) o.id,
-        for (final OrderMock o in accepted) o.id,
-        for (final OrderMock o in rejected) o.id,
-      };
+      final Set<String> dbIds = <String>{for (final r in rows) r.id};
+      // Локально-созданные заказы (`addCreated`), которых ещё нет в БД,
+      // оставляем нетронутыми — иначе только что добавленный заказ
+      // мигнёт и пропадёт до следующей синхронизации.
+      final List<OrderMock> localOnlyNew = <OrderMock>[
+        for (final OrderMock o in newOrders) if (!dbIds.contains(o.id)) o,
+      ];
+      final List<OrderMock> localOnlyAccepted = <OrderMock>[
+        for (final OrderMock o in accepted) if (!dbIds.contains(o.id)) o,
+      ];
+      final List<OrderMock> localOnlyRejected = <OrderMock>[
+        for (final OrderMock o in rejected) if (!dbIds.contains(o.id)) o,
+      ];
+      newOrders
+        ..clear()
+        ..addAll(localOnlyNew);
+      accepted
+        ..clear()
+        ..addAll(localOnlyAccepted);
+      rejected
+        ..clear()
+        ..addAll(localOnlyRejected);
       for (final CustomerOrderListItem r in rows) {
-        if (knownIds.contains(r.id)) continue;
         // Черновики не показываем в UI «Мои заказы» — они появятся, когда
         // заказчик опубликует. Архив `archived` (cron / истёкшие) и явный
         // `cancelled` идут в красный архив с разной формулировкой.
@@ -408,6 +437,9 @@ class MyOrdersStore {
           matchId: r.bestMatchId,
           executorId: r.bestMatchExecutorId,
           customerName: r.bestMatchExecutorName,
+          customerPhone: r.bestMatchExecutorPhone,
+          customerEmail: r.bestMatchExecutorEmail,
+          customerAvatarUrl: r.bestMatchExecutorAvatarUrl,
           executorRating: r.bestMatchExecutorRating,
           executorReviewCount: r.bestMatchExecutorReviewCount,
           description: r.description,
@@ -416,9 +448,8 @@ class MyOrdersStore {
           photos: r.photos,
           reviewLeft: r.reviewLeft,
         );
-        if (uiStatus == MyOrderStatus.accepted) {
-          accepted.add(mock);
-        } else if (uiStatus == MyOrderStatus.completed) {
+        if (uiStatus == MyOrderStatus.accepted ||
+            uiStatus == MyOrderStatus.completed) {
           accepted.add(mock);
         } else if (uiStatus == MyOrderStatus.rejectedDeclined ||
             uiStatus == MyOrderStatus.rejectedOther) {
@@ -532,6 +563,8 @@ class MyOrdersStore {
     OrderMock o, {
     String? name,
     String? phone,
+    String? email,
+    String? avatarUrl,
     String? matchId,
     String? executorId,
   }) {
@@ -541,10 +574,77 @@ class MyOrdersStore {
       status: MyOrderStatus.awaitingExecutor,
       customerName: name,
       customerPhone: phone,
+      customerEmail: email,
+      customerAvatarUrl: avatarUrl,
       matchId: matchId,
       executorId: executorId,
     );
     _bump();
+  }
+
+  /// Заказчик принял откликнувшегося исполнителя: локально переводим
+  /// заказ в `accepted` («Свяжитесь с исполнителем»), сразу пристёгиваем
+  /// его контакты — на детальном экране и в карточке списка появятся
+  /// шапка и блоки phone/email без ожидания следующего `loadFromDb`.
+  /// Серверный UPDATE awaiting_customer → accepted делает
+  /// [CustomerOrdersService.acceptResponse].
+  ///
+  /// Заказ при этом физически переезжает из `newOrders` («Ожидает») в
+  /// `accepted` («В работе») — без переноса между списками вкладка
+  /// «В работе» оставалась пустой, а заказчик видел свой только что
+  /// принятый заказ в «Ожидает» с противоречивой пилюлей «Свяжитесь
+  /// с исполнителем».
+  ///
+  /// Телефон/email, как правило, в момент вызова неизвестны (callback
+  /// от UI передаёт пустые поля), поэтому метод вдогонку асинхронно
+  /// тянет их через RLS-разрешённый `getExecutorContacts` и обновляет
+  /// уже перенесённую запись.
+  static void acceptResponse(
+    OrderMock o, {
+    String? name,
+    String? phone,
+    String? email,
+    String? avatarUrl,
+    String? matchId,
+    String? executorId,
+  }) {
+    final int idx = newOrders.indexWhere((OrderMock x) => x.id == o.id);
+    if (idx < 0) return;
+    final OrderMock moved = newOrders[idx].copyWith(
+      status: MyOrderStatus.accepted,
+      customerName: name,
+      customerPhone: phone,
+      customerEmail: email,
+      customerAvatarUrl: avatarUrl,
+      matchId: matchId,
+      executorId: executorId,
+    );
+    newOrders.removeAt(idx);
+    accepted.insert(0, moved);
+    _bump();
+
+    // Догрузка телефона/email — RLS пропускает их сразу после accepted.
+    final String? execId = executorId ?? moved.executorId;
+    if (execId != null && execId.isNotEmpty) {
+      unawaited(_fetchAndPatchContacts(moved.id, execId));
+    }
+  }
+
+  static Future<void> _fetchAndPatchContacts(
+      String orderId, String executorId) async {
+    try {
+      final ({String? phone, String? email})? c = await CustomerOrdersService
+          .instance
+          .getExecutorContacts(executorId);
+      if (c == null) return;
+      final int i = accepted.indexWhere((OrderMock x) => x.id == orderId);
+      if (i < 0) return;
+      accepted[i] = accepted[i].copyWith(
+        customerPhone: c.phone,
+        customerEmail: c.email,
+      );
+      _bump();
+    } catch (_) {/* RLS не пустил — UI оставит карточку без телефона */}
   }
 
   /// Помечает заказ как тот, по которому уже оставлен отзыв.

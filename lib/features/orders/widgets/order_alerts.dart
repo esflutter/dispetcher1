@@ -24,6 +24,29 @@ Future<void> showConfirmRefuseDialog(
   );
 }
 
+/// Алерт «Вы уверены, что хотите отменить заказ?» — для статуса
+/// «Свяжитесь с исполнителем» (accepted). Функционально делает то же
+/// самое, что `showConfirmRefuseDialog` (UPDATE заказа в `cancelled`),
+/// но текст и кнопка другие — отмена принятого заказа звучит иначе,
+/// чем простое «перемещение в архив».
+Future<void> showConfirmCancelDialog(
+  BuildContext context, {
+  required VoidCallback onCancel,
+}) {
+  return showDialog<void>(
+    context: context,
+    barrierColor: Colors.black.withValues(alpha: 0.35),
+    builder: (BuildContext ctx) => _ConfirmDialog(
+      title: 'Вы уверены, что хотите\nотменить заказ?',
+      primaryLabel: 'Отменить заказ',
+      onPrimary: () {
+        Navigator.of(ctx).pop();
+        onCancel();
+      },
+    ),
+  );
+}
+
 /// Алерт «Вы уверены, что хотите переместить заказ в архив?»
 /// Используется, когда заказ ещё ожидает.
 Future<void> showConfirmDeclineDialog(

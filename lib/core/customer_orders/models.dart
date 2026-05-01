@@ -45,12 +45,14 @@ class OrderDraft {
 class WorkDraft {
   const WorkDraft({required this.name, this.volume, this.unit});
   final String name;
-  final double? volume;
+  /// Свободный текст до 10 символов — туда юзер пишет «22» или
+  /// «10x30x5» (габариты в метрах). DB CHECK гарантирует maxLength=10.
+  final String? volume;
   final String? unit; // 'm' | 'm2' | 'm3'
 
   Map<String, dynamic> toJson() => <String, dynamic>{
         'name': name,
-        if (volume != null) 'volume': volume,
+        if (volume != null && volume!.isNotEmpty) 'volume': volume,
         if (unit != null) 'unit': unit,
       };
 }
@@ -83,6 +85,9 @@ class CustomerOrderListItem {
     this.bestMatchExecutorName,
     this.bestMatchExecutorRating = 0,
     this.bestMatchExecutorReviewCount = 0,
+    this.bestMatchExecutorPhone,
+    this.bestMatchExecutorEmail,
+    this.bestMatchExecutorAvatarUrl,
     this.reviewLeft = false,
   });
 
@@ -121,6 +126,24 @@ class CustomerOrderListItem {
   final String? bestMatchExecutorName;
   final double bestMatchExecutorRating;
   final int bestMatchExecutorReviewCount;
+  /// Телефон исполнителя по best-мэтчу — заполняется только когда мэтч
+  /// в `accepted`/`completed` (RLS на `profiles_private` пропускает
+  /// заказчика только в этих статусах). Нужен для кнопки-звонка
+  /// в карточке «В работе» и в деталях заказа без отдельного запроса.
+  final String? bestMatchExecutorPhone;
+
+  /// Email исполнителя по best-мэтчу (`profiles_private.email`).
+  /// Тянется тем же SELECT'ом что и `bestMatchExecutorPhone`, по тем
+  /// же RLS-условиям (`accepted`/`completed`). `null` — поле пустое
+  /// или у заказчика нет доступа.
+  final String? bestMatchExecutorEmail;
+
+  /// URL аватара исполнителя по best-мэтчу (`profiles.avatar_url`).
+  /// Доступен на любом статусе мэтча (RLS на `profiles` пропускает
+  /// чтение этого поля без ограничений). Нужен для шапки заказа в
+  /// «В работе»/«Завершён» — без него у исполнителя всегда серый
+  /// силуэт.
+  final String? bestMatchExecutorAvatarUrl;
 
   /// True, если текущий заказчик уже оставил отзыв об исполнителе по
   /// best-мэтчу. Берётся одним SELECT по `reviews` в `listMine` и

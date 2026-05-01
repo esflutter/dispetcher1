@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:dispatcher_1/core/catalog/catalog_service.dart';
@@ -7,6 +8,18 @@ import 'package:dispatcher_1/core/catalog/models.dart';
 import 'package:dispatcher_1/core/storage/storage_service.dart';
 
 import 'models.dart';
+
+/// Конфликт по UNIQUE-индексам `order_matches` (PostgreSQL `23505`):
+/// либо `order_matches_single_accepted` — на этот заказ уже принят
+/// другой исполнитель, либо `order_matches_non_completed_unique` —
+/// на пару (order_id, executor_id) уже есть не-completed мэтч,
+/// и второй создать нельзя. UI показывает понятное сообщение
+/// и не «съедает» молчаливый no-op.
+class MatchAlreadyTakenException implements Exception {
+  const MatchAlreadyTakenException();
+  @override
+  String toString() => 'Match already taken';
+}
 
 /// Результат публикации заказа: id новой записи + сколько фото из
 /// заявленных реально залилось в Storage. UI показывает снэкбар, если
@@ -129,9 +142,14 @@ class CustomerOrdersService {
         final String path = await StorageService.instance
             .uploadOrderPhoto(f, orderId: orderId);
         uploaded.add(path);
-      } catch (_) {
+      } catch (e, st) {
         // Конкретное фото не залилось — пропускаем; остальные пробуем.
         // UI узнает о потере по photosUploaded < photosTotal.
+        // Логируем ошибку, чтобы в flutter logs было видно конкретную
+        // причину (RLS, mime, network, размер) — без этого debug
+        // «N фото не загрузились» сводится к гаданию.
+        debugPrint('uploadOrderPhoto failed for ${f.path}: $e');
+        debugPrint('$st');
       }
     }
 
@@ -202,7 +220,7 @@ class CustomerOrdersService {
         .select(
           'id, order_id, status, '
           'executor:profiles!order_matches_executor_id_fkey('
-          'id, name, rating_as_executor, review_count_as_executor)',
+          'id, name, avatar_url, rating_as_executor, review_count_as_executor)',
         )
         .inFilter('order_id', ids);
     for (final Map<String, dynamic> m in matchRows) {
@@ -230,11 +248,44 @@ class CustomerOrdersService {
           status: mStatus,
           executorId: executor?['id'] as String?,
           executorName: executor?['name'] as String?,
+          executorAvatarUrl: executor?['avatar_url'] as String?,
           executorRating: _toDouble(executor?['rating_as_executor']) ?? 0,
           executorReviewCount:
               (executor?['review_count_as_executor'] as int?) ?? 0,
         );
       }
+    }
+
+    // Телефоны исполнителей по best-мэтчам в `accepted`/`completed`.
+    // RLS на `profiles_private` пропускает заказчика только при таких
+    // статусах мэтча (`profiles_private_select_self_or_matched`). Без
+    // этого блока «В работе» в «Моих заказах» показывала имя исполнителя
+    // без телефона — кнопка-звонок ничего не набирала.
+    final Map<String, String?> phoneByExecutor = <String, String?>{};
+    final Map<String, String?> emailByExecutor = <String, String?>{};
+    final List<String> contactExecutorIds = <String>[
+      for (final _BestMatch b in bestByOrder.values)
+        if ((b.status == 'accepted' || b.status == 'completed') &&
+            b.executorId != null)
+          b.executorId!,
+    ];
+    if (contactExecutorIds.isNotEmpty) {
+      try {
+        // Тянем телефон и email одним SELECT'ом — раньше был только
+        // phone, и блок «Электронная почта» на деталях заказа догружался
+        // отдельным запросом после открытия экрана (`_loadContacts`).
+        // Теперь email есть в карточке заказа сразу, без асинхронного
+        // моргания.
+        final List<Map<String, dynamic>> rows = await _client
+            .from('profiles_private')
+            .select('id, phone, email')
+            .inFilter('id', contactExecutorIds);
+        for (final Map<String, dynamic> row in rows) {
+          final String id = row['id'] as String;
+          phoneByExecutor[id] = row['phone'] as String?;
+          emailByExecutor[id] = row['email'] as String?;
+        }
+      } catch (_) {/* silent — UI отдаст пустой контакт */}
     }
 
     // Какие best-мэтчи уже получили отзыв от этого заказчика — нужно,
@@ -307,12 +358,43 @@ class CustomerOrdersService {
         respondersCount: activeCounts[r['id']] ?? 0,
         bestMatchId: best?.matchId,
         bestMatchStatus: best?.status,
-        bestMatchExecutorId: best?.executorId,
-        bestMatchExecutorName: best?.executorName,
-        bestMatchExecutorRating: best?.executorRating ?? 0,
-        bestMatchExecutorReviewCount: best?.executorReviewCount ?? 0,
+        // Если best-мэтч в терминальном «негативном» статусе (expired
+        // после auto-archive, либо отказ исполнителя/заказчика),
+        // executor-данные не отдаём: на детальном экране заказа их
+        // показывать нечего, а если оставить, в UI «Исполнитель не
+        // найден» подтянется аватар и имя того, кто когда-то откликался.
+        bestMatchExecutorId:
+            _bestMatchYieldsExecutor(best) ? best?.executorId : null,
+        bestMatchExecutorName:
+            _bestMatchYieldsExecutor(best) ? best?.executorName : null,
+        bestMatchExecutorAvatarUrl:
+            _bestMatchYieldsExecutor(best) ? best?.executorAvatarUrl : null,
+        bestMatchExecutorRating:
+            _bestMatchYieldsExecutor(best) ? (best?.executorRating ?? 0) : 0,
+        bestMatchExecutorReviewCount:
+            _bestMatchYieldsExecutor(best) ? (best?.executorReviewCount ?? 0) : 0,
+        bestMatchExecutorPhone:
+            _bestMatchYieldsExecutor(best) && best?.executorId != null
+                ? phoneByExecutor[best!.executorId]
+                : null,
+        bestMatchExecutorEmail:
+            _bestMatchYieldsExecutor(best) && best?.executorId != null
+                ? emailByExecutor[best!.executorId]
+                : null,
       );
     }).toList();
+  }
+
+  /// `true`, если best-мэтч представляет «живого» исполнителя по заказу
+  /// (откликнулся или принят), `false` для терминальных терминальных
+  /// негативных статусов (expired/rejected_*) — в этих случаях UI заказа
+  /// показывать данные исполнителя не должен.
+  static bool _bestMatchYieldsExecutor(_BestMatch? b) {
+    if (b == null) return false;
+    return b.status == 'awaiting_customer' ||
+        b.status == 'awaiting_executor' ||
+        b.status == 'accepted' ||
+        b.status == 'completed';
   }
 
   /// Превращает один элемент `orders.works` (`{name, volume?, unit?}`)
@@ -321,18 +403,23 @@ class CustomerOrdersService {
   static String _formatWorkLine(Map<String, dynamic> w) {
     final String name = (w['name'] as String?)?.trim() ?? '';
     if (name.isEmpty) return '';
-    final num? volume = w['volume'] as num?;
+    // volume хранится как string maxLength=10 после миграции
+    // `orders_works_volume_text_with_dimensions` (юзер вводит «40»
+    // или «10x30x5»). Старые записи могли быть числовыми — поддерживаем оба.
+    final dynamic vRaw = w['volume'];
+    final String? volStr = vRaw is String
+        ? (vRaw.isEmpty ? null : vRaw)
+        : vRaw is num
+            ? (vRaw == vRaw.toInt() ? vRaw.toInt().toString() : vRaw.toString())
+            : null;
     final String? unit = w['unit'] as String?;
-    if (volume == null) return name;
+    if (volStr == null) return name;
     final String unitUi = switch (unit) {
       'm' => 'м',
       'm2' => 'м²',
       'm3' => 'м³',
       _ => '',
     };
-    final String volStr = volume == volume.toInt()
-        ? volume.toInt().toString()
-        : volume.toString();
     return '$name — $volStr $unitUi'.trim();
   }
 
@@ -412,22 +499,38 @@ class CustomerOrdersService {
     }).toList();
   }
 
-  /// Выбор конкретного отклика: `awaiting_customer` → `awaiting_executor`.
-  /// Остальные отклики на тот же заказ триггер БД автоматически не
-  /// закрывает — клиент может это сделать отдельным UPDATE либо
-  /// дождаться, пока исполнитель подтвердит.
+  /// Выбор конкретного отклика заказчиком: `awaiting_customer` →
+  /// `accepted`. Исполнитель уже откликнулся — заказчик принимает,
+  /// сделка считается заключённой. Дополнительный шаг через
+  /// `awaiting_executor` не нужен: этот статус только для
+  /// инициированных заказчиком предложений (когда исполнитель ещё
+  /// не выбрал).
+  ///
+  /// FSM-триггер разрешает `awaiting_customer → accepted`
+  /// (002_functions_triggers.sql). UNIQUE-индекс
+  /// `order_matches_single_accepted` гарантирует, что только один
+  /// мэтч на заказ может быть в `accepted`; параллельный UPDATE
+  /// другого отклика того же заказа упадёт с `23505`, который
+  /// перехватывает [MatchAlreadyTakenException].
   ///
   /// `.select().single()` обязательная: если строка не нашлась
   /// (RLS отказал, мэтч удалён, или его статус уже терминальный
   /// и FSM-триггер откатил UPDATE) — `single()` бросит исключение,
   /// и UI не «съест» молчаливый no-op.
-  Future<void> proposeToExecutor(String matchId) async {
-    await _client
-        .from('order_matches')
-        .update(<String, dynamic>{'status': 'awaiting_executor'})
-        .eq('id', matchId)
-        .select('id')
-        .single();
+  Future<void> acceptResponse(String matchId) async {
+    try {
+      await _client
+          .from('order_matches')
+          .update(<String, dynamic>{'status': 'accepted'})
+          .eq('id', matchId)
+          .select('id')
+          .single();
+    } on PostgrestException catch (e) {
+      if (e.code == '23505') {
+        throw const MatchAlreadyTakenException();
+      }
+      rethrow;
+    }
   }
 
   /// Заказчик отклонил отклик (`awaiting_customer` → `rejected_by_customer`).
@@ -487,17 +590,29 @@ class CustomerOrdersService {
       throw Exception('У исполнителя нет услуги под технику этого заказа');
     }
 
-    final Map<String, dynamic> row = await _client
-        .from('order_matches')
-        .insert(<String, dynamic>{
-          'order_id': orderId,
-          'executor_id': executorId,
-          'service_id': serviceId,
-          'initiated_by': 'customer',
-          'status': 'awaiting_executor',
-        })
-        .select('id')
-        .single();
+    final Map<String, dynamic> row;
+    try {
+      row = await _client
+          .from('order_matches')
+          .insert(<String, dynamic>{
+            'order_id': orderId,
+            'executor_id': executorId,
+            'service_id': serviceId,
+            'initiated_by': 'customer',
+            'status': 'awaiting_executor',
+          })
+          .select('id')
+          .single();
+    } on PostgrestException catch (e) {
+      if (e.code == '23505') {
+        // На пару (order_id, executor_id) уже есть не-completed мэтч —
+        // например, исполнитель когда-то откликался (`expired` после
+        // auto-archive) или ему уже предлагали этот заказ. Второй INSERT
+        // запрещён уникальным индексом order_matches_non_completed_unique.
+        throw const MatchAlreadyTakenException();
+      }
+      rethrow;
+    }
     return (matchId: row['id'] as String, serviceId: serviceId);
   }
 
@@ -653,6 +768,7 @@ class _BestMatch {
     required this.status,
     required this.executorId,
     required this.executorName,
+    required this.executorAvatarUrl,
     required this.executorRating,
     required this.executorReviewCount,
   });
@@ -661,6 +777,7 @@ class _BestMatch {
   final String status;
   final String? executorId;
   final String? executorName;
+  final String? executorAvatarUrl;
   final double executorRating;
   final int executorReviewCount;
 }
