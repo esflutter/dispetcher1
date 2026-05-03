@@ -292,12 +292,19 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
   /// старый мэтч оставался в `awaiting_executor` навечно: исполнитель
   /// видел «призрачное» предложение в своих откликах, а заказчик
   /// продолжал считать заказ «выбран другой».
+  ///
+  /// Используем `withdrawProposal` (→ `expired`), а не `rejectResponse`
+  /// (→ `rejected_by_customer`): FSM-триггер не разрешает переход
+  /// `awaiting_executor` → `rejected_by_customer`, и старый код с
+  /// `rejectResponse` молча падал в catch — мэтч оставался в
+  /// `awaiting_executor`, а заказ — ровно той самой «висячей»
+  /// ситуацией, ради которой этот метод и появился.
   Future<void> _handlePickAnotherFromAwaiting(
       BuildContext screenCtx, OrderMock o) async {
     final String? matchId = o.matchId;
     if (matchId != null) {
       try {
-        await CustomerOrdersService.instance.rejectResponse(matchId);
+        await CustomerOrdersService.instance.withdrawProposal(matchId);
       } catch (_) {/* пусть UI продолжит — следующая загрузка из БД
         синхронизирует статус */}
     }

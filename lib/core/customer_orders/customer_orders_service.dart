@@ -544,15 +544,17 @@ class CustomerOrdersService {
   }
 
   /// Заказчик отзывает своё предложение исполнителю
-  /// (`awaiting_executor` → `expired`). FSM не разрешает прямой
-  /// переход в `rejected_by_customer` из `awaiting_executor`, поэтому
-  /// используем нейтральный терминал `expired`. Раньше этот сценарий
-  /// шёл через `rejectResponse`, и FSM-триггер отвергал UPDATE — мэтч
-  /// оставался «висячим», исполнитель продолжал видеть приглашение.
+  /// (`awaiting_executor` → `rejected_by_customer`). После миграции
+  /// `customer_withdraw_to_rejected_and_auto_complete` FSM-триггер
+  /// разрешает этот переход — раньше использовали `expired` как
+  /// нейтральный терминал, и в UI исполнителя отображалось «Снят с
+  /// публикации» (визуально неотличимо от истёкших по дате заказов).
+  /// Теперь — «Выбран другой исполнитель» (красная пилюля), что
+  /// точнее отражает причину отказа.
   Future<void> withdrawProposal(String matchId) async {
     await _client
         .from('order_matches')
-        .update(<String, dynamic>{'status': 'expired'})
+        .update(<String, dynamic>{'status': 'rejected_by_customer'})
         .eq('id', matchId)
         .select('id')
         .single();
