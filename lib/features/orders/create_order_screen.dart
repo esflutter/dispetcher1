@@ -304,8 +304,23 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
             c.map((cat.CategoryRef e) => e.title).toList(growable: false);
       });
     } catch (_) {
-      // БД упала — пользователь увидит пустой список чипов и не сможет
-      // создать заказ; на следующем входе попробуем снова.
+      // Без справочников чипы техники/категорий остаются пустыми,
+      // юзер не понимает почему. Раньше catch был тихий — теперь
+      // показываем snackbar, чтобы стало ясно что это сетевая проблема,
+      // а не «у нас нет техники в каталоге».
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text(
+            'Не удалось загрузить справочники. '
+            'Проверьте интернет и попробуйте позже.',
+          ),
+          action: SnackBarAction(
+            label: 'Повторить',
+            onPressed: _loadDirectories,
+          ),
+        ),
+      );
     }
   }
 
