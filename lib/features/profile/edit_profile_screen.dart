@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
@@ -117,7 +118,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       // ignore: discarded_futures
       ProfileService.instance.update(name: name).catchError((Object e) {
         CropResult.userName = prev;
-        debugPrint('EditProfileScreen.update(name) failed: $e');
+        if (kDebugMode) {
+          debugPrint('EditProfileScreen.update(name) failed: $e');
+        }
       });
     }
     final String email = _emailCtrl.text.trim().toLowerCase();
@@ -128,7 +131,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       // ignore: discarded_futures
       ProfileService.instance.updatePrivateEmail(email).catchError((Object e) {
         CropResult.userEmail = prev;
-        debugPrint('EditProfileScreen.updatePrivateEmail failed: $e');
+        if (kDebugMode) {
+          debugPrint('EditProfileScreen.updatePrivateEmail failed: $e');
+        }
       });
     }
     _nameCtrl.dispose();

@@ -8,7 +8,9 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'app.dart';
 import 'core/catalog/catalog_service.dart';
 import 'core/config/env.dart';
+import 'core/realtime/realtime_service.dart';
 import 'core/settings/settings_service.dart';
+import 'core/theme/system_bar_style.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -19,16 +21,17 @@ Future<void> main() async {
   if (kReleaseMode) {
     Env.assertConfigured();
   }
-  SystemChrome.setPreferredOrientations([
+  await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
   ]);
-  SystemChrome.setSystemUIOverlayStyle(
-    const SystemUiOverlayStyle(
-      statusBarColor: Colors.transparent,
-      statusBarIconBrightness: Brightness.dark,
-      statusBarBrightness: Brightness.light,
-    ),
-  );
+  // Edge-to-edge: на Android 15+ (API 35+) свойства типа
+  // `systemNavigationBarColor` игнорируются, и без edge-to-edge система
+  // показывает дефолтный чёрный фон под кнопками навигации — видимая
+  // тёмная полоса. С edge-to-edge область под нав-баром раскрашивается
+  // цветом `Scaffold.backgroundColor`, а SafeArea даёт корректные
+  // отступы для контента.
+  await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+  SystemChrome.setSystemUIOverlayStyle(dispatcherSystemBarStyle());
 
   if (Env.hasSupabaseConfig) {
     await Supabase.initialize(
@@ -45,6 +48,23 @@ Future<void> main() async {
     // мгновенно с готовыми значениями. Не блокируем старт — fire-and-forget.
     unawaited(CatalogService.instance.warmup());
     unawaited(SettingsService.instance.warmup());
+    // Поднимаем realtime-подписки ТОЛЬКО если есть восстановленная
+    // сессия. Раньше start() звался безусловно — на холодном старте
+    // без юзера канал открывался под анон-токеном и не пересоздавался
+    // после signIn (start() идемпотентен). Теперь канал поднимается
+    // либо здесь (с уже валидным JWT), либо в auth_service.verify().
+    if (Supabase.instance.client.auth.currentSession != null) {
+      RealtimeService.instance.start();
+    }
+    // Глобальный listener событий авторизации. Без него истёкший /
+    // отозванный токен снаружи (например, удалённый аккаунт из админки)
+    // не приводил ни к чему — экран продолжал «работать пустотой».
+    Supabase.instance.client.auth.onAuthStateChange
+        .listen((AuthState event) async {
+      if (event.event == AuthChangeEvent.signedOut) {
+        await RealtimeService.instance.stop();
+      }
+    });
   }
 
   runApp(const DispatcherApp());

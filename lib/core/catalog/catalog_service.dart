@@ -212,16 +212,16 @@ class CatalogService {
       displayNumber: r['display_number'] as int,
       title: r['title'] as String,
       address: r['address'] as String,
-      dateFrom: DateTime.parse(r['date_from'] as String),
+      dateFrom: DateTime.parse(r['date_from'] as String).toLocal(),
       dateTo: r['date_to'] == null
           ? null
-          : DateTime.parse(r['date_to'] as String),
+          : DateTime.parse(r['date_to'] as String).toLocal(),
       timeFrom: r['time_from'] as String?,
       timeTo: r['time_to'] as String?,
       exactDate: r['exact_date'] as bool,
       wholeDay: r['whole_day'] as bool,
       machineryTitles: titles,
-      publishedAt: DateTime.parse(r['published_at'] as String),
+      publishedAt: DateTime.parse(r['published_at'] as String).toLocal(),
       customer: cust,
     );
   }
@@ -281,10 +281,10 @@ class CatalogService {
       address: r['address'] as String,
       latitude: (r['latitude'] as num?)?.toDouble(),
       longitude: (r['longitude'] as num?)?.toDouble(),
-      dateFrom: DateTime.parse(r['date_from'] as String),
+      dateFrom: DateTime.parse(r['date_from'] as String).toLocal(),
       dateTo: r['date_to'] == null
           ? null
-          : DateTime.parse(r['date_to'] as String),
+          : DateTime.parse(r['date_to'] as String).toLocal(),
       timeFrom: r['time_from'] as String?,
       timeTo: r['time_to'] as String?,
       exactDate: r['exact_date'] as bool,
@@ -293,7 +293,7 @@ class CatalogService {
       categoryTitles: categoryTitles,
       works: works,
       photos: List<String>.from(r['photos'] as List),
-      publishedAt: DateTime.parse(r['published_at'] as String),
+      publishedAt: DateTime.parse(r['published_at'] as String).toLocal(),
       customer: cust,
     );
   }
@@ -828,7 +828,7 @@ class CatalogService {
   ExecutorScheduleDay _scheduleDayFromRow(Map<String, dynamic> r) {
     final List<int> mIds = List<int>.from(
         (r['machinery_ids'] as List?) ?? const <int>[]);
-    final DateTime day = DateTime.parse(r['day'] as String);
+    final DateTime day = DateTime.parse(r['day'] as String).toLocal();
     return ExecutorScheduleDay(
       day: DateTime(day.year, day.month, day.day),
       accepting: (r['accepting'] as bool?) ?? true,

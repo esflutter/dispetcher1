@@ -1,11 +1,12 @@
 import 'dart:io';
 
-import 'package:flutter/foundation.dart' show debugPrint;
+import 'package:flutter/foundation.dart' show debugPrint, kDebugMode;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:dispatcher_1/core/catalog/catalog_service.dart';
 import 'package:dispatcher_1/core/catalog/models.dart';
 import 'package:dispatcher_1/core/storage/storage_service.dart';
+import 'package:dispatcher_1/core/utils/client_uid.dart';
 
 import 'models.dart';
 
@@ -71,11 +72,17 @@ class CustomerOrdersService {
     OrderDraft d, {
     bool publishNow = true,
     List<File> photoFiles = const <File>[],
+    String? clientUid,
   }) async {
     final User? user = _client.auth.currentUser;
     if (user == null) {
       throw const AuthException('Нет активной сессии');
     }
+    // Идемпотентный ключ: вызывающий код передаёт ОДИН и тот же UID
+    // при повторных попытках после сетевого флапа. Без него юзер
+    // мог получить два одинаковых заказа в БД, если ACK от первого
+    // INSERT не дошёл и он жмёт «Опубликовать» снова.
+    final String uid = clientUid ?? generateClientUid();
     final List<MachineryRef> machinery =
         await CatalogService.instance.listActiveMachinery();
     final List<CategoryRef> categories =
@@ -109,6 +116,7 @@ class CustomerOrdersService {
 
     final Map<String, dynamic> payload = <String, dynamic>{
       'customer_id': user.id,
+      'client_uid': uid,
       'title': d.title,
       'description': d.description,
       'category_ids': categoryIds,
@@ -129,12 +137,32 @@ class CustomerOrdersService {
       'status': 'draft',
     };
 
-    final Map<String, dynamic> row = await _client
-        .from('orders')
-        .insert(payload)
-        .select('id')
-        .single();
-    final String orderId = row['id'] as String;
+    String orderId;
+    try {
+      final Map<String, dynamic> row = await _client
+          .from('orders')
+          .insert(payload)
+          .select('id')
+          .single();
+      orderId = row['id'] as String;
+    } on PostgrestException catch (e) {
+      // Конфликт по unique-индексу (`orders_customer_client_uid_uniq`)
+      // означает, что предыдущая попытка INSERT прошла на сервере, но
+      // ACK не дошёл до клиента. Подтягиваем существующую запись и
+      // отдаём её id, как будто INSERT отработал чисто.
+      if (e.code == '23505') {
+        final Map<String, dynamic>? existing = await _client
+            .from('orders')
+            .select('id')
+            .eq('customer_id', user.id)
+            .eq('client_uid', uid)
+            .maybeSingle();
+        if (existing == null) rethrow;
+        orderId = existing['id'] as String;
+      } else {
+        rethrow;
+      }
+    }
 
     final List<String> uploaded = <String>[];
     for (final File f in photoFiles) {
@@ -145,11 +173,13 @@ class CustomerOrdersService {
       } catch (e, st) {
         // Конкретное фото не залилось — пропускаем; остальные пробуем.
         // UI узнает о потере по photosUploaded < photosTotal.
-        // Логируем ошибку, чтобы в flutter logs было видно конкретную
-        // причину (RLS, mime, network, размер) — без этого debug
-        // «N фото не загрузились» сводится к гаданию.
-        debugPrint('uploadOrderPhoto failed for ${f.path}: $e');
-        debugPrint('$st');
+        // Лог только в debug-режиме: в release `$e` от Storage / Postgres
+        // может содержать URL, RLS-детали и метаданные — попадание в
+        // logcat = потенциальная утечка.
+        if (kDebugMode) {
+          debugPrint('uploadOrderPhoto failed for ${f.path}: $e');
+          debugPrint('$st');
+        }
       }
     }
 
@@ -314,8 +344,8 @@ class CustomerOrdersService {
       final List<int> cIds =
           List<int>.from((r['category_ids'] as List?) ?? const <dynamic>[]);
       final DateTime published = r['published_at'] == null
-          ? DateTime.parse(r['created_at'] as String)
-          : DateTime.parse(r['published_at'] as String);
+          ? DateTime.parse(r['created_at'] as String).toLocal()
+          : DateTime.parse(r['published_at'] as String).toLocal();
       final _BestMatch? best = bestByOrder[r['id']];
       final List<dynamic>? worksRaw = r['works'] as List<dynamic>?;
       final List<String> worksList = worksRaw == null
@@ -334,10 +364,10 @@ class CustomerOrdersService {
         title: r['title'] as String,
         description: (r['description'] as String?) ?? '',
         address: r['address'] as String,
-        dateFrom: DateTime.parse(r['date_from'] as String),
+        dateFrom: DateTime.parse(r['date_from'] as String).toLocal(),
         dateTo: r['date_to'] == null
             ? null
-            : DateTime.parse(r['date_to'] as String),
+            : DateTime.parse(r['date_to'] as String).toLocal(),
         timeFrom: r['time_from'] as String?,
         timeTo: r['time_to'] as String?,
         exactDate: r['exact_date'] as bool,
@@ -480,7 +510,7 @@ class CustomerOrdersService {
       return IncomingResponse(
         matchId: r['id'] as String,
         status: r['status'] as String,
-        createdAt: DateTime.parse(r['created_at'] as String),
+        createdAt: DateTime.parse(r['created_at'] as String).toLocal(),
         agreedPricePerHour: _toDouble(r['agreed_price_per_hour']),
         agreedPricePerDay: _toDouble(r['agreed_price_per_day']),
         agreedMinHours: r['agreed_min_hours'] as int?,

@@ -22,6 +22,7 @@ import 'package:dispatcher_1/features/orders/order_detail_screen.dart';
 import 'package:dispatcher_1/features/orders/widgets/order_status_pill.dart';
 import 'package:dispatcher_1/features/support/chat_screen.dart';
 
+import 'package:dispatcher_1/core/widgets/dialog_close_button.dart';
 /// Антиспам-лимит: не более [maxPerDay] заказов в сутки на пользователя.
 /// Значение лимита читается один раз из `public.settings`
 /// (`order.daily_limit`) и кэшируется. Счётчик сбрасывается автоматически
@@ -44,37 +45,48 @@ class DailyOrderLimit {
     } catch (_) {/* остаётся дефолт 30 */}
   }
 
+  /// Начало текущих московских суток в UTC. Сервер считает лимит по
+  /// `Europe/Moscow` (без DST, UTC+3) — клиент должен использовать
+  /// ту же границу, иначе ночью в 23:00-03:00 МСК счётчики разъезжаются:
+  /// сервер ещё считает заказы прошлой сутки активными, клиент уже
+  /// думает, что новый день, или наоборот.
+  static DateTime _moscowDayStartUtc() {
+    final DateTime nowUtc = DateTime.now().toUtc();
+    final DateTime moscowNow = nowUtc.add(const Duration(hours: 3));
+    return DateTime.utc(moscowNow.year, moscowNow.month, moscowNow.day)
+        .subtract(const Duration(hours: 3));
+  }
+
   /// Считает реально созданные сегодня заказы из БД и подгоняет под них
   /// локальный счётчик. Без этого `_count` хранится только в памяти Dart
   /// и сбрасывается при перезапуске приложения — пользователь успевал
   /// заполнить форму, отправить INSERT и получить отказ от серверного
   /// триггера `enforce_daily_order_limit`.
+  ///
+  /// Фильтрация — по `published_at` и `status='published'`, как делает
+  /// серверный триггер. Раньше клиент считал по `created_at` без статуса
+  /// — счётчик расходился с серверным.
   static Future<void> primeCountFromDb() async {
     try {
       final SupabaseClient client = Supabase.instance.client;
       final User? user = client.auth.currentUser;
       if (user == null) return;
-      final DateTime now = DateTime.now();
-      final DateTime today = DateTime(now.year, now.month, now.day);
-      final String iso = '${today.year.toString().padLeft(4, '0')}-'
-          '${today.month.toString().padLeft(2, '0')}-'
-          '${today.day.toString().padLeft(2, '0')}';
+      final DateTime moscowStartUtc = _moscowDayStartUtc();
       final List<Map<String, dynamic>> rows = await client
           .from('orders')
           .select('id')
           .eq('customer_id', user.id)
-          .gte('created_at', '${iso}T00:00:00')
-          .lte('created_at', '${iso}T23:59:59');
-      _date = today;
+          .eq('status', 'published')
+          .gte('published_at', moscowStartUtc.toIso8601String());
+      _date = moscowStartUtc;
       _count = rows.length;
     } catch (_) {/* silent — оставляем локальный счётчик */}
   }
 
   static void _rolloverIfNeeded() {
-    final DateTime now = DateTime.now();
-    final DateTime today = DateTime(now.year, now.month, now.day);
-    if (_date != today) {
-      _date = today;
+    final DateTime moscowStartUtc = _moscowDayStartUtc();
+    if (_date != moscowStartUtc) {
+      _date = moscowStartUtc;
       _count = 0;
     }
   }
@@ -144,13 +156,10 @@ class _OrderLimitDialog extends StatelessWidget {
           children: <Widget>[
             Align(
               alignment: Alignment.centerRight,
-              child: GestureDetector(
+              child: DialogCloseButton(
                 onTap: () => Navigator.of(context).pop(),
-                child: Icon(
-                  Icons.close_rounded,
-                  size: 22.r,
-                  color: AppColors.textTertiary,
-                ),
+                color: AppColors.textTertiary,
+                iconSize: 22.r,
               ),
             ),
             SizedBox(height: 20.h),

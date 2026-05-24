@@ -3,6 +3,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
+import '../theme/system_bar_style.dart';
 
 /// Канонический тёмный AppBar вложенных экранов (те, что пушатся поверх
 /// MainShell). Совпадает с паттерном из `orders/order_detail_screen.dart`
@@ -26,6 +27,13 @@ class DarkSubAppBar extends StatelessWidget implements PreferredSizeWidget {
     return AppBar(
       backgroundColor: AppColors.navBarDark,
       foregroundColor: Colors.white,
+      // У тёмного AppBar нужны светлые иконки в статус-баре, иначе
+      // время и батарея сливаются с navBarDark. AppBar.systemOverlayStyle
+      // перекрывает глобальный стиль на тех экранах, где он рисуется.
+      systemOverlayStyle: dispatcherSystemBarStyle(
+        navBarColor: AppColors.background,
+        statusIconBrightness: Brightness.light,
+      ),
       elevation: 0,
       centerTitle: true,
       toolbarHeight: 48.h,

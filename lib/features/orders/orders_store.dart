@@ -713,10 +713,12 @@ class MyOrdersStore {
       _bump();
     } catch (e) {
       // RLS не пустил (например, мэтч отозван параллельно другим
-      // клиентом) — карточка останется без телефона. Логируем для
-      // диагностики, чтобы пустой блок «Номер телефона» не казался
-      // загадкой.
-      debugPrint('_fetchAndPatchContacts failed: $e');
+      // клиентом) — карточка останется без телефона. Лог только
+      // в debug: в release `$e` может содержать URL/RLS-детали, и
+      // в logcat это потенциальная утечка PII.
+      if (kDebugMode) {
+        debugPrint('_fetchAndPatchContacts failed: $e');
+      }
     }
   }
 

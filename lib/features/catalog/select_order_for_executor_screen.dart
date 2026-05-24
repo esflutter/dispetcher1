@@ -11,6 +11,7 @@ import 'package:dispatcher_1/features/catalog/widgets/respond_bottom_sheet.dart'
 import 'package:dispatcher_1/features/orders/create_order_screen.dart';
 import 'package:dispatcher_1/features/orders/orders_store.dart';
 
+import 'package:dispatcher_1/core/widgets/dialog_close_button.dart';
 /// Трекер отправленных откликов по executor id. После отправки
 /// предложения исполнителю кнопка «Предложить заказ» на его карточке
 /// сменяется на «Предложение уже отправлено». Сбрасывается, когда
@@ -464,10 +465,10 @@ class NoOrderDialog extends StatelessWidget {
           children: <Widget>[
             Align(
               alignment: Alignment.centerRight,
-              child: GestureDetector(
+              child: DialogCloseButton(
                 onTap: () => Navigator.of(context).pop(),
-                child: Icon(Icons.close_rounded,
-                    size: 22.r, color: AppColors.textTertiary),
+                color: AppColors.textTertiary,
+                iconSize: 22.r,
               ),
             ),
             SizedBox(height: 16.h),

@@ -116,25 +116,50 @@ class StorageService {
   /// и сбивает с толку). 50-мегапиксельный кадр 8160×6120 после сжатия
   /// станет 2560×1920 ≈ 250 КБ webp.
   ///
-  /// При неудаче (некоторые форматы платформа не сжимает) возвращает
-  /// исходный файл — лучше залить как есть, чем сорвать создание заказа.
+  /// HEIC/HEIF из iOS-галереи обрабатывается особо: для них принудительно
+  /// идём в JPEG и НЕ возвращаем исходник «как есть» при сбое — сервер
+  /// отвергает HEIC с ошибкой mime, а юзер видит мутное «не удалось»
+  /// без понимания почему. При неудаче не-HEIC форматов — fallback на
+  /// исходник (лучше залить как есть, чем сорвать создание заказа).
   Future<File> _compress(File source) async {
+    final String ext = source.path.toLowerCase();
+    final bool isHeic = ext.endsWith('.heic') || ext.endsWith('.heif');
     try {
+      final CompressFormat fmt =
+          isHeic ? CompressFormat.jpeg : CompressFormat.webp;
+      final String suffix = isHeic ? 'jpg' : 'webp';
       final String target =
-          '${source.path}.${DateTime.now().microsecondsSinceEpoch}.webp';
+          '${source.path}.${DateTime.now().microsecondsSinceEpoch}.$suffix';
       final XFile? out = await FlutterImageCompress.compressAndGetFile(
         source.absolute.path,
         target,
-        format: CompressFormat.webp,
+        format: fmt,
         quality: 85,
         minWidth: maxImageDimension,
         minHeight: maxImageDimension,
       );
-      if (out == null) return source;
-      return File(out.path);
-    } catch (_) {
-      return source;
+      if (out != null) return File(out.path);
+    } catch (_) {/* ниже — fallback */}
+    if (isHeic) {
+      try {
+        final String target =
+            '${source.path}.${DateTime.now().microsecondsSinceEpoch}.jpg';
+        final XFile? out = await FlutterImageCompress.compressAndGetFile(
+          source.absolute.path,
+          target,
+          format: CompressFormat.jpeg,
+          quality: 85,
+          minWidth: maxImageDimension,
+          minHeight: maxImageDimension,
+        );
+        if (out != null) return File(out.path);
+      } catch (_) {/* ниже */}
+      throw const FormatException(
+        'Не удалось обработать HEIC-фото. Попробуйте сохранить в галерее '
+        'как JPEG и повторить.',
+      );
     }
+    return source;
   }
 
   /// Возвращает signed URL для приватного файла (1 час).

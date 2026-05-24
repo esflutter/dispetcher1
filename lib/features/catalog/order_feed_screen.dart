@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import 'package:dispatcher_1/core/catalog/catalog_service.dart';
 import 'package:dispatcher_1/core/catalog/models.dart';
+import 'package:dispatcher_1/core/realtime/realtime_service.dart';
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
 import 'package:dispatcher_1/features/catalog/catalog_filter_screen.dart';
@@ -45,15 +46,26 @@ class _OrderFeedScreenState extends State<OrderFeedScreen> {
   void initState() {
     super.initState();
     AppliedFilter.revision.addListener(_onFilterChanged);
+    // Realtime: при изменении любой записи в `orders`/`order_matches`
+    // глобальный RealtimeService бампит ordersFeedBeacon. Лента
+    // пере-фетчит, чтобы новый/изменённый/снятый заказ появлялся /
+    // исчезал «живьём», без pull-to-refresh.
+    RealtimeService.ordersFeedBeacon.addListener(_onFeedChanged);
     _future = _fetch();
   }
 
   @override
   void dispose() {
     AppliedFilter.revision.removeListener(_onFilterChanged);
+    RealtimeService.ordersFeedBeacon.removeListener(_onFeedChanged);
     _debounce?.cancel();
     _searchCtrl.dispose();
     super.dispose();
+  }
+
+  void _onFeedChanged() {
+    if (!mounted) return;
+    setState(() => _future = _fetch());
   }
 
   Future<List<ExecutorCardListItem>> _fetch() {

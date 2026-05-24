@@ -121,11 +121,19 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
     super.dispose();
   }
 
-  /// На любые изменения в сторе — просто перерисовываем. Списки
-  /// отдаются через геттеры, которые каждый раз читают актуальное
-  /// состояние стора.
+  /// На любые изменения в сторе перетягиваем свежие данные из БД.
+  /// Раньше тут был только `setState` — `RealtimeService` бампит
+  /// `revision` при INSERT/UPDATE/DELETE в `orders`/`order_matches`,
+  /// но экран перерисовывался с теми же старыми данными, потому что
+  /// loadFromDb не вызывался. По факту realtime в «Мои заказы» не
+  /// работал — обновлялось только то, что инициировано локальным
+  /// действием пользователя.
   void _onStoreChanged() {
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    setState(() {});
+    // Не блокируем UI: список перерисуется по revision, а свежие
+    // данные подтянутся следующим бампом revision из loadFromDb.
+    unawaited(MyOrdersStore.loadFromDb());
   }
 
   void _onBlockChanged() {

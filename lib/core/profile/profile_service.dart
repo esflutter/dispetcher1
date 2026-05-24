@@ -176,16 +176,16 @@ class MyProfile {
         isCustomer: (r['is_customer'] as bool?) ?? true,
         blockedUntil: r['blocked_until'] == null
             ? null
-            : DateTime.parse(r['blocked_until'] as String),
+            : DateTime.parse(r['blocked_until'] as String).toLocal(),
         verificationStatus:
             (r['verification_status'] as String?) ?? 'none',
         agreementAcceptedAt: r['agreement_accepted_at'] == null
             ? null
-            : DateTime.parse(r['agreement_accepted_at'] as String),
+            : DateTime.parse(r['agreement_accepted_at'] as String).toLocal(),
         termsVersion: r['terms_version'] as String?,
         customerCardSavedAt: r['customer_card_saved_at'] == null
             ? null
-            : DateTime.parse(r['customer_card_saved_at'] as String),
+            : DateTime.parse(r['customer_card_saved_at'] as String).toLocal(),
       );
 }
 
@@ -208,10 +208,10 @@ class MyPrivate {
         email: r['email'] as String?,
         dateOfBirth: r['date_of_birth'] == null
             ? null
-            : DateTime.parse(r['date_of_birth'] as String),
+            : DateTime.parse(r['date_of_birth'] as String).toLocal(),
         subscriptionPaidUntil: r['subscription_paid_until'] == null
             ? null
-            : DateTime.parse(r['subscription_paid_until'] as String),
+            : DateTime.parse(r['subscription_paid_until'] as String).toLocal(),
         subscriptionAutoRenew:
             (r['subscription_auto_renew'] as bool?) ?? false,
       );

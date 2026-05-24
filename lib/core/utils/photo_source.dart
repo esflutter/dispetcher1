@@ -220,6 +220,11 @@ Widget imageFromPath(
 /// храним 50 минут (с запасом), чтобы не пересоздавать URL при каждом
 /// rebuild и не словить «истёкший токен» прямо во время отображения.
 class _SignedUrlCache {
+  /// Лимит записей — без него кэш растёт неограниченно при пролистывании
+  /// больших лент. При достижении вычищаем половину «старых» по сроку
+  /// подписи.
+  static const int _maxEntries = 500;
+
   static final Map<String, _Entry> _entries = <String, _Entry>{};
 
   static Future<String?> resolve(String bucket, String path) async {
@@ -234,12 +239,31 @@ class _SignedUrlCache {
           .createSignedUrl(path, 3600);
       _entries[key] =
           _Entry(url, DateTime.now().add(const Duration(minutes: 50)));
+      if (_entries.length > _maxEntries) _evictHalf();
       return url;
     } catch (_) {
       return null;
     }
   }
+
+  static void _evictHalf() {
+    final List<MapEntry<String, _Entry>> sorted = _entries.entries.toList()
+      ..sort((a, b) => a.value.expiresAt.compareTo(b.value.expiresAt));
+    final int toRemove = sorted.length ~/ 2;
+    for (int i = 0; i < toRemove; i++) {
+      _entries.remove(sorted[i].key);
+    }
+  }
+
+  /// Полная очистка — вызывается при выходе из аккаунта, чтобы ссылки
+  /// на приватные файлы прежнего юзера не достались следующему.
+  static void clearAll() {
+    _entries.clear();
+  }
 }
+
+/// Публичная очистка — для вызова из auth_reset при выходе из аккаунта.
+void clearSignedUrlCache() => _SignedUrlCache.clearAll();
 
 class _Entry {
   _Entry(this.url, this.expiresAt);

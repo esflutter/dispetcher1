@@ -15,6 +15,7 @@ import 'package:dispatcher_1/core/widgets/cropped_avatar.dart';
 import 'package:dispatcher_1/features/auth/photo_crop_screen.dart';
 import 'package:dispatcher_1/features/profile/account_block.dart';
 
+import 'package:dispatcher_1/core/widgets/dialog_close_button.dart';
 /// Экран «Моя карточка заказчика». Два состояния:
 ///   empty   — карточка ещё не создана (показываем плейсхолдер + «Создать»)
 ///   filled  — карточка создана (показываем данные + «Редактировать»)
@@ -395,10 +396,10 @@ Future<void> showCreateCustomerCardDialog(BuildContext context) {
           children: <Widget>[
             Align(
               alignment: Alignment.centerRight,
-              child: GestureDetector(
+              child: DialogCloseButton(
                 onTap: () => Navigator.of(ctx).pop(),
-                child: Icon(Icons.close_rounded,
-                    size: 22.r, color: AppColors.textTertiary),
+                color: AppColors.textTertiary,
+                iconSize: 22.r,
               ),
             ),
             SizedBox(height: 20.h),
@@ -466,10 +467,10 @@ Future<void> showBlockedProfileDialog(BuildContext context) {
           children: <Widget>[
             Align(
               alignment: Alignment.centerRight,
-              child: GestureDetector(
+              child: DialogCloseButton(
                 onTap: () => Navigator.of(ctx).pop(),
-                child: Icon(Icons.close_rounded,
-                    size: 22.r, color: AppColors.textTertiary),
+                color: AppColors.textTertiary,
+                iconSize: 22.r,
               ),
             ),
             SizedBox(height: 20.h),
