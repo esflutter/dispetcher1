@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 
 import 'package:dispatcher_1/core/customer_orders/customer_orders_service.dart';
+import 'package:dispatcher_1/core/push/pending_deep_link.dart';
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/utils/phone_dial.dart';
 import 'package:dispatcher_1/core/widgets/primary_button.dart';
@@ -97,6 +98,56 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
         MyOrdersStore.archiveActiveOrdersOnBlock();
       });
     }
+    // Deep-link от пуша: если в notifier лежит id заказа — найти его в
+    // store и открыть детали той же логикой, что и обычный тап карточки.
+    pendingOrderDeepLink.addListener(_onPendingDeepLink);
+    if (pendingOrderDeepLink.value != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _onPendingDeepLink());
+    }
+  }
+
+  Future<void> _onPendingDeepLink() async {
+    final String? id = pendingOrderDeepLink.value;
+    if (id == null || !mounted) return;
+
+    OrderMock? order = _findInStore(id);
+    if (order == null) {
+      // Заказ ещё не в локальном кэше — попробуем подтянуть из БД.
+      // loadFromDb обновит списки и поднимет revision → setState.
+      await MyOrdersStore.loadFromDb();
+      if (!mounted) return;
+      order = _findInStore(id);
+    }
+
+    if (!mounted) return;
+    // Сбрасываем notifier ДО открытия экрана — иначе при возврате с
+    // деталей listener сработает повторно и попытается открыть снова.
+    pendingOrderDeepLink.value = null;
+
+    if (order != null) {
+      _openOrderDetail(context, order);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Заказ не найден или у вас нет доступа'),
+        ),
+      );
+    }
+  }
+
+  OrderMock? _findInStore(String id) {
+    for (final List<OrderMock> bucket in <List<OrderMock>>[
+      MyOrdersStore.newOrders,
+      MyOrdersStore.accepted,
+      MyOrdersStore.inWork,
+      MyOrdersStore.archive,
+      MyOrdersStore.rejected,
+    ]) {
+      for (final OrderMock o in bucket) {
+        if (o.id == id) return o;
+      }
+    }
+    return null;
   }
 
   Timer? _blockExpiryTimer;
@@ -112,6 +163,7 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
   void dispose() {
     AccountBlock.notifier.removeListener(_onBlockChanged);
     MyOrdersStore.revision.removeListener(_onStoreChanged);
+    pendingOrderDeepLink.removeListener(_onPendingDeepLink);
     if (MyOrdersStore.onError == _onStoreError) {
       MyOrdersStore.onError = null;
     }
@@ -204,9 +256,22 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
         ],
       ),
       body: _isEmpty
-          ? _EmptyOrders(
-              onGoToCatalog: _blocked ? null : widget.onGoToCatalog,
-              blocked: _blocked,
+          // LayoutBuilder + ConstrainedBox(minHeight) гарантируют, что
+          // _EmptyOrders с mainAxisAlignment.center реально центрируется
+          // по вертикали даже на низких экранах и при pull-to-refresh.
+          ? LayoutBuilder(
+              builder: (BuildContext _, BoxConstraints c) {
+                return SingleChildScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(minHeight: c.maxHeight),
+                    child: _EmptyOrders(
+                      onGoToCatalog: _blocked ? null : widget.onGoToCatalog,
+                      blocked: _blocked,
+                    ),
+                  ),
+                );
+              },
             )
           : _buildWithTabs(),
     );
@@ -553,8 +618,13 @@ class _OrdersSegmented extends StatelessWidget {
                     child: GestureDetector(
                       behavior: HitTestBehavior.opaque,
                       onTap: () => controller.animateTo(i),
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 150),
+                      // Без AnimatedContainer (был duration 150ms): при
+                      // быстром свайпе по TabBarView controller.index
+                      // менялся быстрее, чем заканчивался transition
+                      // цвета, и подсветка визуально отставала. Обычный
+                      // Container переключается синхронно с index — это
+                      // ожидаемое поведение.
+                      child: Container(
                         alignment: Alignment.center,
                         color: i == index
                             ? AppColors.primary

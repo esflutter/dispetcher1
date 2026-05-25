@@ -46,7 +46,8 @@ class ProfileService {
       final Map<String, dynamic>? r = await _client
           .from('profiles_private')
           .select('phone, email, date_of_birth, '
-              'subscription_paid_until, subscription_auto_renew')
+              'subscription_paid_until, subscription_auto_renew, '
+              'push_enabled')
           .eq('id', user.id)
           .maybeSingle();
       if (r == null) return null;
@@ -114,6 +115,21 @@ class ProfileService {
     await _client
         .from('profiles_private')
         .update(<String, dynamic>{'email': email.isEmpty ? null : email})
+        .eq('id', user.id);
+    changeBeacon.value++;
+  }
+
+  /// UPDATE общего тумблера «Уведомления» в `profiles_private`.
+  /// Для заказчика тумблера «новые заказы рядом» нет — это поле касается
+  /// исполнителя.
+  Future<void> updatePushEnabled(bool enabled) async {
+    final User? user = _client.auth.currentUser;
+    if (user == null) {
+      throw const AuthException('Нет активной сессии');
+    }
+    await _client
+        .from('profiles_private')
+        .update(<String, dynamic>{'push_enabled': enabled})
         .eq('id', user.id);
     changeBeacon.value++;
   }
@@ -196,12 +212,17 @@ class MyPrivate {
     required this.dateOfBirth,
     required this.subscriptionPaidUntil,
     required this.subscriptionAutoRenew,
+    required this.pushEnabled,
   });
   final String? phone;
   final String? email;
   final DateTime? dateOfBirth;
   final DateTime? subscriptionPaidUntil;
   final bool subscriptionAutoRenew;
+
+  /// Мастер-тумблер «Уведомления». OFF → ни один пуш не доходит до
+  /// устройства. In-app inbox при этом всё равно наполняется.
+  final bool pushEnabled;
 
   factory MyPrivate.fromRow(Map<String, dynamic> r) => MyPrivate(
         phone: r['phone'] as String?,
@@ -214,6 +235,7 @@ class MyPrivate {
             : DateTime.parse(r['subscription_paid_until'] as String).toLocal(),
         subscriptionAutoRenew:
             (r['subscription_auto_renew'] as bool?) ?? false,
+        pushEnabled: (r['push_enabled'] as bool?) ?? true,
       );
 }
 

@@ -8,6 +8,8 @@ import 'package:pinput/pinput.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:dispatcher_1/core/auth/auth_service.dart';
+import 'package:dispatcher_1/core/notifications/notifications_service.dart';
+import 'package:dispatcher_1/core/push/push_service.dart';
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
 import 'package:dispatcher_1/core/widgets/primary_button.dart';
@@ -109,6 +111,11 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
         if (result.name != null && result.name!.trim().isNotEmpty) {
           CropResult.userName = result.name!;
         }
+        // Регистрация FCM-токена сразу после OTP. Не блокируем переход —
+        // если сеть тормозит, юзер уже на экране shell, а токен подтянется
+        // в фоне (внутри single-flight + дедуп 5 мин).
+        unawaited(PushService.instance.registerForCurrentUser());
+        NotificationsService.instance.start();
         context.go('/shell');
       }
     } on AuthException {
