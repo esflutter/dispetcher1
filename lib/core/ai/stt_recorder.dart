@@ -49,6 +49,13 @@ class SttRecorder {
     final granted = await ensurePermission();
     if (!granted) return false;
     try {
+      // Проверка поддержки Opus — на части устройств без энкодера
+      // SpeechKit отвергнет файл с непонятной ошибкой формата.
+      final opusOk = await _rec.isEncoderSupported(AudioEncoder.opus);
+      if (!opusOk) {
+        if (kDebugMode) debugPrint('[stt-recorder] device does not support Opus');
+        return false;
+      }
       final dir = await getTemporaryDirectory();
       final path = '${dir.path}/voice_${DateTime.now().microsecondsSinceEpoch}.ogg';
       _currentPath = path;
@@ -82,7 +89,8 @@ class SttRecorder {
       final f = File(path);
       if (!await f.exists()) return null;
       final len = await f.length();
-      if (len < 500) {
+      // Порог 200 байт — короткие «да», «нет», «ага» проходят.
+      if (len < 200) {
         try { await f.delete(); } catch (_) {}
         return null;
       }

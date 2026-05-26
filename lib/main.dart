@@ -16,6 +16,7 @@ import 'core/push/push_service.dart';
 import 'core/realtime/realtime_service.dart';
 import 'core/settings/settings_service.dart';
 import 'core/theme/system_bar_style.dart';
+import 'features/support/chat_screen.dart';
 
 /// Обработчик пушей в фоне / при закрытом приложении.
 ///
@@ -101,6 +102,8 @@ Future<void> main() async {
       if (event.event == AuthChangeEvent.signedOut) {
         await RealtimeService.instance.stop();
         await NotificationsService.instance.stop();
+        // Чистим переписку ассистента — иначе следующий юзер увидит чужие сообщения.
+        ChatScreen.resetHistory();
         if (firebaseReady) {
           await PushService.instance.clearForCurrentUser();
         }
