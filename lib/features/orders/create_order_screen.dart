@@ -359,15 +359,26 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
       });
     }
 
-    // Даты
-    final dfStr = draft['date_from'] as String?;
-    final dtStr = draft['date_to']   as String?;
-    if (dfStr != null) {
-      try { _dateFrom = DateTime.parse(dfStr); } catch (_) {}
+    // Даты — поддерживаем и ISO ("YYYY-MM-DD"), и русский "DD.MM.YYYY".
+    // LLM иногда возвращает русский формат вопреки промпту; вместо
+    // молчаливой потери даты дополнительно парсим его.
+    DateTime? parseSmartDate(String? s) {
+      if (s == null || s.isEmpty) return null;
+      try { return DateTime.parse(s); } catch (_) {}
+      final ru = RegExp(r'^(\d{1,2})\.(\d{1,2})\.(\d{2,4})$').firstMatch(s);
+      if (ru != null) {
+        final d = int.tryParse(ru.group(1)!);
+        final m = int.tryParse(ru.group(2)!);
+        var y    = int.tryParse(ru.group(3)!);
+        if (d != null && m != null && y != null) {
+          if (y < 100) y += 2000;
+          try { return DateTime(y, m, d); } catch (_) {}
+        }
+      }
+      return null;
     }
-    if (dtStr != null) {
-      try { _dateTo = DateTime.parse(dtStr); } catch (_) {}
-    }
+    _dateFrom = parseSmartDate(draft['date_from'] as String?);
+    _dateTo   = parseSmartDate(draft['date_to']   as String?);
     _exactDate = (draft['exact_date'] as bool?) ?? (_dateTo == null);
     _wholeDay  = (draft['whole_day']  as bool?) ?? false;
 
