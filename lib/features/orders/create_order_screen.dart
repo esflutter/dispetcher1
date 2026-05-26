@@ -202,8 +202,27 @@ class _OrderLimitDialog extends StatelessWidget {
 
 /// Экран «Создание заказа». Структура и вёрстка по аналогии с экраном
 /// «Создание услуги» в приложении исполнителя.
+///
+/// [aiDraft] — опциональный черновик, собранный ИИ-ассистентом в slot-fill.
+/// Если передан — экран открывается с заполненными полями (юзер только
+/// проверяет и нажимает «Создать»).
+/// Формат:
+/// ```
+/// {
+///   "machinery_ids": [int],
+///   "category_ids":  [int],
+///   "title": str, "description": str,
+///   "works": [{ "name": str, "volume": str, "unit": str }],
+///   "date_from": "YYYY-MM-DD", "date_to": "YYYY-MM-DD"|null,
+///   "exact_date": bool, "whole_day": bool,
+///   "time_from": "HH:MM"|null, "time_to": "HH:MM"|null,
+///   "city": str, "address": str,
+/// }
+/// ```
 class CreateOrderScreen extends StatefulWidget {
-  const CreateOrderScreen({super.key});
+  const CreateOrderScreen({super.key, this.aiDraft});
+
+  final Map<String, dynamic>? aiDraft;
 
   @override
   State<CreateOrderScreen> createState() => _CreateOrderScreenState();
@@ -287,6 +306,116 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
     }
     if (mc == null || cc == null) {
       _loadDirectories();
+    }
+    // Применяем черновик от ИИ-ассистента (если был передан).
+    if (widget.aiDraft != null) {
+      _applyAiDraft(widget.aiDraft!, mc, cc);
+    }
+  }
+
+  /// Применяет ИИ-черновик к полям формы. Best-effort:
+  /// поля, которые не получилось распознать (например id не нашлось
+  /// в справочнике) — просто пропускаются, форма остаётся редактируемой.
+  void _applyAiDraft(
+    Map<String, dynamic> draft,
+    List<cat.MachineryRef>? mcCached,
+    List<cat.CategoryRef>? ccCached,
+  ) {
+    // Title / description
+    final title = (draft['title'] as String? ?? '').trim();
+    final desc  = (draft['description'] as String? ?? '').trim();
+    if (title.isNotEmpty) _titleCtrl.text = title;
+    if (desc.isNotEmpty)  _descCtrl.text  = desc;
+
+    // Категории / техника: id → title через справочник.
+    final machIds = (draft['machinery_ids'] is List)
+        ? (draft['machinery_ids'] as List).whereType<int>().toSet()
+        : <int>{};
+    final catIds = (draft['category_ids'] is List)
+        ? (draft['category_ids'] as List).whereType<int>().toSet()
+        : <int>{};
+
+    void mapIds() {
+      final mc = mcCached ?? CatalogService.instance.cachedMachinery;
+      final cc = ccCached ?? CatalogService.instance.cachedCategories;
+      if (mc != null) {
+        for (final m in mc) {
+          if (machIds.contains(m.id)) _selMach.add(m.title);
+        }
+      }
+      if (cc != null) {
+        for (final c in cc) {
+          if (catIds.contains(c.id)) _selCat.add(c.title);
+        }
+      }
+    }
+
+    mapIds();
+    // Если справочники ещё не догрузились — повторим маппинг после загрузки.
+    if (mcCached == null || ccCached == null) {
+      Future<void>.delayed(const Duration(milliseconds: 100), () {
+        if (!mounted) return;
+        setState(mapIds);
+      });
+    }
+
+    // Даты
+    final dfStr = draft['date_from'] as String?;
+    final dtStr = draft['date_to']   as String?;
+    if (dfStr != null) {
+      try { _dateFrom = DateTime.parse(dfStr); } catch (_) {}
+    }
+    if (dtStr != null) {
+      try { _dateTo = DateTime.parse(dtStr); } catch (_) {}
+    }
+    _exactDate = (draft['exact_date'] as bool?) ?? (_dateTo == null);
+    _wholeDay  = (draft['whole_day']  as bool?) ?? false;
+
+    // Время
+    TimeOfDay? parseTime(String? s) {
+      if (s == null) return null;
+      final p = s.split(':');
+      if (p.length < 2) return null;
+      final h = int.tryParse(p[0]);
+      final m = int.tryParse(p[1]);
+      if (h == null || m == null) return null;
+      return TimeOfDay(hour: h.clamp(0, 23), minute: m.clamp(0, 59));
+    }
+    _timeFrom = parseTime(draft['time_from'] as String?);
+    _timeTo   = parseTime(draft['time_to']   as String?);
+
+    // Работы
+    final worksRaw = draft['works'];
+    if (worksRaw is List && worksRaw.isNotEmpty) {
+      // Освобождаем дефолтный пустой work и формируем из draft.
+      for (final w in _works) {
+        w.dispose();
+      }
+      _works.clear();
+      for (final w in worksRaw.take(_maxWorks)) {
+        if (w is! Map) continue;
+        final item = _WorkItem();
+        item.nameCtrl.text   = (w['name']   as String? ?? '').trim();
+        item.volumeCtrl.text = w['volume']?.toString().trim() ?? '';
+        final unit = (w['unit'] as String? ?? '').trim();
+        if (_workUnits.contains(unit)) item.unit = unit;
+        _attachWorkListeners(item);
+        _works.add(item);
+      }
+      if (_works.isEmpty) {
+        final empty = _WorkItem();
+        _attachWorkListeners(empty);
+        _works.add(empty);
+      }
+    }
+
+    // Адрес
+    final addr = (draft['address'] as String? ?? '').trim();
+    final city = (draft['city']    as String? ?? '').trim();
+    if (addr.isNotEmpty) {
+      _address = addr;
+    } else if (city.isNotEmpty) {
+      _address = city;
     }
   }
 

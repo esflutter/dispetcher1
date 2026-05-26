@@ -1,0 +1,90 @@
+// =====================================================================
+// stt_recorder.dart — обёртка над `record` для голосовых сообщений.
+//
+// Запись идёт в OGG/Opus 16 kHz mono — сжатый формат, который без
+// конвертации принимает Yandex SpeechKit STT v1 (sync). На 30 сек
+// — примерно 30-60 КБ, влезает в лимит API 1 МБ с большим запасом.
+// =====================================================================
+
+import 'dart:async';
+import 'dart:io';
+
+import 'package:flutter/foundation.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:record/record.dart';
+
+class SttRecorder {
+  SttRecorder._();
+  static final SttRecorder instance = SttRecorder._();
+
+  final AudioRecorder _rec = AudioRecorder();
+  String? _currentPath;
+
+  Future<bool> isRecording() => _rec.isRecording();
+
+  Future<bool> ensurePermission() async {
+    final status = await Permission.microphone.status;
+    if (status.isGranted) return true;
+    if (status.isPermanentlyDenied) return false;
+    final result = await Permission.microphone.request();
+    return result.isGranted;
+  }
+
+  Future<void> openSettings() => openAppSettings();
+
+  Future<bool> start() async {
+    final granted = await ensurePermission();
+    if (!granted) return false;
+    try {
+      final dir = await getTemporaryDirectory();
+      final path = '${dir.path}/voice_${DateTime.now().microsecondsSinceEpoch}.ogg';
+      _currentPath = path;
+      await _rec.start(
+        const RecordConfig(
+          encoder:     AudioEncoder.opus,
+          sampleRate:  16000,
+          numChannels: 1,
+        ),
+        path: path,
+      );
+      return true;
+    } catch (e) {
+      if (kDebugMode) debugPrint('[stt-recorder] start failed: $e');
+      _currentPath = null;
+      return false;
+    }
+  }
+
+  Future<File?> stop() async {
+    try {
+      final path = await _rec.stop();
+      _currentPath = null;
+      if (path == null) return null;
+      final f = File(path);
+      if (!await f.exists()) return null;
+      final len = await f.length();
+      if (len < 500) {
+        try { await f.delete(); } catch (_) {}
+        return null;
+      }
+      return f;
+    } catch (e) {
+      if (kDebugMode) debugPrint('[stt-recorder] stop failed: $e');
+      return null;
+    }
+  }
+
+  Future<void> cancel() async {
+    try {
+      await _rec.cancel();
+    } catch (_) {}
+    final path = _currentPath;
+    _currentPath = null;
+    if (path != null) {
+      try { await File(path).delete(); } catch (_) {}
+    }
+  }
+
+  Future<void> dispose() => _rec.dispose();
+}
