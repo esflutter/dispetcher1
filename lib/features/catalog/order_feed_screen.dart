@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:dispatcher_1/core/ai/ai_navigation.dart';
 import 'package:dispatcher_1/core/catalog/catalog_service.dart';
 import 'package:dispatcher_1/core/catalog/models.dart';
 import 'package:dispatcher_1/core/realtime/realtime_service.dart';
@@ -224,7 +225,7 @@ class _OrderFeedScreenState extends State<OrderFeedScreen> {
       floatingActionButton: Padding(
         padding: EdgeInsets.only(bottom: 24.h),
         child: AiAssistantFab(
-          onTap: () => context.push('/assistant/chat'),
+          onTap: () => openAssistantChat(context),
         ),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,

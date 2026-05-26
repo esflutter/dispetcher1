@@ -171,6 +171,15 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     _scrollToBottom();
     const Duration timeout = Duration(seconds: 30);
     try {
+      // Для обычного chat-режима используем стрим. _streamChatReply сам
+      // отрисовывает ошибку в placeholder и НЕ rethrow — иначе outer-catch
+      // ниже добавил бы второй bubble с тем же текстом.
+      if (_mode == AiChatKind.chat) {
+        await _streamChatReply(text).timeout(timeout, onTimeout: () {
+          _replaceStreamMessage('__last_stream__', 'Не дождался ответа. Попробуйте ещё раз.');
+        });
+        return;
+      }
       Future<AiReply> call() {
         switch (_mode) {
           case AiChatKind.search:
@@ -197,6 +206,55 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     } finally {
       if (mounted) setState(() => _isProcessing = false);
     }
+  }
+
+  /// Стриминговый вариант chat. Все ошибки рисуются прямо в placeholder —
+  /// НЕ rethrow, иначе outer-catch добавит дубликат-бабл.
+  String _lastStreamId = '';
+  Future<void> _streamChatReply(String text) async {
+    _idCounter++;
+    final id = 'stream_$_idCounter';
+    _lastStreamId = id;
+    _messages.add(ChatMessage(id: id, text: '', fromUser: false));
+    if (mounted) setState(() {});
+    _scrollToBottom();
+
+    try {
+      await for (final chunk in AiClient.instance.chatStream(text)) {
+        final idx = _messages.indexWhere((m) => m.id == id);
+        if (idx < 0) return;
+        _messages[idx] = ChatMessage(
+          id: id,
+          text: chunk.text,
+          fromUser: false,
+        );
+        if (mounted) setState(() {});
+        if (chunk.done) {
+          _scrollToBottom();
+          return;
+        }
+      }
+    } on AiQuotaExceeded catch (e) {
+      _replaceStreamMessage(id, e.message);
+    } on AiContentFilterError catch (e) {
+      _replaceStreamMessage(id, e.message);
+    } catch (_) {
+      _replaceStreamMessage(
+        id,
+        'Не удалось получить ответ. Проверьте интернет и попробуйте снова.',
+      );
+    }
+  }
+
+  void _replaceStreamMessage(String id, String text) {
+    final realId = (id == '__last_stream__') ? _lastStreamId : id;
+    final idx = _messages.indexWhere((m) => m.id == realId);
+    if (idx < 0) {
+      _addBotMessage(text);
+      return;
+    }
+    _messages[idx] = ChatMessage(id: realId, text: text, fromUser: false);
+    if (mounted) setState(() {});
   }
 
   void _appendReply(AiReply reply) {
