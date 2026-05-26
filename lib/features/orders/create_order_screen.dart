@@ -359,12 +359,17 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
       });
     }
 
-    // Даты — поддерживаем и ISO ("YYYY-MM-DD"), и русский "DD.MM.YYYY".
-    // LLM иногда возвращает русский формат вопреки промпту; вместо
-    // молчаливой потери даты дополнительно парсим его.
+    // Даты — поддерживаем ISO ("YYYY-MM-DD") и русский "DD.MM.YYYY".
+    // Валидируем d/m в реальных диапазонах: DateTime(2025,13,32) в Dart
+    // молча переливается в 2026-02-01 без исключения — это даст юзеру
+    // дату через год вместо ошибки.
     DateTime? parseSmartDate(String? s) {
       if (s == null || s.isEmpty) return null;
-      try { return DateTime.parse(s); } catch (_) {}
+      try {
+        final iso = DateTime.parse(s);
+        // ISO тоже может сломаться при битых значениях — но parse уже их отвергнет.
+        return iso;
+      } catch (_) {}
       final ru = RegExp(r'^(\d{1,2})\.(\d{1,2})\.(\d{2,4})$').firstMatch(s);
       if (ru != null) {
         final d = int.tryParse(ru.group(1)!);
@@ -372,7 +377,18 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
         var y    = int.tryParse(ru.group(3)!);
         if (d != null && m != null && y != null) {
           if (y < 100) y += 2000;
-          try { return DateTime(y, m, d); } catch (_) {}
+          // Жёсткая валидация диапазонов до создания DateTime,
+          // чтобы избежать «32.13.2025 → 2026-02-01».
+          if (d < 1 || d > 31 || m < 1 || m > 12 || y < 2000 || y > 2100) {
+            return null;
+          }
+          try {
+            final dt = DateTime(y, m, d);
+            // Дополнительная защита: если Dart всё-таки перетёк (например
+            // 31 февраля → 3 марта), значения после конструктора не совпадут.
+            if (dt.year != y || dt.month != m || dt.day != d) return null;
+            return dt;
+          } catch (_) {}
         }
       }
       return null;

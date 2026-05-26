@@ -170,6 +170,9 @@ class ChatBubble extends StatelessWidget {
 // Handoff-виджеты — найденные карточки и готовые черновики.
 // ============================================================
 
+/// В приложении заказчика order_cards теоретически может прилететь (например,
+/// «покажи мои заказы»). Раньше виджет был заглушкой с одним текстом —
+/// карточки терялись. Сейчас рендерим список с тапом на детали заказа.
 class _OrderCardsHandoff extends StatelessWidget {
   const _OrderCardsHandoff({required this.text, required this.data});
   final String text;
@@ -177,20 +180,101 @@ class _OrderCardsHandoff extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final items = (data['items'] is List ? data['items'] as List : const [])
+        .whereType<Map<String, dynamic>>()
+        .where((it) => (it['id'] as String? ?? '').isNotEmpty)
+        .toList();
+
     return Align(
       alignment: Alignment.centerLeft,
       child: Container(
-        constraints: BoxConstraints(maxWidth: 280.w),
+        constraints: BoxConstraints(maxWidth: 312.w),
         margin: EdgeInsets.symmetric(vertical: 8.h),
         padding: EdgeInsets.all(16.w),
         decoration: BoxDecoration(
           color: AppColors.primaryTint,
-          borderRadius: BorderRadius.circular(12.r),
+          borderRadius: BorderRadius.circular(16.r),
         ),
-        child: Text(text,
-            style: AppTextStyles.body.copyWith(
-              color: AppColors.textBlack, fontSize: 16.sp, height: 1.25,
-            )),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (text.isNotEmpty) ...[
+              Text(text,
+                style: AppTextStyles.body.copyWith(
+                  color: AppColors.textBlack, fontSize: 16.sp, height: 1.25,
+                ),
+              ),
+              SizedBox(height: 12.h),
+            ],
+            ...items.take(5).map((it) => _CustomerOrderTile(item: it)),
+            if (items.length > 5)
+              Padding(
+                padding: EdgeInsets.only(top: 8.h),
+                child: Text(
+                  'И ещё ${items.length - 5} — уточните запрос, чтобы их сузить.',
+                  style: AppTextStyles.body.copyWith(
+                    color: AppColors.textTertiary, fontSize: 13.sp,
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CustomerOrderTile extends StatelessWidget {
+  const _CustomerOrderTile({required this.item});
+  final Map<String, dynamic> item;
+
+  @override
+  Widget build(BuildContext context) {
+    final id      = item['id'] as String? ?? '';
+    final title   = (item['title']  as String? ?? '').trim();
+    final address = (item['address']as String? ?? '').trim();
+    final dateFrom = item['date_from'] as String?;
+    return InkWell(
+      // В приложении заказчика свои заказы открываются через /orders/:id.
+      onTap: id.isEmpty ? null : () => Navigator.of(context).maybePop(),
+      borderRadius: BorderRadius.circular(10.r),
+      child: Container(
+        margin: EdgeInsets.only(bottom: 8.h),
+        padding: EdgeInsets.all(12.w),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(10.r),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(title.isEmpty ? 'Заказ' : title,
+              maxLines: 2, overflow: TextOverflow.ellipsis,
+              style: AppTextStyles.body.copyWith(
+                color: AppColors.textBlack, fontSize: 14.sp, fontWeight: FontWeight.w600,
+              ),
+            ),
+            if (address.isNotEmpty) ...[
+              SizedBox(height: 4.h),
+              Text(address,
+                maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: AppTextStyles.body.copyWith(
+                  color: AppColors.textTertiary, fontSize: 12.sp,
+                ),
+              ),
+            ],
+            if (dateFrom != null) ...[
+              SizedBox(height: 4.h),
+              Text('с $dateFrom',
+                style: AppTextStyles.body.copyWith(
+                  color: AppColors.textTertiary, fontSize: 12.sp,
+                ),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }

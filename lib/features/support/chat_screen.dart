@@ -291,12 +291,17 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     if (mounted) setState(() => _isRecording = false);
 
     final File? audio = await SttRecorder.instance.stop();
-    if (audio == null) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Слишком короткое сообщение — задержите кнопку микрофона')),
-        );
+    // После await — экран мог закрыться. Без guard крах на setState().
+    if (!mounted) {
+      if (audio != null) {
+        try { await audio.delete(); } catch (_) {}
       }
+      return;
+    }
+    if (audio == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Слишком короткое сообщение — задержите кнопку микрофона')),
+      );
       return;
     }
 
