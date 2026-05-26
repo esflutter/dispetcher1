@@ -183,6 +183,7 @@ class AiClient {
   }
 
   /// Распознавание голоса.
+  /// Бросает: [AiQuotaExceeded], [AiAudioTooLargeError], [AiAudioNoSpeechError].
   Future<String> transcribeAudio(File audio, {String format = 'oggopus'}) async {
     final bytes = await audio.readAsBytes();
     try {
@@ -192,14 +193,47 @@ class AiClient {
         body:          bytes,
         queryParameters: <String, dynamic>{ 'format': format },
       );
-      final data = res.data;
-      if (data is Map<String, dynamic> && data['text'] is String) {
-        return (data['text'] as String).trim();
+      final status = res.status;
+      final data   = res.data;
+      final Map<String, dynamic> json = data is Map<String, dynamic>
+          ? data
+          : <String, dynamic>{};
+
+      if (status == 402) {
+        throw AiQuotaExceeded(json['message'] as String? ?? 'Лимит исчерпан');
+      }
+      if (status == 413 || json['error'] == 'audio_too_large') {
+        throw AiAudioTooLargeError();
+      }
+      if (status == 422) {
+        throw AiAudioNoSpeechError();
+      }
+      if (status >= 400) {
+        throw Exception('stt-yandex failed: status=$status, error=${json['error']}');
+      }
+      if (json['text'] is String) {
+        return (json['text'] as String).trim();
       }
       return '';
+    } on AiQuotaExceeded {
+      rethrow;
+    } on AiAudioTooLargeError {
+      rethrow;
+    } on AiAudioNoSpeechError {
+      rethrow;
     } catch (e) {
       if (kDebugMode) debugPrint('[ai-client] transcribe failed: $e');
       rethrow;
     }
   }
+}
+
+class AiAudioTooLargeError implements Exception {
+  @override
+  String toString() => 'AiAudioTooLargeError';
+}
+
+class AiAudioNoSpeechError implements Exception {
+  @override
+  String toString() => 'AiAudioNoSpeechError';
 }

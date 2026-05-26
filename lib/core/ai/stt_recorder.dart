@@ -2,8 +2,12 @@
 // stt_recorder.dart — обёртка над `record` для голосовых сообщений.
 //
 // Запись идёт в OGG/Opus 16 kHz mono — сжатый формат, который без
-// конвертации принимает Yandex SpeechKit STT v1 (sync). На 30 сек
+// конвертации принимает Yandex SpeechKit STT v1 (sync). На 28 сек
 // — примерно 30-60 КБ, влезает в лимит API 1 МБ с большим запасом.
+//
+// SpeechKit sync строго требует длительность <30 сек, иначе 400 Bad
+// Request — поэтому автоматически останавливаем запись на 28 сек и
+// дёргаем onAutoStop, чтобы клиент отправил то, что собрано.
 // =====================================================================
 
 import 'dart:async';
@@ -18,8 +22,16 @@ class SttRecorder {
   SttRecorder._();
   static final SttRecorder instance = SttRecorder._();
 
+  /// Жёсткий лимит SpeechKit sync API — 30 секунд. Берём 28 с запасом
+  /// на сетевую задержку и обработку.
+  static const Duration maxDuration = Duration(seconds: 28);
+
   final AudioRecorder _rec = AudioRecorder();
   String? _currentPath;
+  Timer? _maxDurationTimer;
+
+  /// Callback срабатывает, когда auto-stop по maxDuration сработал.
+  void Function()? onAutoStop;
 
   Future<bool> isRecording() => _rec.isRecording();
 
@@ -48,6 +60,10 @@ class SttRecorder {
         ),
         path: path,
       );
+      _maxDurationTimer?.cancel();
+      _maxDurationTimer = Timer(maxDuration, () {
+        try { onAutoStop?.call(); } catch (_) {}
+      });
       return true;
     } catch (e) {
       if (kDebugMode) debugPrint('[stt-recorder] start failed: $e');
@@ -57,6 +73,8 @@ class SttRecorder {
   }
 
   Future<File?> stop() async {
+    _maxDurationTimer?.cancel();
+    _maxDurationTimer = null;
     try {
       final path = await _rec.stop();
       _currentPath = null;
@@ -76,6 +94,8 @@ class SttRecorder {
   }
 
   Future<void> cancel() async {
+    _maxDurationTimer?.cancel();
+    _maxDurationTimer = null;
     try {
       await _rec.cancel();
     } catch (_) {}
