@@ -230,7 +230,11 @@ class _ExecutorCardsHandoff extends StatelessWidget {
               ),
               SizedBox(height: 12.h),
             ],
-            ...items.take(5).map((it) => _ExecutorTile(item: it)),
+            // Фильтруем карточки без id, иначе тап молча игнорируется.
+            ...items
+                .where((it) => (it['user_id'] as String? ?? '').isNotEmpty)
+                .take(5)
+                .map((it) => _ExecutorTile(item: it)),
             if (items.length > 5)
               Padding(
                 padding: EdgeInsets.only(top: 8.h),
@@ -378,6 +382,12 @@ class _DraftReadyHandoff extends StatelessWidget {
               width: double.infinity,
               child: ElevatedButton(
                 onPressed: () {
+                  if (draft.isEmpty) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Черновик пуст — расскажите подробнее ассистенту.')),
+                    );
+                    return;
+                  }
                   if (isOrder) {
                     Navigator.of(context).push(MaterialPageRoute<void>(
                       builder: (_) => CreateOrderScreen(aiDraft: draft),
