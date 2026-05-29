@@ -221,6 +221,10 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
     try {
       await for (final chunk in AiClient.instance.chatStream(text)) {
+        // Экран закрыли посреди генерации — прекращаем читать поток.
+        // Выход из await for отменяет подписку, и http-клиент закрывается
+        // в finally внутри chatStream (иначе сокет висел бы до конца ответа).
+        if (!mounted) return;
         final idx = _messages.indexWhere((m) => m.id == id);
         if (idx < 0) return;
         _messages[idx] = ChatMessage(
