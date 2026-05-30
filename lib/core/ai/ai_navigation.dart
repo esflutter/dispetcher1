@@ -13,6 +13,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:dispatcher_1/features/shell/main_shell.dart';
+
 const String _kAssistantChat = '/assistant/chat';
 
 /// Открыть чат с ассистентом без дубликатов.
@@ -28,4 +30,27 @@ Future<void> openAssistantChat(
     return;
   }
   await router.push(_kAssistantChat, extra: extra);
+}
+
+/// Перейти в раздел приложения по ключу действия от ассистента — это
+/// обработчик кнопки «Перейти» под ответом. Ключи приходят с сервера
+/// (см. _shared/navSuggest.ts). Корневые вкладки открываем переключением
+/// таба. Неизвестный ключ — ничего не делаем (молча, без краша).
+void navigateAssistantAction(BuildContext context, String action) {
+  switch (action) {
+    case 'open_create_order':
+      // Создание заказа живёт на вкладке «Мои заказы» (там же лимит/проверки).
+      MainShell.selectedTab.value = 1;
+      context.go('/shell');
+    case 'open_my_orders':
+      MainShell.selectedTab.value = 1;
+      context.go('/shell');
+    case 'open_catalog':
+      MainShell.selectedTab.value = 0;
+      context.go('/shell');
+    case 'open_reviews':
+      context.push('/profile/reviews');
+    default:
+      break;
+  }
 }

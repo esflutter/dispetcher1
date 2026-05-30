@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
+import 'package:dispatcher_1/core/ai/ai_navigation.dart';
 import 'package:dispatcher_1/core/utils/photo_source.dart';
 import 'package:dispatcher_1/features/catalog/executor_card_view_screen.dart';
 import 'package:dispatcher_1/features/orders/create_order_screen.dart';
@@ -20,6 +21,8 @@ class ChatMessage {
     this.type = ChatMessageType.text,
     this.imageAssets = const <String>[],
     this.data,
+    this.navAction,
+    this.navLabel,
   });
 
   final String id;
@@ -29,6 +32,9 @@ class ChatMessage {
   final List<String> imageAssets;
   /// Для handoff-сообщений (см. enum ChatMessageType).
   final Map<String, dynamic>? data;
+  /// Подсказка перехода в раздел (кнопка «Перейти» под ответом ассистента).
+  final String? navAction;
+  final String? navLabel;
 }
 
 /// Пузырь сообщения. Входящие — кремовый primaryTint слева,
@@ -119,13 +125,25 @@ class ChatBubble extends StatelessWidget {
           color: bg,
           borderRadius: BorderRadius.circular(12.r),
         ),
-        child: Text(
-          message.text,
-          style: AppTextStyles.body.copyWith(
-            color: fg,
-            fontSize: 16.sp,
-            height: 1.25,
-          ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              message.text,
+              style: AppTextStyles.body.copyWith(
+                color: fg,
+                fontSize: 16.sp,
+                height: 1.25,
+              ),
+            ),
+            // Кнопка «Перейти» под ответом ассистента (если сервер прислал
+            // подсказку раздела). На сообщениях пользователя её не бывает.
+            if (!isUser && message.navAction != null && message.navLabel != null) ...[
+              SizedBox(height: 10.h),
+              _NavButton(action: message.navAction!, label: message.navLabel!),
+            ],
+          ],
         ),
       ),
     );
@@ -163,6 +181,37 @@ class ChatBubble extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+/// Кнопка «Перейти» под ответом ассистента — ведёт в нужный раздел.
+class _NavButton extends StatelessWidget {
+  const _NavButton({required this.action, required this.label});
+  final String action;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      child: OutlinedButton(
+        onPressed: () => navigateAssistantAction(context, action),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: AppColors.primary,
+          side: const BorderSide(color: AppColors.primary, width: 1.5),
+          padding: EdgeInsets.symmetric(vertical: 10.h),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.r)),
+        ),
+        child: Text(
+          label,
+          style: AppTextStyles.body.copyWith(
+            color: AppColors.primary,
+            fontSize: 14.sp,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
     );
   }
 }
