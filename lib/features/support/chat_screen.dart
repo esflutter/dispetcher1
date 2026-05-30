@@ -87,12 +87,12 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
     if (initial == 'create_order' || initial == 'Разместить заказ') {
       _mode = AiChatKind.slotFillOrder;
-      _addBotMessage('Опишите заказ — текстом или голосом, я заполню всё за вас.');
+      _addBotMessage('Давайте оформлю заказ. Какая техника нужна и для каких работ? Можно ответить голосом.');
       return;
     }
     if (initial == 'find_executor' || initial == 'Найти исполнителя') {
       _mode = AiChatKind.search;
-      _addBotMessage('Опишите задачу и регион — найду подходящих исполнителей.');
+      _addBotMessage('Кого ищете? Назовите технику и город — например, «кран в Москве». Можно голосом.');
       return;
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -507,7 +507,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                       label: 'Разместить заказ',
                       onTap: () {
                         _mode = AiChatKind.slotFillOrder;
-                        _addBotMessage('Опишите заказ — текстом или голосом, я заполню всё за вас.');
+                        _addBotMessage('Давайте оформлю заказ. Какая техника нужна и для каких работ? Можно ответить голосом.');
                       },
                     ),
                     SizedBox(height: 8.h),
@@ -515,7 +515,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                       label: 'Найти исполнителя',
                       onTap: () {
                         _mode = AiChatKind.search;
-                        _addBotMessage('Опишите задачу и регион — найду подходящих исполнителей.');
+                        _addBotMessage('Кого ищете? Назовите технику и город — например, «кран в Москве». Можно голосом.');
                       },
                     ),
                   ],
