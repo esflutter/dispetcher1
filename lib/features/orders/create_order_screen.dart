@@ -444,6 +444,14 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
     } else if (city.isNotEmpty) {
       _address = city;
     }
+    // Координаты города от ассистента — иначе заказ без гео выпадет из
+    // поиска по радиусу. Точный адрес пользователь может уточнить сам.
+    final lat = draft['latitude'];
+    final lon = draft['longitude'];
+    if (lat is num && lon is num) {
+      _lat = lat.toDouble();
+      _lon = lon.toDouble();
+    }
   }
 
   Future<void> _loadDirectories() async {

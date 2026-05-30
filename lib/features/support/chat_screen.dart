@@ -307,6 +307,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
   Future<void> _toggleRecording() async {
     if (_voiceBusy) return;
+    // Пока ассистент отвечает — не начинаем новую запись (иначе два потока
+    // правят индикатор и список). Отмену уже идущей записи разрешаем.
+    if (_isProcessing && !_isRecording) return;
     _voiceBusy = true;
     try {
       if (_isRecording) {
@@ -521,6 +524,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
             ),
           ChatInputBar(
             controller: _inputController,
+            // У заказчика нет верификации и работы с фото — прикрепление
+            // ничего не делало (фото уходили в никуда). Прячем кнопку.
+            showAttach: false,
             isRecording: _isRecording,
             pendingImages: _pendingImages,
             onRemovePendingImage: _removePendingImage,
