@@ -72,6 +72,13 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   bool get _showQuickActions =>
       _messages.length == 1 && !_messages.first.fromUser && _pendingImages.isEmpty && !_isProcessing;
 
+  /// Отдельное облачко «печатает» показываем только пока ждём ПЕРВОЙ реакции
+  /// (последнее сообщение — от пользователя). Когда появляется плейсхолдер
+  /// ответа ассистента (стрим), точки рисуются уже внутри него — второе
+  /// облачко не нужно.
+  bool get _showStandaloneTyping =>
+      _isProcessing && (_messages.isEmpty || _messages.last.fromUser);
+
   @override
   void initState() {
     super.initState();
@@ -165,7 +172,17 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       }
     });
     _scrollToBottom();
-    if (text.isEmpty) return;
+    if (text.isEmpty) {
+      // Картинка без текста: распознавать изображения ассистент не умеет —
+      // не молчим, а подсказываем, что делать.
+      if (hasImages) {
+        _addBotMessage(
+          'Картинку получил, но читать изображения я пока не умею. '
+          'Опишите, что нужно, текстом или голосом — и я помогу.',
+        );
+      }
+      return;
+    }
     await _sendToAssistant(text);
   }
 
@@ -484,7 +501,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
             child: ListView.separated(
               controller: _scrollController,
               padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 16.h),
-              itemCount: _messages.length + (_isProcessing ? 1 : 0),
+              itemCount: _messages.length + (_showStandaloneTyping ? 1 : 0),
               separatorBuilder: (_, _) => const SizedBox.shrink(),
               itemBuilder: (context, index) {
                 if (index < _messages.length) {
