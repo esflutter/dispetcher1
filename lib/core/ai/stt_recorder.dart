@@ -30,6 +30,11 @@ class SttRecorder {
   String? _currentPath;
   Timer? _maxDurationTimer;
 
+  /// Формат последней записи для параметра `?format=` в stt-yandex:
+  /// 'oggopus' (по умолчанию) либо 'lpcm' (фолбэк на устройствах без Opus).
+  String _lastFormat = 'oggopus';
+  String get lastFormat => _lastFormat;
+
   /// Callback срабатывает, когда auto-stop по maxDuration сработал.
   void Function()? onAutoStop;
 
@@ -49,19 +54,26 @@ class SttRecorder {
     final granted = await ensurePermission();
     if (!granted) return false;
     try {
-      // Проверка поддержки Opus — на части устройств без энкодера
-      // SpeechKit отвергнет файл с непонятной ошибкой формата.
-      final opusOk = await _rec.isEncoderSupported(AudioEncoder.opus);
-      if (!opusOk) {
-        if (kDebugMode) debugPrint('[stt-recorder] device does not support Opus');
+      // Выбираем кодек под устройство. Предпочитаем Opus (компактный). Если
+      // нативного Opus-энкодера нет (часть Xiaomi/Huawei/MediaTek), раньше тут
+      // был ЖЁСТКИЙ отказ — и голос на таких телефонах не работал. Теперь
+      // фолбэк на сырой PCM (lpcm): он есть везде и его принимает SpeechKit.
+      final AudioEncoder encoder;
+      final String ext;
+      if (await _rec.isEncoderSupported(AudioEncoder.opus)) {
+        encoder = AudioEncoder.opus;       ext = 'ogg'; _lastFormat = 'oggopus';
+      } else if (await _rec.isEncoderSupported(AudioEncoder.pcm16bits)) {
+        encoder = AudioEncoder.pcm16bits;  ext = 'pcm'; _lastFormat = 'lpcm';
+      } else {
+        if (kDebugMode) debugPrint('[stt-recorder] no supported encoder (opus/pcm16)');
         return false;
       }
       final dir = await getTemporaryDirectory();
-      final path = '${dir.path}/voice_${DateTime.now().microsecondsSinceEpoch}.ogg';
+      final path = '${dir.path}/voice_${DateTime.now().microsecondsSinceEpoch}.$ext';
       _currentPath = path;
       await _rec.start(
-        const RecordConfig(
-          encoder:     AudioEncoder.opus,
+        RecordConfig(
+          encoder:     encoder,
           sampleRate:  16000,
           numChannels: 1,
         ),

@@ -61,6 +61,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
   final List<String> _pendingImages = <String>[];
   final ScrollController _scrollController = ScrollController();
+  // Контроллер поля ввода держим в экране, чтобы класть в поле распознанный
+  // голос — пользователь видит текст и отправляет/правит сам.
+  final TextEditingController _inputController = TextEditingController();
   bool _isRecording = false;
   bool _isProcessing = false;
   /// Защёлка от двойного тапа по микрофону.
@@ -375,7 +378,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     String? errorMsg;
     String? recognized;
     try {
-      recognized = await AiClient.instance.transcribeAudio(audio);
+      recognized = await AiClient.instance
+          .transcribeAudio(audio, format: SttRecorder.instance.lastFormat);
     } on AiQuotaExceeded catch (e) {
       errorMsg = e.message;
     } on AiAudioTooLargeError {
@@ -397,12 +401,16 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       setState(() => _isProcessing = false);
       return;
     }
-    setState(() {
-      _messages.add(ChatMessage(id: _nextId(), text: recognized!, fromUser: true));
-    });
-    _scrollToBottom();
-    final String capped = recognized.length > 1000 ? recognized.substring(0, 1000) : recognized;
-    await _sendToAssistant(capped);
+    // Распознанное кладём в ПОЛЕ ВВОДА — пользователь видит, что услышал
+    // ассистент, и отправляет сам (или правит). Раньше текст уходил вслепую:
+    // при неточном распознавании уходил мусор без шанса исправить, а на
+    // пустом результате не показывалось ничего. Длину режем под лимит поля.
+    final String capped =
+        recognized.length > 1000 ? recognized.substring(0, 1000) : recognized;
+    setState(() => _isProcessing = false);
+    _inputController.text = capped;
+    _inputController.selection =
+        TextSelection.collapsed(offset: _inputController.text.length);
   }
 
   @override
@@ -421,6 +429,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     }
     SttRecorder.instance.onAutoStop = null;
     _scrollController.dispose();
+    _inputController.dispose();
     super.dispose();
   }
 
@@ -511,6 +520,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
               ),
             ),
           ChatInputBar(
+            controller: _inputController,
             isRecording: _isRecording,
             pendingImages: _pendingImages,
             onRemovePendingImage: _removePendingImage,
