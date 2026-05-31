@@ -143,13 +143,27 @@ class _SelectOrderForExecutorScreenState
 
   Future<void> _onRespond() async {
     if (_busy) return;
-    final OrderMock? selected = _selectedId == null
-        ? null
-        : _items.firstWhere(
-            (OrderMock o) => o.id == _selectedId,
-            orElse: () => _items.first,
-          );
-    if (selected == null) return;
+    // Ищем именно ВЫБРАННЫЙ заказ. Если его уже нет в списке (пока выбирали,
+    // статус заказа изменился в фоне — например, исполнитель сам откликнулся, и
+    // realtime убрал заказ из offerable) — НЕ подставляем первый попавшийся, а
+    // честно говорим, что заказ недоступен. Иначе исполнителю ушёл бы не тот.
+    OrderMock? selected;
+    if (_selectedId != null) {
+      final Iterable<OrderMock> hit =
+          _items.where((OrderMock o) => o.id == _selectedId);
+      if (hit.isNotEmpty) selected = hit.first;
+    }
+    if (selected == null) {
+      if (_selectedId != null && mounted) {
+        setState(() => _selectedId = null);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Этот заказ больше недоступен — выберите другой.'),
+          ),
+        );
+      }
+      return;
+    }
     setState(() => _busy = true);
 
     final ({String matchId, String serviceId}) result;

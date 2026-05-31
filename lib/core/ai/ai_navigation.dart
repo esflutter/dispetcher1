@@ -50,6 +50,11 @@ void navigateAssistantAction(BuildContext context, String action) {
       context.go('/shell');
     case 'open_reviews':
       context.push('/profile/reviews');
+    case 'contact_support':
+      // Живой человек — ведём на вкладку «Профиль», там внизу блок
+      // «Возникли вопросы? Напишите нам» с иконкой мессенджера.
+      MainShell.selectedTab.value = 2;
+      context.go('/shell');
     default:
       break;
   }

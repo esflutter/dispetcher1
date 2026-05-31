@@ -315,7 +315,13 @@ class CatalogService {
     double? originLng,
     int? radiusKm,
     String? addressContains,
-    int limit = 200,
+    // Цена и сортировка по цене считаются на клиенте ПОСЛЕ выборки (у карточек
+    // нет колонки цены — она в услугах). Чтобы лимит не отрезал самых дешёвых
+    // ещё до фильтра/сортировки, держим большой запас. Опубликованных
+    // карточек естественно немного (по одной на проверенного исполнителя).
+    // На большом масштабе это место заменит серверный RPC с сортировкой по
+    // агрегату цены — пока запас 500 покрывает обозримый рост.
+    int limit = 500,
   }) async {
     await _primeDirectories();
 
@@ -571,6 +577,21 @@ class CatalogService {
         }
       }
 
+      // Цена карточки: при активном фильтре по технике считаем минимум по
+      // услугам ИМЕННО под выбранную технику (matching), а не по всем услугам
+      // исполнителя. Иначе карточка под фильтром «экскаватор» показывала бы
+      // дешёвую цену, например, от крана, и сортировка/фильтр по цене врали бы.
+      double? cardMinHour = agg.minPriceHour;
+      double? cardMinDay = agg.minPriceDay;
+      if (machineryIds.isNotEmpty) {
+        cardMinHour = null;
+        cardMinDay = null;
+        for (final MatchingService m in matching) {
+          cardMinHour = _min(cardMinHour, m.pricePerHour);
+          cardMinDay = _min(cardMinDay, m.pricePerDay);
+        }
+      }
+
       final double? cardLat = (c['location_lat'] as num?)?.toDouble();
       final double? cardLng = (c['location_lng'] as num?)?.toDouble();
 
@@ -608,8 +629,8 @@ class CatalogService {
             .map((int id) => _categoryIdToTitle[id] ?? '')
             .where((String t) => t.isNotEmpty)
             .toList(),
-        minPricePerHour: agg.minPriceHour,
-        minPricePerDay: agg.minPriceDay,
+        minPricePerHour: cardMinHour,
+        minPricePerDay: cardMinDay,
         matchingServices: matching,
       ));
     }
@@ -856,10 +877,41 @@ class CatalogService {
     return double.tryParse(v.toString());
   }
 
-  double? _min(double? a, double? b) {
+  static double? _min(double? a, double? b) {
     if (a == null) return b;
     if (b == null) return a;
     return a < b ? a : b;
+  }
+
+  /// Локальный фильтр по максимальной цене + сортировка по возрастанию
+  /// минимальной цены за час. Общий для ленты исполнителей и для поиска на
+  /// экране категорий, чтобы фильтр цены вёл себя одинаково везде (раньше
+  /// поиск по категориям цену вообще игнорировал). Чистая функция — покрыта
+  /// юнит-тестами.
+  static List<ExecutorCardListItem> applyPriceFilterAndSort(
+    List<ExecutorCardListItem> input, {
+    int? maxPricePerHour,
+    int? maxPricePerDay,
+    bool sortByPriceAsc = false,
+  }) {
+    Iterable<ExecutorCardListItem> res = input;
+    if (maxPricePerHour != null) {
+      res = res.where((ExecutorCardListItem e) =>
+          e.minPricePerHour != null && e.minPricePerHour! <= maxPricePerHour);
+    }
+    if (maxPricePerDay != null) {
+      res = res.where((ExecutorCardListItem e) =>
+          e.minPricePerDay != null && e.minPricePerDay! <= maxPricePerDay);
+    }
+    final List<ExecutorCardListItem> out = res.toList();
+    if (sortByPriceAsc) {
+      out.sort((ExecutorCardListItem a, ExecutorCardListItem b) {
+        final double av = a.minPricePerHour ?? double.infinity;
+        final double bv = b.minPricePerHour ?? double.infinity;
+        return av.compareTo(bv);
+      });
+    }
+    return out;
   }
 
   // ---------------------------------------------------------------

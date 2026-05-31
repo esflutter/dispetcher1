@@ -348,6 +348,11 @@ class _ExecutorCardsHandoff extends StatelessWidget {
     final items = (data['items'] is List ? data['items'] as List : const [])
         .whereType<Map<String, dynamic>>()
         .toList();
+    // Карточки без user_id не кликабельны — фильтруем заранее, чтобы и срез
+    // до 5, и счётчик «И ещё N» считались по реально показываемым.
+    final visibleExec = items
+        .where((it) => (it['user_id'] as String? ?? '').isNotEmpty)
+        .toList();
 
     return Align(
       alignment: Alignment.centerLeft,
@@ -371,16 +376,15 @@ class _ExecutorCardsHandoff extends StatelessWidget {
               ),
               SizedBox(height: 12.h),
             ],
-            // Фильтруем карточки без id, иначе тап молча игнорируется.
-            ...items
-                .where((it) => (it['user_id'] as String? ?? '').isNotEmpty)
+            // Карточки без user_id не кликабельны — считаем по отфильтрованным.
+            ...visibleExec
                 .take(5)
                 .map((it) => _ExecutorTile(item: it)),
-            if (items.length > 5)
+            if (visibleExec.length > 5)
               Padding(
                 padding: EdgeInsets.only(top: 8.h),
                 child: Text(
-                  'И ещё ${items.length - 5} — уточните запрос, чтобы их сузить.',
+                  'И ещё ${visibleExec.length - 5} — уточните запрос, чтобы их сузить.',
                   style: AppTextStyles.body.copyWith(
                     color: AppColors.textTertiary, fontSize: 13.sp,
                   ),

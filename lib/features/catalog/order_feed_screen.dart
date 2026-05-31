@@ -118,31 +118,16 @@ class _OrderFeedScreenState extends State<OrderFeedScreen> {
     });
   }
 
-  /// Локальные фильтры по цене (в сервисе их нет) + сортировка.
+  /// Локальные фильтры по цене (в сервисе их нет) + сортировка. Логика общая
+  /// с поиском на экране категорий — см. CatalogService.applyPriceFilterAndSort.
   List<ExecutorCardListItem> _applyLocalFilters(
       List<ExecutorCardListItem> input) {
-    Iterable<ExecutorCardListItem> res = input;
-
-    final int? maxHour = _parseIntOrNull(AppliedFilter.priceHour);
-    if (maxHour != null) {
-      res = res.where((ExecutorCardListItem e) =>
-          e.minPricePerHour != null && e.minPricePerHour! <= maxHour);
-    }
-    final int? maxDay = _parseIntOrNull(AppliedFilter.priceDay);
-    if (maxDay != null) {
-      res = res.where((ExecutorCardListItem e) =>
-          e.minPricePerDay != null && e.minPricePerDay! <= maxDay);
-    }
-
-    final List<ExecutorCardListItem> out = res.toList();
-    if (AppliedFilter.sortByPriceAsc) {
-      out.sort((ExecutorCardListItem a, ExecutorCardListItem b) {
-        final double av = a.minPricePerHour ?? double.infinity;
-        final double bv = b.minPricePerHour ?? double.infinity;
-        return av.compareTo(bv);
-      });
-    }
-    return out;
+    return CatalogService.applyPriceFilterAndSort(
+      input,
+      maxPricePerHour: _parseIntOrNull(AppliedFilter.priceHour),
+      maxPricePerDay: _parseIntOrNull(AppliedFilter.priceDay),
+      sortByPriceAsc: AppliedFilter.sortByPriceAsc,
+    );
   }
 
   /// True только если реально отрисуется хотя бы один chip. Значения,

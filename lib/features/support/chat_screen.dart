@@ -6,6 +6,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:dispatcher_1/core/ai/ai_client.dart';
+import 'package:dispatcher_1/core/ai/chat_intent.dart';
 import 'package:dispatcher_1/core/ai/stt_recorder.dart';
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
@@ -83,6 +84,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _salvageOrphanPlaceholders();
     final initial = widget.initialMessage?.trim();
     if (initial == null || initial.isEmpty) {
       // Открытие чата без intent — это «обычный разговор». Сбрасываем
@@ -108,7 +110,31 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     });
   }
 
+  /// Подчистка при открытии экрана: список сообщений статический и переживает
+  /// уход/возврат и ремаунт (поворот экрана). Прерванный стрим мог оставить в
+  /// нём пустой пузырь ассистента, который рисуется как вечные «печатает…».
+  void _salvageOrphanPlaceholders() {
+    for (var i = 0; i < _messages.length; i++) {
+      final m = _messages[i];
+      if (!m.fromUser &&
+          m.type == ChatMessageType.text &&
+          m.text.trim().isEmpty) {
+        _messages[i] = ChatMessage(
+          id: m.id,
+          text: 'Ответ прервался — спросите, пожалуйста, ещё раз.',
+          fromUser: false,
+        );
+      }
+    }
+  }
+
   void _addBotMessage(String text, {Map<String, dynamic>? data, ChatMessageType type = ChatMessageType.text}) {
+    // Защита от вечных точек: пустой текст ассистента пузырь рисует как
+    // индикатор «печатает». На неstreaming-пути (поиск/slot-fill) заменить
+    // его нечем, поэтому пустой текстовый ответ подменяем понятным фолбэком.
+    if (type == ChatMessageType.text && text.trim().isEmpty) {
+      text = 'Не получилось сформировать ответ. Попробуйте переформулировать.';
+    }
     // Если экран не активен — сохраняем сообщение в статичный список,
     // чтобы при возврате юзер его увидел. setState — только если mounted.
     final msg = ChatMessage(
@@ -155,6 +181,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     final hasImages = _pendingImages.isNotEmpty;
     if (text.isEmpty && !hasImages) return;
     if (_isProcessing) return;
+    // Идёт запись голоса — не отправляем текст параллельно (иначе два потока
+    // правят список сообщений и _isProcessing). Голос завершит сам себя.
+    if (_isRecording) return;
 
     setState(() {
       if (hasImages) {
@@ -189,6 +218,17 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   Future<void> _sendToAssistant(String text) async {
     setState(() => _isProcessing = true);
     _scrollToBottom();
+
+    // Поиск прямо из обычного чата: если пользователь в режиме болтовни явно
+    // просит найти исполнителя/технику — уводим в поиск (карточки), а не в
+    // FAQ-ответ. И наоборот: вопрос-FAQ в режиме поиска возвращает в чат.
+    // Slot-fill (пошаговый сбор) не трогаем.
+    if (_mode == AiChatKind.chat && looksLikeCatalogSearch(text, isCustomer: true)) {
+      _mode = AiChatKind.search;
+    } else if (_mode == AiChatKind.search && looksLikeFaqQuestion(text)) {
+      _mode = AiChatKind.chat;
+    }
+
     const Duration timeout = Duration(seconds: 30);
     try {
       // Для обычного chat-режима используем стрим. _streamChatReply сам
@@ -306,6 +346,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     }
     if ((kind == 'order_draft' || kind == 'service_draft') && reply.isDraftReady) {
       _addBotMessage(reply.text, type: ChatMessageType.draftReady, data: reply.data);
+      // Slot-fill завершён черновиком. Возвращаем режим в обычный чат, иначе
+      // следующий свободный вопрос ушёл бы снова в пошаговый сбор, а не в FAQ.
+      _mode = AiChatKind.chat;
       return;
     }
     _addBotMessage(reply.text);

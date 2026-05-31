@@ -58,10 +58,46 @@ class _CatalogCategoriesScreenState extends State<CatalogCategoriesScreen> {
     _debounce = Timer(const Duration(milliseconds: 300), () {
       if (!mounted) return;
       setState(() {
-        _searchFuture =
-            CatalogService.instance.listPublishedExecutors(search: q);
+        _searchFuture = _searchExecutors(q);
       });
     });
+  }
+
+  /// Поиск исполнителей по тексту С УЧЁТОМ активных фильтров (техника,
+  /// категории, дата/время, адрес/радиус) и локального фильтра/сортировки по
+  /// цене — чтобы поиск на этом экране вёл себя так же, как лента с фильтром, а
+  /// не игнорировал заданные пользователем фильтры.
+  Future<List<ExecutorCardListItem>> _searchExecutors(String q) async {
+    String? hm(TimeOfDay? t) => t == null
+        ? null
+        : '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+    int? pint(String? s) =>
+        s == null ? null : int.tryParse(s.replaceAll(' ', ''));
+
+    final bool radiusActive = AppliedFilter.radiusKm != null &&
+        AppliedFilter.addressLat != null &&
+        AppliedFilter.addressLng != null;
+    final List<ExecutorCardListItem> raw =
+        await CatalogService.instance.listPublishedExecutors(
+      search: q,
+      machineryTitles: AppliedFilter.equipment,
+      categoryTitles: AppliedFilter.categories,
+      dateFrom: AppliedFilter.dateFrom,
+      dateTo: AppliedFilter.dateTo,
+      timeFrom: hm(AppliedFilter.timeFrom),
+      timeTo: hm(AppliedFilter.timeTo),
+      wholeDay: AppliedFilter.wholeDay,
+      originLat: radiusActive ? AppliedFilter.addressLat : null,
+      originLng: radiusActive ? AppliedFilter.addressLng : null,
+      radiusKm: radiusActive ? AppliedFilter.radiusKm : null,
+      addressContains: radiusActive ? null : AppliedFilter.address,
+    );
+    return CatalogService.applyPriceFilterAndSort(
+      raw,
+      maxPricePerHour: pint(AppliedFilter.priceHour),
+      maxPricePerDay: pint(AppliedFilter.priceDay),
+      sortByPriceAsc: AppliedFilter.sortByPriceAsc,
+    );
   }
 
   @override
