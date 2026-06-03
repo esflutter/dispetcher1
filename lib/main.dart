@@ -10,7 +10,6 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'app.dart';
 import 'core/catalog/catalog_service.dart';
 import 'core/config/env.dart';
-import 'core/notifications/notifications_service.dart';
 import 'core/push/push_handler.dart';
 import 'core/push/push_service.dart';
 import 'core/realtime/realtime_service.dart';
@@ -92,7 +91,6 @@ Future<void> main() async {
     // либо здесь (с уже валидным JWT), либо в auth_service.verify().
     if (Supabase.instance.client.auth.currentSession != null) {
       RealtimeService.instance.start();
-      NotificationsService.instance.start();
     }
     // Глобальный listener событий авторизации. Без него истёкший /
     // отозванный токен снаружи (например, удалённый аккаунт из админки)
@@ -101,7 +99,6 @@ Future<void> main() async {
         .listen((AuthState event) async {
       if (event.event == AuthChangeEvent.signedOut) {
         await RealtimeService.instance.stop();
-        await NotificationsService.instance.stop();
         // Чистим переписку ассистента — иначе следующий юзер увидит чужие сообщения.
         ChatScreen.resetHistory();
         if (firebaseReady) {

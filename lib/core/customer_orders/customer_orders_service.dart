@@ -340,7 +340,8 @@ class CustomerOrdersService {
     }
 
     return rows.map((Map<String, dynamic> r) {
-      final List<int> mIds = List<int>.from(r['machinery_ids'] as List);
+      final List<int> mIds =
+          List<int>.from((r['machinery_ids'] as List?) ?? const <dynamic>[]);
       final List<int> cIds =
           List<int>.from((r['category_ids'] as List?) ?? const <dynamic>[]);
       final DateTime published = r['published_at'] == null

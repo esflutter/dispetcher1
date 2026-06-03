@@ -11,7 +11,6 @@ import '../features/catalog/no_internet_screen.dart';
 import '../features/catalog/order_feed_screen.dart';
 import '../features/executor_card/edit_executor_card_screen.dart';
 import '../features/executor_card/executor_card_screen.dart';
-import '../features/notifications/notifications_inbox_screen.dart';
 import '../features/profile/notifications_settings_screen.dart';
 import '../features/onboarding/onboarding_screen.dart';
 import '../features/onboarding/splash_screen.dart';
@@ -83,12 +82,6 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: '/profile/notifications-settings',
       builder: (_, _) => const NotificationsSettingsScreen(),
-    ),
-
-    // Inbox уведомлений
-    GoRoute(
-      path: '/notifications',
-      builder: (_, _) => const NotificationsInboxScreen(),
     ),
 
     // Карточка заказчика

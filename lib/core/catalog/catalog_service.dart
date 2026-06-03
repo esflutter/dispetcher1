@@ -345,84 +345,20 @@ class CatalogService {
     Set<String>? searchUserIds;
     final String? s = search?.trim();
     if (s != null && s.isNotEmpty) {
-      final String esc = _escapeLike(s).replaceAll(',', ' ');
-      final String pattern = '%$esc%';
-      final int hardLimit = limit * 4;
-      final Set<String> userIds = <String>{};
-
-      // (1) profiles.name — имя/фамилия
-      final List<Map<String, dynamic>> nameRows = await _client
-          .from('profiles')
-          .select('id')
-          .ilike('name', pattern)
-          .limit(hardLimit);
-      for (final Map<String, dynamic> r in nameRows) {
-        userIds.add(r['id'] as String);
-      }
-
-      // (2) profiles.about — раздел «О себе» в карточке исполнителя
-      final List<Map<String, dynamic>> aboutRows = await _client
-          .from('profiles')
-          .select('id')
-          .ilike('about', pattern)
-          .limit(hardLimit);
-      for (final Map<String, dynamic> r in aboutRows) {
-        userIds.add(r['id'] as String);
-      }
-
-      // (3) executor_cards.location_address — адрес карточки
-      final List<Map<String, dynamic>> locRows = await _client
-          .from('executor_cards')
-          .select('user_id')
-          .ilike('location_address', pattern)
-          .limit(hardLimit);
-      for (final Map<String, dynamic> r in locRows) {
-        userIds.add(r['user_id'] as String);
-      }
-
-      // (4) services.title / services.description — содержимое услуги
-      final List<Map<String, dynamic>> svcRows = await _client
-          .from('services')
-          .select('executor_id')
-          .or('title.ilike.$pattern,description.ilike.$pattern')
-          .limit(hardLimit);
-      for (final Map<String, dynamic> r in svcRows) {
-        userIds.add(r['executor_id'] as String);
-      }
-
-      // (5) Названия техники / категорий из локальных справочников.
-      // Если запрос совпадает с названием — подмешиваем всех
-      // исполнителей, у кого есть услуги с этой техникой / категорией.
-      final String sLower = s.toLowerCase();
-      final List<int> matchedMachIds = <int>[
-        for (final MapEntry<String, int> e in _machineryTitleToId.entries)
-          if (e.key.toLowerCase().contains(sLower)) e.value,
-      ];
-      final List<int> matchedCatIds = <int>[
-        for (final MapEntry<String, int> e in _categoryTitleToId.entries)
-          if (e.key.toLowerCase().contains(sLower)) e.value,
-      ];
-      if (matchedMachIds.isNotEmpty) {
-        final List<Map<String, dynamic>> r = await _client
-            .from('services')
-            .select('executor_id')
-            .overlaps('machinery_ids', matchedMachIds)
-            .limit(hardLimit);
-        for (final Map<String, dynamic> x in r) {
-          userIds.add(x['executor_id'] as String);
-        }
-      }
-      if (matchedCatIds.isNotEmpty) {
-        final List<Map<String, dynamic>> r = await _client
-            .from('services')
-            .select('executor_id')
-            .overlaps('category_ids', matchedCatIds)
-            .limit(hardLimit);
-        for (final Map<String, dynamic> x in r) {
-          userIds.add(x['executor_id'] as String);
-        }
-      }
-
+      // Один серверный RPC вместо 5-7 последовательных запросов: объединяет
+      // поиск по профилю (имя / о себе), адресу карточки и услугам
+      // (название / описание / техника / категория) — см. миграцию
+      // 041_search_rpc. Экранирование ILIKE — внутри функции.
+      final dynamic resp = await _client.rpc(
+        'search_executor_ids',
+        params: <String, dynamic>{'q': s},
+      );
+      final List<dynamic> found =
+          (resp as List<dynamic>?) ?? const <dynamic>[];
+      final Set<String> userIds = <String>{
+        for (final dynamic r in found)
+          if (r is Map && r['user_id'] != null) r['user_id'].toString(),
+      };
       if (userIds.isEmpty) {
         return <ExecutorCardListItem>[];
       }
@@ -575,6 +511,14 @@ class CatalogService {
             ));
           }
         }
+        // Дешёвые услуги — выше: верхняя строка карточки совпадает с ценой,
+        // по которой карточка стоит в отсортированном по цене списке. Ключ
+        // строки — видимая цена (часовая, иначе дневная), как в _ServiceLine.
+        matching.sort((MatchingService a, MatchingService b) {
+          final double pa = a.pricePerHour ?? a.pricePerDay ?? double.infinity;
+          final double pb = b.pricePerHour ?? b.pricePerDay ?? double.infinity;
+          return pa.compareTo(pb);
+        });
       }
 
       // Цена карточки: при активном фильтре по технике считаем минимум по
@@ -905,13 +849,46 @@ class CatalogService {
     }
     final List<ExecutorCardListItem> out = res.toList();
     if (sortByPriceAsc) {
-      out.sort((ExecutorCardListItem a, ExecutorCardListItem b) {
-        final double av = a.minPricePerHour ?? double.infinity;
-        final double bv = b.minPricePerHour ?? double.infinity;
-        return av.compareTo(bv);
-      });
+      out.sort(_comparePriceAsc);
     }
     return out;
+  }
+
+  /// Компаратор «по возрастанию цены» — устойчивый и согласованный с тем,
+  /// что видно на карточке.
+  ///
+  ///   1. Группа по доступной ставке: сперва те, у кого есть ПОЧАСОВАЯ цена,
+  ///      затем те, у кого ТОЛЬКО ПОСУТОЧНАЯ, затем «цена по запросу».
+  ///      Часовую и дневную ставку нельзя сравнивать напрямую (разные
+  ///      единицы), поэтому не мешаем их в один ряд, а разводим по группам —
+  ///      иначе «5000 ₽/час» и «8000 ₽/день» встали бы в произвольном порядке.
+  ///   2. Внутри группы — по самой цене, по возрастанию.
+  ///   3. При равной цене — детерминированный тай-брейк: выше рейтинг, затем
+  ///      имя по алфавиту, затем id. Без него порядок одинаково-ценовых
+  ///      карточек «прыгал» бы между перерисовками (List.sort нестабилен).
+  static int _comparePriceAsc(ExecutorCardListItem a, ExecutorCardListItem b) {
+    final int ga = _priceGroup(a);
+    final int gb = _priceGroup(b);
+    if (ga != gb) return ga.compareTo(gb);
+    if (ga == 0) {
+      final int c = a.minPricePerHour!.compareTo(b.minPricePerHour!);
+      if (c != 0) return c;
+    } else if (ga == 1) {
+      final int c = a.minPricePerDay!.compareTo(b.minPricePerDay!);
+      if (c != 0) return c;
+    }
+    final int r = b.ratingAsExecutor.compareTo(a.ratingAsExecutor);
+    if (r != 0) return r;
+    final int n = a.name.toLowerCase().compareTo(b.name.toLowerCase());
+    if (n != 0) return n;
+    return a.userId.compareTo(b.userId);
+  }
+
+  /// 0 — есть почасовая ставка, 1 — только посуточная, 2 — цены нет вовсе.
+  static int _priceGroup(ExecutorCardListItem e) {
+    if (e.minPricePerHour != null && e.minPricePerHour! > 0) return 0;
+    if (e.minPricePerDay != null && e.minPricePerDay! > 0) return 1;
+    return 2;
   }
 
   // ---------------------------------------------------------------

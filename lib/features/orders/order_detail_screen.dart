@@ -769,6 +769,7 @@ class _PhotosGrid extends StatelessWidget {
                   width: 72.r,
                   height: 72.r,
                   fit: BoxFit.cover,
+                  cacheWidth: 300,
                 ),
               ))
           .toList(),

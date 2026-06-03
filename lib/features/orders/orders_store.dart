@@ -394,7 +394,17 @@ class MyOrdersStore {
   /// Теперь всё, что присутствует в ответе БД, переписывается заново;
   /// заказы, которых в БД нет (например, только что созданный через
   /// `addCreated` и ещё не дошедший до неё), сохраняются как есть.
+  static bool _loadingFromDb = false;
+  static bool _reloadQueued = false;
   static Future<void> loadFromDb() async {
+    // Защита от наложения вызовов: при всплеске realtime-событий несколько
+    // полных загрузок шли внахлёст (по 3-4 запроса). Если загрузка уже идёт —
+    // помечаем, что нужен повтор, и выходим; повтор запустится один раз.
+    if (_loadingFromDb) {
+      _reloadQueued = true;
+      return;
+    }
+    _loadingFromDb = true;
     try {
       final List<CustomerOrderListItem> rows =
           await CustomerOrdersService.instance.listMine();
@@ -476,6 +486,12 @@ class MyOrdersStore {
       _bump();
     } catch (_) {
       // БД упала — оставляем то, что есть в памяти.
+    } finally {
+      _loadingFromDb = false;
+      if (_reloadQueued) {
+        _reloadQueued = false;
+        unawaited(loadFromDb());
+      }
     }
   }
 

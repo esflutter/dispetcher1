@@ -182,10 +182,11 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
   /// действием пользователя.
   void _onStoreChanged() {
     if (!mounted) return;
+    // Только перерисовка по уже обновлённому стору. Перезагрузку из БД
+    // инициирует RealtimeService напрямую (loadFromDb), а не этот listener,
+    // иначе loadFromDb → _bump(revision) → этот listener → loadFromDb → …
+    // крутили бесконечную перезагрузку, пока экран открыт.
     setState(() {});
-    // Не блокируем UI: список перерисуется по revision, а свежие
-    // данные подтянутся следующим бампом revision из loadFromDb.
-    unawaited(MyOrdersStore.loadFromDb());
   }
 
   void _onBlockChanged() {

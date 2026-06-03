@@ -124,14 +124,21 @@ class DailyOrderLimit {
 
   /// Если лимит исчерпан — показать диалог и вернуть false.
   /// Иначе — открыть [CreateOrderScreen] и вернуть true.
+  static bool _opening = false;
   static Future<bool> openCreateOrAlert(BuildContext context) async {
+    if (_opening) return false; // защита от двойного тапа — два экрана стопкой
     if (!canCreate) {
       await showLimitDialog(context);
       return false;
     }
-    await Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(builder: (_) => const CreateOrderScreen()),
-    );
+    _opening = true;
+    try {
+      await Navigator.of(context).push<void>(
+        MaterialPageRoute<void>(builder: (_) => const CreateOrderScreen()),
+      );
+    } finally {
+      _opening = false;
+    }
     return true;
   }
 }
@@ -282,16 +289,20 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
   /// - back-навигацию (`PopScope.canPop=false`), чтобы пользователь не
   ///   ушёл с экрана с заказом, висящим в `draft` без фото.
   bool _creating = false;
+  // Защита от двойного тапа «Создать»: ставится синхронно ДО открытия
+  // предпросмотра. Без неё два быстрых тапа открывали два экрана
+  // предпросмотра, и публикация обоих создавала два заказа (у каждого свой
+  // client_uid — серверная идемпотентность тут не помогает).
+  bool _opening = false;
 
   @override
   void initState() {
     super.initState();
     // Поля _titleCtrl/_descCtrl отдельный listener не получают — кнопка
     // «Создать» подписана на них через ListenableBuilder; остальная
-    // форма от их ввода не зависит.
-    for (final _WorkItem w in _works) {
-      _attachWorkListeners(w);
-    }
+    // форма от их ввода не зависит. Поля работ тоже без глобального
+    // listener: кнопка «Добавить» слушает их точечно через ListenableBuilder
+    // (раньше каждая буква перестраивала всю форму ~1600 строк).
     final List<cat.MachineryRef>? mc =
         CatalogService.instance.cachedMachinery;
     final List<cat.CategoryRef>? cc =
@@ -426,12 +437,10 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
         item.volumeCtrl.text = w['volume']?.toString().trim() ?? '';
         final unit = (w['unit'] as String? ?? '').trim();
         if (_workUnits.contains(unit)) item.unit = unit;
-        _attachWorkListeners(item);
         _works.add(item);
       }
       if (_works.isEmpty) {
         final empty = _WorkItem();
-        _attachWorkListeners(empty);
         _works.add(empty);
       }
     }
@@ -488,11 +497,6 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
     }
   }
 
-  void _attachWorkListeners(_WorkItem w) {
-    w.nameCtrl.addListener(_onFieldChanged);
-    w.volumeCtrl.addListener(_onFieldChanged);
-  }
-
   bool _isWorkFilled(_WorkItem w) =>
       w.nameCtrl.text.trim().isNotEmpty &&
       w.unit != null &&
@@ -511,9 +515,7 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
   void _addWork() {
     if (_works.length >= _maxWorks) return;
     setState(() {
-      final _WorkItem w = _WorkItem();
-      _attachWorkListeners(w);
-      _works.add(w);
+      _works.add(_WorkItem());
     });
   }
 
@@ -523,8 +525,6 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
       _works.removeAt(i);
     });
   }
-
-  void _onFieldChanged() => setState(() {});
 
   Future<void> _addPhoto() async {
     final int remaining = 8 - _photos.length;
@@ -602,30 +602,69 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
     }
   }
 
+  // Минимально допустимое время «По»: начало + 1 час (чтобы у заказа была
+  // длительность). Если начало не задано — ограничения нет. У позднего
+  // старта (после 23:00) упираемся в конец суток.
+  TimeOfDay? get _minTimeTo {
+    if (_timeFrom == null) return null;
+    final int m = _timeFrom!.hour * 60 + _timeFrom!.minute + 60;
+    if (m >= 24 * 60) return const TimeOfDay(hour: 23, minute: 59);
+    return TimeOfDay(hour: m ~/ 60, minute: m % 60);
+  }
+
+  // Окончание времени должно быть позже начала, иначе публиковались
+  // заказы вида «с 18:00 по 09:00». Для «весь день» время не задаётся.
+  bool get _timeRangeValid {
+    if (_wholeDay) return true;
+    if (_timeFrom == null || _timeTo == null) return false;
+    final int from = _timeFrom!.hour * 60 + _timeFrom!.minute;
+    final int to = _timeTo!.hour * 60 + _timeTo!.minute;
+    return to > from;
+  }
+
+  // Дата начала работ не должна быть в прошлом (заказ на сегодня — ок).
+  bool get _dateNotInPast {
+    if (_dateFrom == null) return false;
+    final DateTime now = DateTime.now();
+    final DateTime today = DateTime(now.year, now.month, now.day);
+    final DateTime from =
+        DateTime(_dateFrom!.year, _dateFrom!.month, _dateFrom!.day);
+    return !from.isBefore(today);
+  }
+
   bool get _canCreate =>
       _selCat.isNotEmpty &&
       _selMach.isNotEmpty &&
       _titleCtrl.text.trim().isNotEmpty &&
       _descCtrl.text.trim().isNotEmpty &&
-      _dateFrom != null &&
+      _dateNotInPast &&
       (_exactDate || _dateTo != null) &&
-      (_wholeDay || (_timeFrom != null && _timeTo != null)) &&
+      _timeRangeValid &&
       _address != null;
 
   Future<void> _onCreateTap() async {
-    if (_creating) return;
+    if (_creating || _opening) return;
     if (!DailyOrderLimit.canCreate) {
       await DailyOrderLimit.showLimitDialog(context);
       return;
     }
     final OrderDraft draft = _buildDraft();
-    final bool? published = await Navigator.of(context).push<bool>(
-      MaterialPageRoute<bool>(
-        builder: (_) => OrderDetailScreen(draft: draft),
-      ),
-    );
+    _opening = true;
+    final bool? published;
+    try {
+      published = await Navigator.of(context).push<bool>(
+        MaterialPageRoute<bool>(
+          builder: (_) => OrderDetailScreen(draft: draft),
+        ),
+      );
+    } finally {
+      _opening = false;
+    }
     if (!mounted || published != true) return;
 
+    // Прячем клавиатуру: индикатор загрузки теперь на самой кнопке внизу,
+    // и открытая клавиатура его бы перекрыла.
+    FocusScope.of(context).unfocus();
     setState(() => _creating = true);
 
     final CreateOrderResult result;
@@ -822,13 +861,7 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
   Widget build(BuildContext context) {
     return PopScope(
       canPop: !_creating,
-      child: Stack(
-        children: <Widget>[
-          _buildScaffold(context),
-          if (_creating)
-            const _CreatingOverlay(),
-        ],
-      ),
+      child: _buildScaffold(context),
     );
   }
 
@@ -903,7 +936,13 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
                       selected: _openDatePicker == 'dateFrom'
                           ? _dateFrom
                           : (_dateTo ?? _dateFrom),
-                      minDate: _openDatePicker == 'dateTo' ? _dateFrom : null,
+                      // Дата начала — не раньше сегодня; дата «По» — не
+                      // раньше выбранного начала. Ограничиваем прямо в
+                      // календаре, чтобы прошлое нельзя было выбрать (а не
+                      // молча блокировать кнопку «Создать»).
+                      minDate: _openDatePicker == 'dateTo'
+                          ? _dateFrom
+                          : DateTime.now(),
                       onChanged: (DateTime d) {
                         setState(() {
                           if (_openDatePicker == 'dateFrom') {
@@ -977,11 +1016,22 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
                       key: _timePickerAnchorKey,
                       selected: _openTimePicker == 'timeFrom'
                           ? _timeFrom
-                          : _timeTo,
+                          : (_timeTo ?? _minTimeTo),
+                      minTime:
+                          _openTimePicker == 'timeTo' ? _minTimeTo : null,
                       onDone: (TimeOfDay t) {
                         setState(() {
                           if (_openTimePicker == 'timeFrom') {
                             _timeFrom = t;
+                            // Конец должен быть минимум на час позже начала —
+                            // если выбранный конец стал раньше, подвинем его.
+                            final TimeOfDay? minTo = _minTimeTo;
+                            if (minTo != null &&
+                                (_timeTo == null ||
+                                    _timeTo!.hour * 60 + _timeTo!.minute <
+                                        minTo.hour * 60 + minTo.minute)) {
+                              _timeTo = minTo;
+                            }
                           } else {
                             _timeTo = t;
                           }
@@ -1084,35 +1134,49 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
                       ],
                     ),
                   ],
-                  if (_works.length < _maxWorks &&
-                      (_works.isEmpty ||
-                          _isWorkFilled(_works.last))) ...<Widget>[
-                    if (_works.isNotEmpty) SizedBox(height: 8.h),
-                    GestureDetector(
-                      onTap: _addWork,
-                      child: Container(
-                        width: double.infinity,
-                        height: 40.h,
-                        decoration: BoxDecoration(
-                          color: AppColors.surface,
-                          border: Border.all(
-                              color: AppColors.primary, width: 1),
-                          borderRadius: BorderRadius.circular(16.r),
-                        ),
-                        alignment: Alignment.center,
-                        child: Text(
-                          'Добавить',
-                          style: TextStyle(
-                            fontFamily: 'Roboto',
-                            fontSize: 14.sp,
-                            fontWeight: FontWeight.w400,
-                            height: 1.3,
-                            color: AppColors.primary,
+                  // Кнопка «Добавить работу» появляется, когда последняя
+                  // работа заполнена. Слушаем только поля текущей работы —
+                  // ввод не перестраивает всю форму. Выбор единицы (unit)
+                  // идёт через setState, который и так перерисует этот блок.
+                  ListenableBuilder(
+                    listenable: Listenable.merge(<Listenable?>[
+                      if (_works.isNotEmpty) _works.last.nameCtrl,
+                      if (_works.isNotEmpty) _works.last.volumeCtrl,
+                    ]),
+                    builder: (BuildContext context, Widget? _) {
+                      final bool show = _works.length < _maxWorks &&
+                          (_works.isEmpty || _isWorkFilled(_works.last));
+                      if (!show) return const SizedBox.shrink();
+                      return Padding(
+                        padding:
+                            EdgeInsets.only(top: _works.isNotEmpty ? 8.h : 0),
+                        child: GestureDetector(
+                          onTap: _addWork,
+                          child: Container(
+                            width: double.infinity,
+                            height: 40.h,
+                            decoration: BoxDecoration(
+                              color: AppColors.surface,
+                              border: Border.all(
+                                  color: AppColors.primary, width: 1),
+                              borderRadius: BorderRadius.circular(16.r),
+                            ),
+                            alignment: Alignment.center,
+                            child: Text(
+                              'Добавить',
+                              style: TextStyle(
+                                fontFamily: 'Roboto',
+                                fontSize: 14.sp,
+                                fontWeight: FontWeight.w400,
+                                height: 1.3,
+                                color: AppColors.primary,
+                              ),
+                            ),
                           ),
                         ),
-                      ),
-                    ),
-                  ],
+                      );
+                    },
+                  ),
                   SizedBox(height: 16.h),
                   _SectionTitle('Фото'),
                   SizedBox(height: 4.h),
@@ -1212,6 +1276,7 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
                   builder: (_, _) => PrimaryButton(
                     label: 'Создать',
                     enabled: _canCreate,
+                    loading: _creating,
                     onPressed: _canCreate ? _onCreateTap : null,
                   ),
                 ),
@@ -1623,56 +1688,3 @@ class _UnitDropdown extends StatelessWidget {
   }
 }
 
-/// Полупрозрачный модальный оверлей на время INSERT + загрузки фото
-/// + UPDATE. Перекрывает форму, чтобы пользователь не мог тапнуть
-/// «Создать» повторно или уйти назад жестом — пара ловушек уже стоит
-/// в State (`_creating` + `PopScope.canPop`), но визуальная блокировка
-/// делает поведение однозначным.
-class _CreatingOverlay extends StatelessWidget {
-  const _CreatingOverlay();
-
-  @override
-  Widget build(BuildContext context) {
-    return ColoredBox(
-      color: const Color(0x99000000),
-      child: Center(
-        child: Container(
-          padding: EdgeInsets.symmetric(horizontal: 24.w, vertical: 20.h),
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(16.r),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              SizedBox(
-                width: 32.r,
-                height: 32.r,
-                child: const CircularProgressIndicator(
-                  color: AppColors.primary,
-                  strokeWidth: 3,
-                ),
-              ),
-              SizedBox(height: 16.h),
-              Text(
-                'Публикуем заказ…',
-                style: AppTextStyles.titleS.copyWith(
-                  color: AppColors.textPrimary,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              SizedBox(height: 4.h),
-              Text(
-                'Загружаем фото, не закрывайте экран',
-                textAlign: TextAlign.center,
-                style: AppTextStyles.caption.copyWith(
-                  color: AppColors.textSecondary,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}

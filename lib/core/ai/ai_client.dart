@@ -16,6 +16,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:dispatcher_1/core/config/env.dart';
 
@@ -143,10 +144,70 @@ class AiClient {
 
   SupabaseClient get _sb => Supabase.instance.client;
 
+  // Беседа и поиск — ОДИН разговор с общей памятью (корзина chat); slot-fill
+  // держит свою сессию. Без этого переключение чат↔поиск теряло историю, и
+  // ассистент здоровался заново, будто видит сообщение впервые.
   final Map<AiChatKind, String?> _sessionIds = <AiChatKind, String?>{};
+
+  AiChatKind _sessionBucket(AiChatKind kind) =>
+      (kind == AiChatKind.chat || kind == AiChatKind.search)
+          ? AiChatKind.chat
+          : kind;
 
   void resetSessions() {
     _sessionIds.clear();
+    unawaited(_clearPersistedSession());
+  }
+
+  // --- Персистентность разговора: чтобы история чата пережила перезапуск
+  // приложения. Храним только session_id; сами сообщения берём из БД
+  // (ai_messages, доступ по RLS «только свои сессии»). ---
+  static const String _kChatSessionKey = 'ai_chat_session_id';
+
+  void _persistChatSession() {
+    final String? sid = _sessionIds[AiChatKind.chat];
+    if (sid == null || sid.isEmpty) return;
+    unawaited(SharedPreferences.getInstance()
+        .then((SharedPreferences p) => p.setString(_kChatSessionKey, sid)));
+  }
+
+  Future<void> _clearPersistedSession() async {
+    try {
+      final SharedPreferences p = await SharedPreferences.getInstance();
+      await p.remove(_kChatSessionKey);
+    } catch (_) {/* не критично */}
+  }
+
+  /// Восстанавливает session_id разговора из прошлого запуска. Вызывать при
+  /// открытии экрана чата ДО loadHistory.
+  Future<void> restoreChatSession() async {
+    if (_sessionIds[AiChatKind.chat] != null) return;
+    try {
+      final SharedPreferences p = await SharedPreferences.getInstance();
+      final String? sid = p.getString(_kChatSessionKey);
+      if (sid != null && sid.isNotEmpty) _sessionIds[AiChatKind.chat] = sid;
+    } catch (_) {/* не критично */}
+  }
+
+  /// Загружает историю текущего разговора из БД (последние сообщения сессии).
+  /// Возвращает «сырые» строки {role, content, data}; экран сам строит из них
+  /// сообщения. Пусто, если сессии нет или ошибка.
+  Future<List<Map<String, dynamic>>> loadHistory() async {
+    final String? sid = _sessionIds[AiChatKind.chat];
+    if (sid == null || sid.isEmpty) return const <Map<String, dynamic>>[];
+    try {
+      final List<dynamic> rows = await _sb
+          .from('ai_messages')
+          .select('role, content, data, created_at')
+          .eq('session_id', sid)
+          .order('created_at', ascending: true)
+          .limit(50);
+      return rows
+          .whereType<Map<String, dynamic>>()
+          .toList(growable: false);
+    } catch (_) {
+      return const <Map<String, dynamic>>[];
+    }
   }
 
   Future<AiReply> chat(String message) =>
@@ -201,6 +262,7 @@ class AiClient {
           final sid = obj['session_id'] as String?;
           if (sid != null && sid.isNotEmpty) {
             _sessionIds[AiChatKind.chat] = sid;
+            _persistChatSession();
           }
         } else if (kind == 'delta') {
           final delta = obj['text'] as String? ?? '';
@@ -278,7 +340,7 @@ class AiClient {
     final body = <String, dynamic>{
       'message': message,
       'app':     app,
-      'session_id': ?_sessionIds[kind],
+      'session_id': ?_sessionIds[_sessionBucket(kind)],
       'intent':     ?intent,
     };
 
@@ -296,7 +358,8 @@ class AiClient {
 
       final reply = _buildReply(json);
       if (reply.sessionId.isNotEmpty) {
-        _sessionIds[kind] = reply.sessionId;
+        _sessionIds[_sessionBucket(kind)] = reply.sessionId;
+        _persistChatSession();
       }
       return reply;
     } on FunctionException catch (e) {
@@ -309,7 +372,8 @@ class AiClient {
       // разговора (например, при content_filter).
       final String? newSid = json['session_id'] as String?;
       if (newSid != null && newSid.isNotEmpty) {
-        _sessionIds[kind] = newSid;
+        _sessionIds[_sessionBucket(kind)] = newSid;
+        _persistChatSession();
       }
 
       if (status == 402) {

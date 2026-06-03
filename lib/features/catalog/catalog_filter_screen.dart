@@ -1077,11 +1077,18 @@ class InlineTimePicker extends StatefulWidget {
     required this.selected,
     required this.onDone,
     required this.onCancel,
+    this.minTime,
   });
 
   final TimeOfDay? selected;
   final ValueChanged<TimeOfDay> onDone;
   final VoidCallback onCancel;
+
+  /// Минимально допустимое время. Если задано — выбрать раньше нельзя:
+  /// кнопка «Готово» блокируется, а под колёсами показывается подсказка.
+  /// Для времени «По» сюда передаём начало + 1 час, чтобы у заказа была
+  /// длительность и конец не оказался раньше начала.
+  final TimeOfDay? minTime;
 
   @override
   State<InlineTimePicker> createState() => InlineTimePickerState();
@@ -1093,11 +1100,21 @@ class InlineTimePickerState extends State<InlineTimePicker> {
   late FixedExtentScrollController _hourCtrl;
   late FixedExtentScrollController _minuteCtrl;
 
+  int get _minMinutes => widget.minTime == null
+      ? 0
+      : widget.minTime!.hour * 60 + widget.minTime!.minute;
+  bool get _isValid => _hour * 60 + _minute >= _minMinutes;
+
   @override
   void initState() {
     super.initState();
     _hour = widget.selected?.hour ?? TimeOfDay.now().hour;
     _minute = widget.selected?.minute ?? 0;
+    // Если стартовое значение раньше минимума — открываемся уже на минимуме.
+    if (widget.minTime != null && _hour * 60 + _minute < _minMinutes) {
+      _hour = widget.minTime!.hour;
+      _minute = widget.minTime!.minute;
+    }
     _hourCtrl = FixedExtentScrollController(initialItem: _hour);
     _minuteCtrl = FixedExtentScrollController(initialItem: _minute);
   }
@@ -1110,6 +1127,7 @@ class InlineTimePickerState extends State<InlineTimePicker> {
   }
 
   void _commit() {
+    if (!_isValid) return;
     widget.onDone(TimeOfDay(hour: _hour, minute: _minute));
   }
 
@@ -1233,6 +1251,23 @@ class InlineTimePickerState extends State<InlineTimePicker> {
               ],
             ),
           ),
+          if (widget.minTime != null) ...<Widget>[
+            SizedBox(height: 8.h),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'Не раньше ${widget.minTime!.hour.toString().padLeft(2, '0')}'
+                ':${widget.minTime!.minute.toString().padLeft(2, '0')} '
+                '— минимум час работы',
+                style: TextStyle(
+                  fontFamily: 'Roboto',
+                  fontSize: 12.sp,
+                  fontWeight: FontWeight.w400,
+                  color: AppColors.textTertiary,
+                ),
+              ),
+            ),
+          ],
           SizedBox(height: 16.h),
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
@@ -1253,14 +1288,16 @@ class InlineTimePickerState extends State<InlineTimePicker> {
               SizedBox(width: 24.w),
               GestureDetector(
                 behavior: HitTestBehavior.opaque,
-                onTap: _commit,
+                onTap: _isValid ? _commit : null,
                 child: Text(
                   'Готово',
                   style: TextStyle(
                     fontFamily: 'Roboto',
                     fontSize: 14.sp,
                     fontWeight: FontWeight.w600,
-                    color: AppColors.textPrimary,
+                    color: _isValid
+                        ? AppColors.textPrimary
+                        : AppColors.textTertiary,
                   ),
                 ),
               ),

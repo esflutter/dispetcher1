@@ -55,8 +55,29 @@ class _SelectExecutorScreenState extends State<SelectExecutorScreen> {
   @override
   void initState() {
     super.initState();
+    _reload();
+    // Realtime: новые и отозванные отклики приходят через RealtimeService,
+    // который бампит MyOrdersStore.revision. Пока заказчик стоит на этом
+    // экране, перезагружаем список откликнувшихся — без перезахода.
+    MyOrdersStore.revision.addListener(_onRealtime);
+  }
+
+  @override
+  void dispose() {
+    MyOrdersStore.revision.removeListener(_onRealtime);
+    super.dispose();
+  }
+
+  void _reload() {
     _future = CustomerOrdersService.instance
         .listResponsesForOrder(widget.order.id);
+  }
+
+  void _onRealtime() {
+    // Во время выбора исполнителя список не трогаем, чтобы FutureBuilder
+    // не мигнул спиннером поверх уже идущего действия.
+    if (!mounted || _busy) return;
+    setState(_reload);
   }
 
   Future<void> _pickExecutor(IncomingResponse r) async {
@@ -161,10 +182,7 @@ class _SelectExecutorScreenState extends State<SelectExecutorScreen> {
               return const Center(child: CircularProgressIndicator());
             }
             if (snap.hasError) {
-              return _Retry(onRetry: () => setState(() {
-                    _future = CustomerOrdersService.instance
-                        .listResponsesForOrder(widget.order.id);
-                  }));
+              return _Retry(onRetry: () => setState(_reload));
             }
             final List<IncomingResponse> responses = (snap.data ??
                     const <IncomingResponse>[])

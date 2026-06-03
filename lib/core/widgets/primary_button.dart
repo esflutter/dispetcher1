@@ -11,39 +11,59 @@ class PrimaryButton extends StatelessWidget {
     required this.label,
     required this.onPressed,
     this.enabled = true,
+    this.loading = false,
     this.height,
   });
 
   final String label;
   final VoidCallback? onPressed;
   final bool enabled;
+
+  /// Показать индикатор загрузки вместо текста и заблокировать нажатие.
+  /// Кнопка при этом остаётся «живой» оранжевой — это состояние «идёт
+  /// работа», а не выключенная кнопка.
+  final bool loading;
   final double? height;
 
   @override
   Widget build(BuildContext context) {
+    final bool active = enabled && !loading && onPressed != null;
     return SizedBox(
       width: double.infinity,
       height: height ?? 54.h,
       child: ElevatedButton(
-        onPressed: enabled ? onPressed : null,
+        onPressed: active ? onPressed : null,
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.primary,
-          disabledBackgroundColor: AppColors.primaryButtonDisabledBg,
+          disabledBackgroundColor: loading
+              ? AppColors.primary
+              : AppColors.primaryButtonDisabledBg,
           foregroundColor: Colors.white,
-          disabledForegroundColor: AppColors.primary.withValues(alpha: 0.5),
+          disabledForegroundColor: loading
+              ? Colors.white
+              : AppColors.primary.withValues(alpha: 0.5),
           elevation: 0,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16.r),
           ),
         ),
-        child: Text(
-          label,
-          style: AppTextStyles.button.copyWith(
-            color: enabled && onPressed != null
-                ? Colors.white
-                : AppColors.primary.withValues(alpha: 0.5),
-          ),
-        ),
+        child: loading
+            ? SizedBox(
+                width: 22.r,
+                height: 22.r,
+                child: const CircularProgressIndicator(
+                  color: Colors.white,
+                  strokeWidth: 2.5,
+                ),
+              )
+            : Text(
+                label,
+                style: AppTextStyles.button.copyWith(
+                  color: active
+                      ? Colors.white
+                      : AppColors.primary.withValues(alpha: 0.5),
+                ),
+              ),
       ),
     );
   }

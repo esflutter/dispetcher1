@@ -30,6 +30,7 @@ dependencies:
   # Привязан к версии, которую и так тянет supabase_flutter транзитивно,
   # но указываем явно — это direct dep наших файлов в `lib/core/dadata/`.
   http: ^1.6.0
+  shared_preferences: ^2.3.0
   # Firebase Cloud Messaging — пуш-уведомления. firebase_core инициализирует
   # SDK при старте, firebase_messaging регистрирует токен устройства и
   # принимает пуши. flutter_local_notifications нужен для foreground-баннера

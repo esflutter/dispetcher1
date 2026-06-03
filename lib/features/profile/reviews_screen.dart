@@ -148,13 +148,14 @@ class _ReviewsScreenState extends State<ReviewsScreen> {
     // оставленный поздно вечером, показывался юзеру датой на день
     // раньше из-за разницы с локальным временем.
     final DateTime created =
-        DateTime.parse(r['created_at'] as String).toLocal();
+        DateTime.tryParse((r['created_at'] as String?) ?? '')?.toLocal() ??
+            DateTime.now();
     final String date =
         '${created.day.toString().padLeft(2, '0')}/${created.month.toString().padLeft(2, '0')}/${created.year}';
     return Review(
       author: authorName,
       date: date,
-      rating: r['rating'] as int,
+      rating: (r['rating'] as num?)?.toInt() ?? 0,
       text: (r['text'] as String?) ?? '',
       authorAvatarUrl: authorAvatarUrl,
     );

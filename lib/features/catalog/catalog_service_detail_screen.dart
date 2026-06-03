@@ -323,6 +323,7 @@ class _PhotosGrid extends StatelessWidget {
           child: Image.network(
             photos[i],
             fit: BoxFit.cover,
+            cacheWidth: 300,
             errorBuilder: (_, _, _) => Container(color: AppColors.fieldFill),
           ),
         ),

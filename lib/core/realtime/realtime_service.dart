@@ -17,21 +17,33 @@ import 'package:dispatcher_1/features/profile/account_block.dart' show ReviewsDa
 /// пока сам не дёргал экран.
 ///
 /// Тут централизованно подписываемся на `orders`, `order_matches` и
-/// `reviews` (включены в `supabase_realtime` publication на стороне БД)
-/// и при любом INSERT/UPDATE/DELETE бампим соответствующий маяк.
+/// `reviews` (включены в `supabase_realtime` publication на стороне БД).
+///
+/// Два приёма против лишней нагрузки:
+///   1) Дебаунс — всплеск событий (много правок подряд во всей базе)
+///      склеивается в один перезапрос, а не в десяток.
+///   2) Фильтр по своим данным — заказчику интересны изменения только
+///      его собственных заказов; чужие публикации мы пропускаем там, где
+///      это можно надёжно определить по содержимому события.
 class RealtimeService {
   RealtimeService._();
   static final RealtimeService instance = RealtimeService._();
 
   /// Маяк ленты заказов (каталог). До этого его не было: лента
   /// перетягивалась только при тапе по фильтру или возврате на экран.
-  /// Теперь любое изменение в таблице `orders` бампит этот ValueNotifier.
   static final ValueNotifier<int> ordersFeedBeacon = ValueNotifier<int>(0);
 
   RealtimeChannel? _ordersChan;
   RealtimeChannel? _matchesChan;
   RealtimeChannel? _reviewsChan;
   bool _started = false;
+
+  // Окно склейки всплеска событий. 600 мс незаметно для пользователя, но
+  // превращает «пачку» чужих изменений в один перезапрос.
+  static const Duration _debounceWindow = Duration(milliseconds: 600);
+  Timer? _ordersDebounce;
+  Timer? _matchesDebounce;
+  Timer? _reviewsDebounce;
 
   void start() {
     if (_started) return;
@@ -44,11 +56,15 @@ class RealtimeService {
           event: PostgresChangeEvent.all,
           schema: 'public',
           table: 'orders',
-          callback: (PostgresChangePayload _) {
-            ordersFeedBeacon.value = ordersFeedBeacon.value + 1;
-            // У заказчика свой кэш `MyOrdersStore` — он подписан на
-            // revision и пере-фетчит из БД, когда мы её бампим.
-            MyOrdersStore.revision.value = MyOrdersStore.revision.value + 1;
+          callback: (PostgresChangePayload payload) {
+            final String? me = client.auth.currentUser?.id;
+            final String? owner = _recordField(payload, 'customer_id');
+            // Заказчику важны только его собственные заказы. Чужие
+            // публикации/правки в «Моих заказах» не отражаются. Если
+            // владельца определить не удалось — на всякий случай обновим
+            // (дебаунс склеит всплеск).
+            if (me != null && owner != null && owner != me) return;
+            _scheduleOrders();
           },
         )
         .subscribe();
@@ -60,12 +76,10 @@ class RealtimeService {
           schema: 'public',
           table: 'order_matches',
           callback: (PostgresChangePayload _) {
-            // order_matches касается обеих сторон: для заказчика —
-            // новые отклики, для исполнителя — статус его отклика.
-            // У этого приложения исполнитель смотрит свой статус
-            // через MyOrdersStore тоже.
-            MyOrdersStore.revision.value = MyOrdersStore.revision.value + 1;
-            ordersFeedBeacon.value = ordersFeedBeacon.value + 1;
+            // В order_matches нет customer_id, поэтому надёжно отфильтровать
+            // «свои» отклики по событию нельзя — полагаемся на дебаунс,
+            // чтобы всплеск чужих откликов не дёргал загрузку постоянно.
+            _scheduleMatches();
           },
         )
         .subscribe();
@@ -77,15 +91,53 @@ class RealtimeService {
           schema: 'public',
           table: 'reviews',
           callback: (PostgresChangePayload _) {
-            ReviewsData.revision.value = ReviewsData.revision.value + 1;
+            _scheduleReviews();
           },
         )
         .subscribe();
   }
 
+  void _scheduleOrders() {
+    _ordersDebounce?.cancel();
+    _ordersDebounce = Timer(_debounceWindow, () {
+      ordersFeedBeacon.value = ordersFeedBeacon.value + 1;
+      // loadFromDb сам бампнет revision после загрузки → экран
+      // «Мои заказы» перерисуется.
+      unawaited(MyOrdersStore.loadFromDb());
+    });
+  }
+
+  void _scheduleMatches() {
+    _matchesDebounce?.cancel();
+    _matchesDebounce = Timer(_debounceWindow, () {
+      unawaited(MyOrdersStore.loadFromDb());
+      ordersFeedBeacon.value = ordersFeedBeacon.value + 1;
+    });
+  }
+
+  void _scheduleReviews() {
+    _reviewsDebounce?.cancel();
+    _reviewsDebounce = Timer(_debounceWindow, () {
+      ReviewsData.revision.value = ReviewsData.revision.value + 1;
+    });
+  }
+
+  /// Достаёт значение поля из изменённой строки. Для INSERT берём из
+  /// `newRecord`, для DELETE — из `oldRecord` (оба — Map, пустой `{}`,
+  /// если данных нет).
+  static String? _recordField(PostgresChangePayload p, String field) {
+    final dynamic nv = p.newRecord[field];
+    if (nv != null) return nv.toString();
+    final dynamic ov = p.oldRecord[field];
+    return ov?.toString();
+  }
+
   /// Полная отписка. Зовётся при выходе из аккаунта — иначе подписки
   /// держат соединения для уже не авторизованного клиента.
   Future<void> stop() async {
+    _ordersDebounce?.cancel();
+    _matchesDebounce?.cancel();
+    _reviewsDebounce?.cancel();
     final SupabaseClient client = Supabase.instance.client;
     for (final RealtimeChannel? ch in <RealtimeChannel?>[
       _ordersChan,
