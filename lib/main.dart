@@ -101,9 +101,9 @@ Future<void> main() async {
         await RealtimeService.instance.stop();
         // Чистим переписку ассистента — иначе следующий юзер увидит чужие сообщения.
         ChatScreen.resetHistory();
-        if (firebaseReady) {
-          await PushService.instance.clearForCurrentUser();
-        }
+        // Push-токен инвалидируется в signOut()/deleteAccount() ДО закрытия
+        // сессии (пока запрос к БД ещё авторизован). Здесь, после signedOut,
+        // сессия уже мертва и RLS отклонил бы update — поэтому не дублируем.
       }
     });
 
