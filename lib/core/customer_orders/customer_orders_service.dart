@@ -301,16 +301,15 @@ class CustomerOrdersService {
     ];
     if (contactExecutorIds.isNotEmpty) {
       try {
-        // Тянем телефон и email одним SELECT'ом — раньше был только
-        // phone, и блок «Электронная почта» на деталях заказа догружался
-        // отдельным запросом после открытия экрана (`_loadContacts`).
-        // Теперь email есть в карточке заказа сразу, без асинхронного
-        // моргания.
-        final List<Map<String, dynamic>> rows = await _client
-            .from('profiles_private')
-            .select('id, phone, email')
-            .inFilter('id', contactExecutorIds);
-        for (final Map<String, dynamic> row in rows) {
+        // Тянем телефон и email одним вызовом RPC `get_partner_contacts`.
+        // Сервер сам проверит, что заказ с этим исполнителем подтверждён, и
+        // отдаст только phone+email (приватная строка исполнителя не утекает).
+        final List<dynamic> rows = await _client.rpc(
+          'get_partner_contacts',
+          params: <String, dynamic>{'target_ids': contactExecutorIds},
+        ) as List<dynamic>;
+        for (final dynamic r in rows) {
+          final Map<String, dynamic> row = r as Map<String, dynamic>;
           final String id = row['id'] as String;
           phoneByExecutor[id] = row['phone'] as String?;
           emailByExecutor[id] = row['email'] as String?;
@@ -733,17 +732,20 @@ class CustomerOrdersService {
   }
 
   /// Контакты исполнителя (телефон/email) — доступны только после
-  /// `accepted`/`completed` через RLS-политику на `profiles_private`.
-  /// Возвращает `null`, если RLS не пустила (статус ещё не accepted).
+  /// `accepted`/`completed`. Через RPC `get_partner_contacts`: сервер сам
+  /// проверит, что заказ подтверждён, и вернёт только phone+email (приватная
+  /// строка исполнителя не утекает). Возвращает `null`, если доступа нет.
   Future<({String? phone, String? email})?> getExecutorContacts(
       String executorId) async {
     try {
-      final Map<String, dynamic>? row = await _client
-          .from('profiles_private')
-          .select('phone, email')
-          .eq('id', executorId)
-          .maybeSingle();
-      if (row == null) return null;
+      final List<dynamic> rows = await _client.rpc(
+        'get_partner_contacts',
+        params: <String, dynamic>{
+          'target_ids': <String>[executorId],
+        },
+      ) as List<dynamic>;
+      if (rows.isEmpty) return null;
+      final Map<String, dynamic> row = rows.first as Map<String, dynamic>;
       return (
         phone: row['phone'] as String?,
         email: row['email'] as String?,
