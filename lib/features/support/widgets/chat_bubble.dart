@@ -294,7 +294,12 @@ class _CustomerOrderTile extends StatelessWidget {
     final dateFrom = item['date_from'] as String?;
     return InkWell(
       // В приложении заказчика свои заказы открываются через /orders/:id.
-      onTap: id.isEmpty ? null : () => context.push('/orders/$id'),
+      // Снимаем фокус перед уходом с чата — иначе при возврате клавиатура
+      // снова всплывает (Navigator восстанавливает фокус поля ввода).
+      onTap: id.isEmpty ? null : () {
+        FocusManager.instance.primaryFocus?.unfocus();
+        context.push('/orders/$id');
+      },
       borderRadius: BorderRadius.circular(10.r),
       child: Container(
         margin: EdgeInsets.only(bottom: 8.h),
@@ -412,6 +417,9 @@ class _ExecutorTile extends StatelessWidget {
     final dist    = item['distance_km'];
     return InkWell(
       onTap: id.isEmpty ? null : () {
+        // Снимаем фокус перед уходом с чата — иначе при возврате всплывает
+        // клавиатура (Navigator восстанавливает фокус поля ввода).
+        FocusManager.instance.primaryFocus?.unfocus();
         Navigator.of(context).push(MaterialPageRoute<void>(
           builder: (_) => ExecutorCardViewScreen(executorId: id),
         ));
@@ -533,6 +541,9 @@ class _DraftReadyHandoff extends StatelessWidget {
                     );
                     return;
                   }
+                  // Снимаем фокус перед уходом на форму — чтобы при возврате в
+                  // чат клавиатура не всплывала снова.
+                  FocusManager.instance.primaryFocus?.unfocus();
                   if (isOrder) {
                     Navigator.of(context).push(MaterialPageRoute<void>(
                       builder: (_) => CreateOrderScreen(aiDraft: draft),
