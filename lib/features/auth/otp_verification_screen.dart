@@ -216,6 +216,10 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                       focusNode: _pinFocusNode,
                       length: _otpLength,
                       autofocus: true,
+                      // Без анимации ячеек: со «slide» (по умолчанию) при
+                      // быстром наборе перерисовка не поспевает за вводом и
+                      // последние цифры терялись.
+                      pinAnimationType: PinAnimationType.none,
                       cursor: Align(
                         alignment: Alignment.center,
                         child: Container(
