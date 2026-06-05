@@ -453,7 +453,7 @@ class _ExecutorTile extends StatelessWidget {
               SizedBox(height: 4.h),
               Text(
                 [
-                  '⭐ $rating',
+                  '⭐ ${rating is num ? rating.toStringAsFixed(1) : rating}',
                   if (reviews != null) '($reviews отзывов)',
                 ].join(' '),
                 style: AppTextStyles.body.copyWith(
