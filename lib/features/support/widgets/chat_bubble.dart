@@ -489,6 +489,17 @@ class _ExecutorTile extends StatelessWidget {
   }
 }
 
+/// Реестр подписей уже опубликованных черновиков — чтобы повторными тапами
+/// по карточке нельзя было создать дублей. Статический набор переживает
+/// прокрутку чата. ВАЖНО: при выходе из аккаунта чистится в auth_reset,
+/// иначе следующий пользователь на этом же устройстве увидел бы свой
+/// идентичный черновик как «уже опубликовано».
+class PublishedDraftRegistry {
+  PublishedDraftRegistry._();
+  static final Set<String> sigs = <String>{};
+  static void clear() => sigs.clear();
+}
+
 /// Готовый черновик — кнопка «Открыть форму создания».
 ///
 /// После публикации заказа кнопка становится неактивной («Заказ опубликован»),
@@ -499,8 +510,6 @@ class _DraftReadyHandoff extends StatefulWidget {
   const _DraftReadyHandoff({required this.text, required this.data});
   final String text;
   final Map<String, dynamic> data;
-
-  static final Set<String> _publishedSigs = <String>{};
 
   @override
   State<_DraftReadyHandoff> createState() => _DraftReadyHandoffState();
@@ -519,7 +528,7 @@ class _DraftReadyHandoffState extends State<_DraftReadyHandoff> {
     final kind  = widget.data['kind']  as String? ?? '';
     final draft = widget.data['draft'] as Map<String, dynamic>? ?? const <String, dynamic>{};
     final isOrder = kind == 'order_draft';
-    final bool published = _DraftReadyHandoff._publishedSigs.contains(_sig);
+    final bool published = PublishedDraftRegistry.sigs.contains(_sig);
     return Align(
       alignment: Alignment.centerLeft,
       child: Container(
@@ -588,7 +597,7 @@ class _DraftReadyHandoffState extends State<_DraftReadyHandoff> {
                           // Форма вернула true только при успешной публикации —
                           // помечаем черновик опубликованным и гасим кнопку.
                           if (result == true && mounted) {
-                            setState(() => _DraftReadyHandoff._publishedSigs.add(_sig));
+                            setState(() => PublishedDraftRegistry.sigs.add(_sig));
                           }
                         } else {
                           ScaffoldMessenger.of(context).showSnackBar(

@@ -12,6 +12,7 @@ import 'package:dispatcher_1/features/orders/orders_store.dart';
 import 'package:dispatcher_1/features/profile/account_block.dart';
 import 'package:dispatcher_1/features/shell/main_shell.dart';
 import 'package:dispatcher_1/features/support/chat_screen.dart';
+import 'package:dispatcher_1/features/support/widgets/chat_bubble.dart' show PublishedDraftRegistry;
 
 /// Выход из аккаунта. Закрываем сессию Supabase (иначе RLS будет
 /// пропускать запросы как от прошлого пользователя) и чистим все
@@ -77,6 +78,11 @@ void _clearAll() {
   // История чата с ассистентом — иначе у следующего пользователя
   // на устройстве осталась бы переписка предыдущего.
   ChatScreen.resetHistory();
+
+  // Реестр опубликованных черновиков ассистента (кнопка «Создать заказ»).
+  // Без сброса следующий пользователь, попросив собрать идентичный
+  // черновик, увидел бы кнопку заблокированной с текстом «Заказ опубликован».
+  PublishedDraftRegistry.clear();
 
   // Активная вкладка нижней навигации.
   MainShell.selectedTab.value = 0;
