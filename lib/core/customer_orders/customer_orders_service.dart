@@ -627,7 +627,7 @@ class CustomerOrdersService {
         .eq('is_archived', false);
     String? serviceId;
     for (final Map<String, dynamic> s in services) {
-      final List<int> m = List<int>.from(s['machinery_ids'] as List);
+      final List<int> m = List<int>.from((s['machinery_ids'] as List?) ?? const <dynamic>[]);
       if (m.any(orderMachinery.contains)) {
         serviceId = s['id'] as String;
         break;

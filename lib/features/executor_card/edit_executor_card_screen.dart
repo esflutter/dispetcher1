@@ -125,11 +125,12 @@ class _EditExecutorCardScreenState extends State<EditExecutorCardScreen> {
               await ProfileService.instance.updatePrivateEmail(value);
             } catch (_) {/* silent */}
           }
-          if (_emailError != null) setState(() => _emailError = null);
+          // После await экран мог быть закрыт — иначе setState упадёт «after dispose».
+          if (mounted && _emailError != null) setState(() => _emailError = null);
         } else {
           // Невалидное значение не сохраняем в CropResult. Текст в поле
           // не откатываем — чтобы пользователь увидел ошибку и исправил.
-          setState(() => _emailError = 'Некорректная электронная почта');
+          if (mounted) setState(() => _emailError = 'Некорректная электронная почта');
         }
       }
     });

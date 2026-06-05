@@ -292,7 +292,7 @@ class CatalogService {
       machineryTitles: machineryTitles,
       categoryTitles: categoryTitles,
       works: works,
-      photos: List<String>.from(r['photos'] as List),
+      photos: List<String>.from((r['photos'] as List?) ?? const <dynamic>[]),
       publishedAt: DateTime.parse(r['published_at'] as String).toLocal(),
       customer: cust,
     );
@@ -766,8 +766,8 @@ class CatalogService {
   }
 
   ExecutorService _executorServiceFromRow(Map<String, dynamic> r) {
-    final List<int> mIds = List<int>.from(r['machinery_ids'] as List);
-    final List<int> cIds = List<int>.from(r['category_ids'] as List);
+    final List<int> mIds = List<int>.from((r['machinery_ids'] as List?) ?? const <dynamic>[]);
+    final List<int> cIds = List<int>.from((r['category_ids'] as List?) ?? const <dynamic>[]);
     final List<String> photos = List<String>.from(
       (r['photos'] as List?) ?? const <String>[],
     );
