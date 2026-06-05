@@ -19,6 +19,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:dispatcher_1/core/config/env.dart';
+import 'package:dispatcher_1/core/user_location.dart';
 
 /// Тип чата с ассистентом — определяет какая Edge Function вызывается.
 enum AiChatKind { chat, search, slotFillOrder, slotFillService }
@@ -156,6 +157,7 @@ class AiClient {
 
   void resetSessions() {
     _sessionIds.clear();
+    _lastSlotSessionId = null;
     unawaited(_clearPersistedSession());
   }
 
@@ -163,6 +165,12 @@ class AiClient {
   // приложения. Храним только session_id; сами сообщения берём из БД
   // (ai_messages, доступ по RLS «только свои сессии»). ---
   static const String _kChatSessionKey = 'ai_chat_session_id';
+  // Сессия пошагового создания заказа (slot-fill) отдельная от чата. Храним её
+  // id, чтобы при перезапуске показать в истории и эту часть разговора (а не
+  // только обычный чат). Используется ТОЛЬКО для показа истории — в активную
+  // «корзину» не кладём, иначе «Новый заказ» продолжил бы старый черновик.
+  static const String _kSlotSessionKey = 'ai_slot_session_id';
+  String? _lastSlotSessionId;
 
   void _persistChatSession() {
     final String? sid = _sessionIds[AiChatKind.chat];
@@ -171,21 +179,38 @@ class AiClient {
         .then((SharedPreferences p) => p.setString(_kChatSessionKey, sid)));
   }
 
+  void _persistSlotSession(String sid) {
+    if (sid.isEmpty) return;
+    _lastSlotSessionId = sid;
+    unawaited(SharedPreferences.getInstance()
+        .then((SharedPreferences p) => p.setString(_kSlotSessionKey, sid)));
+  }
+
+  /// Сбрасывает сессию пошагового сбора указанного типа — чтобы «Новый заказ»
+  /// начинался с ЧИСТОГО черновика, а не продолжал предыдущий (иначе поля
+  /// прошлого заказа протекали бы в новый в рамках одного запуска приложения).
+  void startFreshSlot(AiChatKind kind) {
+    _sessionIds[kind] = null;
+  }
+
   Future<void> _clearPersistedSession() async {
     try {
       final SharedPreferences p = await SharedPreferences.getInstance();
       await p.remove(_kChatSessionKey);
+      await p.remove(_kSlotSessionKey);
     } catch (_) {/* не критично */}
   }
 
   /// Восстанавливает session_id разговора из прошлого запуска. Вызывать при
   /// открытии экрана чата ДО loadHistory.
   Future<void> restoreChatSession() async {
-    if (_sessionIds[AiChatKind.chat] != null) return;
     try {
       final SharedPreferences p = await SharedPreferences.getInstance();
-      final String? sid = p.getString(_kChatSessionKey);
-      if (sid != null && sid.isNotEmpty) _sessionIds[AiChatKind.chat] = sid;
+      if (_sessionIds[AiChatKind.chat] == null) {
+        final String? sid = p.getString(_kChatSessionKey);
+        if (sid != null && sid.isNotEmpty) _sessionIds[AiChatKind.chat] = sid;
+      }
+      _lastSlotSessionId ??= p.getString(_kSlotSessionKey);
     } catch (_) {/* не критично */}
   }
 
@@ -193,15 +218,21 @@ class AiClient {
   /// Возвращает «сырые» строки {role, content, data}; экран сам строит из них
   /// сообщения. Пусто, если сессии нет или ошибка.
   Future<List<Map<String, dynamic>>> loadHistory() async {
-    final String? sid = _sessionIds[AiChatKind.chat];
-    if (sid == null || sid.isEmpty) return const <Map<String, dynamic>>[];
+    // Историю собираем по ДВУМ сессиям — обычный чат/поиск и пошаговое создание
+    // заказа — и сливаем в одну ленту по времени. Без этого после перезапуска
+    // часть «создание заказа» пропадала (она в отдельной сессии).
+    final List<String> ids = <String>[
+      if ((_sessionIds[AiChatKind.chat] ?? '').isNotEmpty) _sessionIds[AiChatKind.chat]!,
+      if ((_lastSlotSessionId ?? '').isNotEmpty) _lastSlotSessionId!,
+    ];
+    if (ids.isEmpty) return const <Map<String, dynamic>>[];
     try {
       final List<dynamic> rows = await _sb
           .from('ai_messages')
           .select('role, content, data, created_at')
-          .eq('session_id', sid)
+          .inFilter('session_id', ids)
           .order('created_at', ascending: true)
-          .limit(50);
+          .limit(60);
       return rows
           .whereType<Map<String, dynamic>>()
           .toList(growable: false);
@@ -342,6 +373,12 @@ class AiClient {
       'app':     app,
       'session_id': ?_sessionIds[_sessionBucket(kind)],
       'intent':     ?intent,
+      // GPS-координаты пользователя (если он разрешил геолокацию): в поиске
+      // сервер считает по ним точное расстояние «от вас», а при создании
+      // заказа/услуги — сам определяет город/адрес по координатам (обратный
+      // геокодер), чтобы не переспрашивать. Ключи опускаются, если координат нет.
+      'origin_lat': ?UserLocation.lat,
+      'origin_lng': ?UserLocation.lng,
     };
 
     // supabase_flutter functions_client@2.5.0 бросает FunctionException
@@ -358,8 +395,13 @@ class AiClient {
 
       final reply = _buildReply(json);
       if (reply.sessionId.isNotEmpty) {
-        _sessionIds[_sessionBucket(kind)] = reply.sessionId;
-        _persistChatSession();
+        final AiChatKind bucket = _sessionBucket(kind);
+        _sessionIds[bucket] = reply.sessionId;
+        if (bucket == AiChatKind.chat) {
+          _persistChatSession();
+        } else {
+          _persistSlotSession(reply.sessionId); // slot-fill — сохраняем для истории
+        }
       }
       return reply;
     } on FunctionException catch (e) {
@@ -372,8 +414,13 @@ class AiClient {
       // разговора (например, при content_filter).
       final String? newSid = json['session_id'] as String?;
       if (newSid != null && newSid.isNotEmpty) {
-        _sessionIds[_sessionBucket(kind)] = newSid;
-        _persistChatSession();
+        final AiChatKind bucket = _sessionBucket(kind);
+        _sessionIds[bucket] = newSid;
+        if (bucket == AiChatKind.chat) {
+          _persistChatSession();
+        } else {
+          _persistSlotSession(newSid);
+        }
       }
 
       if (status == 402) {

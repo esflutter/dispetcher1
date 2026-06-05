@@ -33,7 +33,7 @@ class MyOrdersScreen extends StatefulWidget {
 }
 
 class _MyOrdersScreenState extends State<MyOrdersScreen>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   late final TabController _tab;
   final ScrollController _waitingScrollCtrl = ScrollController();
 
@@ -73,6 +73,7 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
   void initState() {
     super.initState();
     _tab = TabController(length: 3, vsync: this);
+    WidgetsBinding.instance.addObserver(this);
     AccountBlock.notifier.addListener(_onBlockChanged);
     MyOrdersStore.revision.addListener(_onStoreChanged);
     MyOrdersStore.onError = _onStoreError;
@@ -110,14 +111,13 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
     final String? id = pendingOrderDeepLink.value;
     if (id == null || !mounted) return;
 
-    OrderMock? order = _findInStore(id);
-    if (order == null) {
-      // Заказ ещё не в локальном кэше — попробуем подтянуть из БД.
-      // loadFromDb обновит списки и поднимет revision → setState.
-      await MyOrdersStore.loadFromDb();
-      if (!mounted) return;
-      order = _findInStore(id);
-    }
+    // Пуш мог прийти ПОСЛЕ устаревшей загрузки списка (например, исполнитель
+    // только что принял заказ — статус сменился с «ждёт подтверждения» на
+    // «принят»). ВСЕГДА тянем свежие данные из БД перед открытием детали,
+    // иначе откроется со старым статусом.
+    await MyOrdersStore.loadFromDb();
+    if (!mounted) return;
+    final OrderMock? order = _findInStore(id);
 
     if (!mounted) return;
     // Сбрасываем notifier ДО открытия экрана — иначе при возврате с
@@ -161,6 +161,7 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     AccountBlock.notifier.removeListener(_onBlockChanged);
     MyOrdersStore.revision.removeListener(_onStoreChanged);
     pendingOrderDeepLink.removeListener(_onPendingDeepLink);
@@ -171,6 +172,16 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
     _tab.dispose();
     _waitingScrollCtrl.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Возврат в приложение из фона: перезапрашиваем заказы из БД, чтобы
+    // изменения, случившиеся пока приложение было свёрнуто, подтянулись
+    // без ручного обновления.
+    if (state == AppLifecycleState.resumed) {
+      MyOrdersStore.loadFromDb();
+    }
   }
 
   /// На любые изменения в сторе перетягиваем свежие данные из БД.
@@ -186,7 +197,23 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
     // инициирует RealtimeService напрямую (loadFromDb), а не этот listener,
     // иначе loadFromDb → _bump(revision) → этот listener → loadFromDb → …
     // крутили бесконечную перезагрузку, пока экран открыт.
+    _maybeAutoSelectTab();
     setState(() {});
+  }
+
+  /// Один раз при первой подгрузке данных выбираем разумный таб по умолчанию:
+  /// если «Ожидает» пусто, а «В работе» есть активные заказы — открываем
+  /// сразу «В работе», чтобы не показывать пустой экран при наличии работы.
+  /// Дальше уважаем ручной выбор пользователя.
+  bool _didAutoSelect = false;
+  void _maybeAutoSelectTab() {
+    if (_didAutoSelect || _isEmpty) return;
+    _didAutoSelect = true;
+    if (MyOrdersStore.newOrders.isEmpty && _inWorkList.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _tab.index = 1;
+      });
+    }
   }
 
   void _onBlockChanged() {
@@ -460,6 +487,7 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
       MaterialPageRoute<void>(
         builder: (BuildContext ctx) => OrderDetailScreen(
           draft: draft,
+          orderId: o.id,
           status: o.status,
           reviewLeft: o.reviewLeft,
           executorId: o.executorId,
@@ -534,6 +562,7 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
       MaterialPageRoute<void>(
         builder: (BuildContext ctx) => OrderDetailScreen(
           draft: draft,
+          orderId: o.id,
           status: o.status,
           reviewLeft: o.reviewLeft,
           executorId: o.executorId,

@@ -422,6 +422,17 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
     _timeFrom = parseTime(draft['time_from'] as String?);
     _timeTo   = parseTime(draft['time_to']   as String?);
 
+    // Фото, прикреплённые в чате ассистента (локальные пути) — кладём в форму
+    // как обычные фото: при публикации они зальются в order-photos так же, как
+    // выбранные на форме. Лимит 8, как и в ручном выборе.
+    final aiPhotos = draft['ai_photos'];
+    if (aiPhotos is List) {
+      for (final p in aiPhotos.whereType<String>()) {
+        if (_photos.length >= 8) break;
+        if (p.trim().isNotEmpty && !_photos.contains(p)) _photos.add(p);
+      }
+    }
+
     // Работы
     final worksRaw = draft['works'];
     if (worksRaw is List && worksRaw.isNotEmpty) {
@@ -593,7 +604,15 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
       backgroundColor: Colors.transparent,
       builder: (_) => const AddressBottomSheet(),
     );
-    if (result != null && mounted) {
+    if (!mounted) return;
+    // Гасим фокус ПОСЛЕ закрытия шита адреса. Flutter восстанавливает фокус на
+    // ранее активное поле (описание) в post-frame коллбэке — то есть ПОСЛЕ
+    // синхронного unfocus(), отменяя его, и всплывает клавиатура. Поэтому
+    // гасим тоже в post-frame, чтобы перебить это восстановление.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) FocusScope.of(context).unfocus();
+    });
+    if (result != null) {
       setState(() {
         _address = result.value;
         _lat = result.lat;
@@ -721,7 +740,10 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
     // на форме, а заказ при этом уже опубликован. Откладываем pop до
     // конца текущего frame, чтобы PopScope успел перестроиться.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) Navigator.of(context).maybePop();
+      // Возвращаем true — чтобы handoff-карточка ассистента поняла, что заказ
+      // опубликован, и сделала свою кнопку неактивной (нельзя спамить
+      // одинаковый заказ повторными тапами).
+      if (mounted) Navigator.of(context).maybePop(true);
     });
   }
 
@@ -1280,12 +1302,19 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
                     onPressed: _canCreate ? _onCreateTap : null,
                   ),
                 ),
-                SizedBox(height: 8.h),
-                SecondaryButton(
-                  label: 'Заполнить автоматически',
-                  onPressed: _onAutoFillTap,
-                  height: 48.h,
-                ),
+                // «Заполнить автоматически» нужна только при РУЧНОМ создании —
+                // отправить пользователя к ассистенту, чтобы тот собрал заказ.
+                // Когда форма УЖЕ открыта из черновика ассистента (aiDraft), эта
+                // кнопка лишняя и запускала новый заказ с нуля, теряя черновик —
+                // поэтому прячем её. Поля и фото правятся прямо здесь.
+                if (widget.aiDraft == null) ...<Widget>[
+                  SizedBox(height: 8.h),
+                  SecondaryButton(
+                    label: 'Заполнить автоматически',
+                    onPressed: _onAutoFillTap,
+                    height: 48.h,
+                  ),
+                ],
               ],
             ),
           ),

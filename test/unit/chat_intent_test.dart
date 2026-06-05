@@ -86,4 +86,25 @@ void main() {
       expect(looksLikeFaqQuestion('ещё варианты'), isFalse);
     });
   });
+
+  group('looksLikeFaqInterruption (выход из пошагового создания заказа)', () {
+    test('притяжательные/локация — это ОТВЕТ слот-филлу, НЕ выходим → false', () {
+      expect(looksLikeFaqInterruption('моё местоположение'), isFalse);
+      expect(looksLikeFaqInterruption('по моему местоположению'), isFalse);
+      expect(looksLikeFaqInterruption('у меня в москве'), isFalse);
+      expect(looksLikeFaqInterruption('мой адрес ленина 5'), isFalse);
+      expect(looksLikeFaqInterruption('моя техника — автокран'), isFalse);
+    });
+
+    test('настоящий вопрос/аккаунт — выходим из сбора → true', () {
+      expect(looksLikeFaqInterruption('как отменить заказ?'), isTrue);
+      expect(looksLikeFaqInterruption('сколько стоит разместить заказ'), isTrue);
+      expect(looksLikeFaqInterruption('что такое верификация'), isTrue);
+    });
+
+    test('уточнения остаются в сборе → false', () {
+      expect(looksLikeFaqInterruption('подешевле'), isFalse);
+      expect(looksLikeFaqInterruption('экскаватор'), isFalse);
+    });
+  });
 }

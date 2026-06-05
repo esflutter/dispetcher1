@@ -10,6 +10,8 @@ import 'package:dispatcher_1/core/ai/chat_intent.dart';
 import 'package:dispatcher_1/core/ai/stt_recorder.dart';
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
+import 'package:dispatcher_1/core/theme/system_bar_style.dart';
+import 'package:dispatcher_1/core/user_location.dart';
 import 'package:dispatcher_1/core/utils/photo_source.dart';
 import 'package:dispatcher_1/features/support/widgets/chat_bubble.dart';
 import 'package:dispatcher_1/features/support/widgets/chat_input_bar.dart';
@@ -61,6 +63,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   }
 
   final List<String> _pendingImages = <String>[];
+  // Все фото, прикреплённые в этой сессии (локальные пути). При создании
+  // заказа уходят в черновик и заливаются в order-photos вместе с заказом.
+  final List<String> _orderPhotos = <String>[];
   final ScrollController _scrollController = ScrollController();
   // Контроллер поля ввода держим в экране, чтобы класть в поле распознанный
   // голос — пользователь видит текст и отправляет/правит сам.
@@ -90,6 +95,10 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // Прогреваем геопозицию заранее (best-effort, не блокирует): к моменту
+    // первого поиска координаты обычно уже готовы, и расстояние в карточках
+    // показывается сразу.
+    unawaited(UserLocation.ensure());
     _salvageOrphanPlaceholders();
     final initial = widget.initialMessage?.trim();
     if (initial == null || initial.isEmpty) {
@@ -108,6 +117,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
     if (initial == 'create_order' || initial == 'Разместить заказ') {
       _mode = AiChatKind.slotFillOrder;
+      // Чистим прошлую слот-сессию — «Новый заказ» должен начинаться с пустого
+      // черновика, а не продолжать предыдущий заказ этого же запуска.
+      AiClient.instance.startFreshSlot(AiChatKind.slotFillOrder);
       _addBotMessage('Давайте оформлю заказ. Какая техника нужна и для каких работ? Можно ответить голосом.');
       return;
     }
@@ -174,19 +186,27 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom(jump: jump));
       return;
     }
-    final pos = _scrollController.position.maxScrollExtent;
-    if (jump) {
-      _scrollController.jumpTo(pos);
-    } else {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!_scrollController.hasClients) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_scrollController.hasClients) return;
+      final pos = _scrollController.position.maxScrollExtent;
+      if (jump) {
+        _scrollController.jumpTo(pos);
+      } else {
         _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
+          pos,
           duration: const Duration(milliseconds: 250),
           curve: Curves.easeOut,
         );
+      }
+      // Высокие виджеты (handoff-карточка заказа, карточки результатов поиска)
+      // доращивают высоту списка уже ПОСЛЕ первого кадра / во время анимации —
+      // из-за этого одиночный скролл не достаёт до низа. Через короткую паузу
+      // (после анимации) доводим список до фактического низа.
+      Future<void>.delayed(const Duration(milliseconds: 320), () {
+        if (!mounted || !_scrollController.hasClients) return;
+        _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
       });
-    }
+    });
   }
 
   Future<void> _handleSend(String text) async {
@@ -199,6 +219,12 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
     setState(() {
       if (hasImages) {
+        // Копим прикреплённые фото — при создании заказа уйдут в order-photos.
+        for (final p in _pendingImages) {
+          if (_orderPhotos.length < 8 && !_orderPhotos.contains(p)) {
+            _orderPhotos.add(p);
+          }
+        }
         _messages.add(ChatMessage(
           id:   _nextId(),
           text: '',
@@ -214,12 +240,13 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     });
     _scrollToBottom();
     if (text.isEmpty) {
-      // Картинка без текста: распознавать изображения ассистент не умеет —
-      // не молчим, а подсказываем, что делать.
+      // Картинка без текста: сами изображения ассистент не читает, НО фото
+      // прикрепятся к заказу при его создании. Подсказываем, что делать дальше.
       if (hasImages) {
         _addBotMessage(
-          'Картинку получил, но читать изображения я пока не умею. '
-          'Опишите, что нужно, текстом или голосом — и я помогу.',
+          'Фото получил — сам я картинки не читаю, но прикреплю их к заказу, '
+          'когда будем его оформлять. Опишите, что нужно: техника, даты, город '
+          '(можно голосом).',
         );
       }
       return;
@@ -239,10 +266,27 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       _mode = AiChatKind.search;
     } else if (_mode == AiChatKind.search && looksLikeFaqQuestion(text)) {
       _mode = AiChatKind.chat;
-    } else if (_mode == AiChatKind.slotFillOrder && looksLikeFaqQuestion(text)) {
-      // Явный вопрос посреди пошагового создания заказа — выходим из сбора
-      // в обычный чат, иначе режим slot-fill залипал при обрыве сети.
+    } else if (_mode == AiChatKind.slotFillOrder && looksLikeFaqInterruption(text)) {
+      // Настоящий вопрос посреди пошагового создания заказа («как отменить?»,
+      // «сколько стоит подписка») — выходим из сбора в обычный чат. А вот
+      // притяжательные слова («моё местоположение», «у меня в Москве») — это
+      // ОТВЕТЫ слот-филлу, на них из режима НЕ выходим (иначе терялись черновик
+      // и геопозиция).
       _mode = AiChatKind.chat;
+    }
+
+    if (_mode == AiChatKind.search) {
+      // Поиск: ЖДЁМ геопозицию, чтобы расстояние в карточках считалось от
+      // пользователя уже с первого запроса (раньше на первом сообщении
+      // координат ещё не было — расстояние то показывалось, то нет). После
+      // первого раза ensure() возвращается мгновенно (координаты кэшируются),
+      // плюс мы прогреваем их при открытии экрана.
+      await UserLocation.ensure();
+    } else if (_mode == AiChatKind.slotFillOrder) {
+      // Создание заказа: ЖДЁМ геопозицию (если разрешит) — тогда сервер сам
+      // определит город/адрес по координатам и не будет их спрашивать. После
+      // первого раза координаты кэшируются, ожидание мгновенное.
+      await UserLocation.ensure();
     }
 
     const Duration timeout = Duration(seconds: 30);
@@ -393,6 +437,10 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       ));
     }
     if (restored.isEmpty || !mounted) return;
+    // За время загрузки истории (сеть) пользователь мог уже отправить
+    // сообщение — тогда НЕ затираем его историей, иначе оно пропадёт.
+    // Подставляем историю, только если на экране всё ещё одно приветствие.
+    if (_messages.length > 1) return;
     setState(() {
       _messages
         ..clear()
@@ -412,7 +460,20 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       return;
     }
     if ((kind == 'order_draft' || kind == 'service_draft') && reply.isDraftReady) {
-      _addBotMessage(reply.text, type: ChatMessageType.draftReady, data: reply.data);
+      Map<String, dynamic>? data = reply.data;
+      // Прикрепляем накопленные в чате фото к черновику ЗАКАЗА — форма заберёт
+      // их в _photos и зальёт в order-photos при публикации заказа.
+      if (kind == 'order_draft' && _orderPhotos.isNotEmpty && data != null) {
+        data = Map<String, dynamic>.from(data);
+        final draft =
+            Map<String, dynamic>.from((data['draft'] as Map?) ?? const <String, dynamic>{});
+        draft['ai_photos'] = List<String>.from(_orderPhotos);
+        data['draft'] = draft;
+      }
+      _addBotMessage(reply.text, type: ChatMessageType.draftReady, data: data);
+      // Фото ушли в черновик заказа — очищаем накопитель, чтобы они не
+      // прилипли к следующему заказу в этой же сессии.
+      _orderPhotos.clear();
       // Slot-fill завершён черновиком. Возвращаем режим в обычный чат, иначе
       // следующий свободный вопрос ушёл бы снова в пошаговый сбор, а не в FAQ.
       _mode = AiChatKind.chat;
@@ -605,6 +666,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       backgroundColor: AppColors.background,
       appBar: AppBar(
         backgroundColor: AppColors.background,
+        // Светлая шапка — тёмные иконки статус-бара (перебиваем светлый
+        // дефолт темы, который рассчитан на тёмные шапки).
+        systemOverlayStyle: dispatcherSystemBarStyle(),
         elevation: 0,
         scrolledUnderElevation: 0,
         centerTitle: true,
@@ -674,7 +738,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                       label: 'Разместить заказ',
                       onTap: () {
                         _mode = AiChatKind.slotFillOrder;
-                        _addBotMessage('Давайте оформлю заказ. Какая техника нужна и для каких работ? Можно ответить голосом.');
+                        _addBotMessage('Давайте оформлю заказ. Какая техника нужна, на какие даты и в каком городе? Можно голосом. При желании прикрепите фото объекта — добавлю их к заказу.');
                       },
                     ),
                     SizedBox(height: 8.h),
@@ -691,9 +755,10 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
             ),
           ChatInputBar(
             controller: _inputController,
-            // У заказчика нет верификации и работы с фото — прикрепление
-            // ничего не делало (фото уходили в никуда). Прячем кнопку.
-            showAttach: false,
+            // Фото из чата теперь прикрепляются к ЗАКАЗУ при его создании
+            // (накапливаются в _orderPhotos → уходят в черновик ai_photos →
+            // форма create_order заливает их в order-photos). Кнопку показываем.
+            showAttach: true,
             isRecording: _isRecording,
             pendingImages: _pendingImages,
             onRemovePendingImage: _removePendingImage,

@@ -490,16 +490,36 @@ class _ExecutorTile extends StatelessWidget {
 }
 
 /// Готовый черновик — кнопка «Открыть форму создания».
-class _DraftReadyHandoff extends StatelessWidget {
+///
+/// После публикации заказа кнопка становится неактивной («Заказ опубликован»),
+/// чтобы повторными тапами нельзя было насоздавать дублей одного и того же
+/// заказа. Подписи уже опубликованных черновиков держим в статическом наборе —
+/// он переживает перестроение/прокрутку списка чата.
+class _DraftReadyHandoff extends StatefulWidget {
   const _DraftReadyHandoff({required this.text, required this.data});
   final String text;
   final Map<String, dynamic> data;
 
+  static final Set<String> _publishedSigs = <String>{};
+
+  @override
+  State<_DraftReadyHandoff> createState() => _DraftReadyHandoffState();
+}
+
+class _DraftReadyHandoffState extends State<_DraftReadyHandoff> {
+  String get _sig {
+    final d = widget.data['draft'] as Map<String, dynamic>? ?? const <String, dynamic>{};
+    return '${widget.data['kind']}|${d['title']}|${d['description']}|'
+        '${d['date_from']}|${d['machinery_ids']}|${d['city']}';
+  }
+
   @override
   Widget build(BuildContext context) {
-    final kind  = data['kind']  as String? ?? '';
-    final draft = data['draft'] as Map<String, dynamic>? ?? const <String, dynamic>{};
+    final String text = widget.text;
+    final kind  = widget.data['kind']  as String? ?? '';
+    final draft = widget.data['draft'] as Map<String, dynamic>? ?? const <String, dynamic>{};
     final isOrder = kind == 'order_draft';
+    final bool published = _DraftReadyHandoff._publishedSigs.contains(_sig);
     return Align(
       alignment: Alignment.centerLeft,
       child: Container(
@@ -523,16 +543,20 @@ class _DraftReadyHandoff extends StatelessWidget {
               SizedBox(height: 12.h),
             ],
             Text(
-              isOrder ? 'Черновик заказа готов' : 'Черновик услуги готов',
+              published
+                  ? (isOrder ? 'Заказ опубликован' : 'Услуга опубликована')
+                  : (isOrder ? 'Черновик заказа готов' : 'Черновик услуги готов'),
               style: AppTextStyles.body.copyWith(
                 color: AppColors.textBlack, fontSize: 14.sp, fontWeight: FontWeight.w600,
               ),
             ),
             SizedBox(height: 4.h),
             Text(
-              isOrder
-                  ? 'Откройте форму заказа — проверьте поля и опубликуйте.'
-                  : 'Откройте форму услуги — проверьте поля и опубликуйте.',
+              published
+                  ? 'Готово. Чтобы создать ещё один — попросите ассистента собрать новый.'
+                  : (isOrder
+                      ? 'Откройте форму заказа — проверьте поля и опубликуйте.'
+                      : 'Откройте форму услуги — проверьте поля и опубликуйте.'),
               style: AppTextStyles.body.copyWith(
                 color: AppColors.textTertiary, fontSize: 13.sp,
               ),
@@ -541,38 +565,52 @@ class _DraftReadyHandoff extends StatelessWidget {
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: () {
-                  if (draft.isEmpty) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Черновик пуст — расскажите подробнее ассистенту.')),
-                    );
-                    return;
-                  }
-                  // Снимаем фокус перед уходом на форму — чтобы при возврате в
-                  // чат клавиатура не всплывала снова.
-                  FocusManager.instance.primaryFocus?.unfocus();
-                  if (isOrder) {
-                    Navigator.of(context).push(MaterialPageRoute<void>(
-                      builder: (_) => CreateOrderScreen(aiDraft: draft),
-                    ));
-                  } else {
-                    // В приложении заказчика создание услуг отсутствует —
-                    // эта ветка чисто для совместимости с серверным kind.
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Этот тип черновика недоступен в приложении заказчика')),
-                    );
-                  }
-                },
+                // Неактивна, если этот черновик уже опубликован — защита от
+                // повторного создания одного и того же заказа.
+                onPressed: published
+                    ? null
+                    : () async {
+                        if (draft.isEmpty) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Черновик пуст — расскажите подробнее ассистенту.')),
+                          );
+                          return;
+                        }
+                        // Снимаем фокус перед уходом на форму — чтобы при
+                        // возврате в чат клавиатура не всплывала снова.
+                        FocusManager.instance.primaryFocus?.unfocus();
+                        if (isOrder) {
+                          final Object? result = await Navigator.of(context).push<Object?>(
+                            MaterialPageRoute<Object?>(
+                              builder: (_) => CreateOrderScreen(aiDraft: draft),
+                            ),
+                          );
+                          // Форма вернула true только при успешной публикации —
+                          // помечаем черновик опубликованным и гасим кнопку.
+                          if (result == true && mounted) {
+                            setState(() => _DraftReadyHandoff._publishedSigs.add(_sig));
+                          }
+                        } else {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Этот тип черновика недоступен в приложении заказчика')),
+                          );
+                        }
+                      },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primary,
                   foregroundColor: Colors.white,
+                  disabledBackgroundColor: AppColors.textTertiary.withValues(alpha: 0.25),
+                  disabledForegroundColor: AppColors.textTertiary,
                   padding: EdgeInsets.symmetric(vertical: 12.h),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.r)),
                 ),
                 child: Text(
-                  isOrder ? 'Открыть форму заказа' : 'Открыть форму услуги',
+                  published
+                      ? (isOrder ? 'Заказ опубликован' : 'Услуга опубликована')
+                      : (isOrder ? 'Открыть форму заказа' : 'Открыть форму услуги'),
                   style: AppTextStyles.body.copyWith(
-                    color: Colors.white, fontSize: 15.sp, fontWeight: FontWeight.w600,
+                    color: published ? AppColors.textTertiary : Colors.white,
+                    fontSize: 15.sp, fontWeight: FontWeight.w600,
                   ),
                 ),
               ),

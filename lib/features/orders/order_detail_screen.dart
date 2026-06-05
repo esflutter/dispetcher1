@@ -11,6 +11,7 @@ import 'package:dispatcher_1/core/utils/plural.dart';
 import 'package:dispatcher_1/core/widgets/avatar_circle.dart';
 import 'package:dispatcher_1/core/widgets/clickable_address.dart';
 import 'package:dispatcher_1/core/widgets/dark_sub_app_bar.dart';
+import 'package:dispatcher_1/features/orders/orders_store.dart';
 import 'package:dispatcher_1/core/widgets/primary_button.dart';
 import 'package:dispatcher_1/features/catalog/executor_card_view_screen.dart';
 import 'package:dispatcher_1/features/catalog/widgets/catalog_search_bar.dart';
@@ -67,6 +68,7 @@ class OrderDetailScreen extends StatefulWidget {
   const OrderDetailScreen({
     super.key,
     required this.draft,
+    this.orderId,
     this.status,
     this.reviewLeft = false,
     this.onPickAnother,
@@ -84,6 +86,10 @@ class OrderDetailScreen extends StatefulWidget {
   });
 
   final OrderDraft draft;
+
+  /// DB-id заказа (для live-обновления статуса по realtime из стора). Если
+  /// null — экран статичен (например, превью до публикации).
+  final String? orderId;
 
   /// Данные исполнителя по best-мэтчу. Если `executorId` непустой —
   /// под пилюлей статуса показывается шапка с аватаром, именем,
@@ -139,6 +145,11 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
   String? _dbExecutorPhone;
   String? _dbExecutorEmail;
 
+  /// Live-статус: при realtime-изменении заказа (исполнитель принял/отклонил,
+  /// заказ завершился) обновляется из стора, перебивая исходный widget.status.
+  MyOrderStatus? _liveStatus;
+  MyOrderStatus? get _status => _liveStatus ?? widget.status;
+
   @override
   void initState() {
     super.initState();
@@ -148,6 +159,44 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
             (widget.executorPhone == null ||
                 widget.executorPhone!.trim().isEmpty);
     if (needContacts &&
+        widget.executorId != null &&
+        widget.executorId!.isNotEmpty) {
+      _loadContacts();
+    }
+    // Live-обновление ОТКРЫТОГО экрана: стор обновляется по realtime —
+    // переискиваем свой заказ и обновляем статус на месте.
+    if (widget.orderId != null) {
+      MyOrdersStore.revision.addListener(_onStoreRevision);
+    }
+  }
+
+  @override
+  void dispose() {
+    MyOrdersStore.revision.removeListener(_onStoreRevision);
+    super.dispose();
+  }
+
+  /// Realtime поднял revision стора — ищем свой заказ и, если статус сменился,
+  /// обновляем экран и догружаем контакты (на случай перехода в «принят»).
+  void _onStoreRevision() {
+    final String? id = widget.orderId;
+    if (id == null || !mounted) return;
+    OrderMock? found;
+    for (final List<OrderMock> bucket in <List<OrderMock>>[
+      MyOrdersStore.newOrders, MyOrdersStore.accepted, MyOrdersStore.inWork,
+      MyOrdersStore.archive, MyOrdersStore.rejected,
+    ]) {
+      for (final OrderMock o in bucket) {
+        if (o.id == id) { found = o; break; }
+      }
+      if (found != null) break;
+    }
+    if (found == null) return;
+    if (found.status == _status) return;
+    setState(() => _liveStatus = found!.status);
+    if ((found.status == MyOrderStatus.accepted ||
+            found.status == MyOrderStatus.completed) &&
+        (_dbExecutorPhone == null || _dbExecutorPhone!.isEmpty) &&
         widget.executorId != null &&
         widget.executorId!.isNotEmpty) {
       _loadContacts();
@@ -185,7 +234,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
     // совпадало с прежним StatelessWidget. Это убирает шум `widget.X`
     // на каждой строке и облегчает сверку с Figma-эталоном.
     final OrderDraft draft = widget.draft;
-    final MyOrderStatus? status = widget.status;
+    final MyOrderStatus? status = _status;
     final bool reviewLeft = widget.reviewLeft;
     final String? executorId = widget.executorId;
     final String? executorName = widget.executorName;
@@ -479,7 +528,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
   /// Набор кнопок нижней панели в зависимости от статуса заказа.
   /// Пустой список означает, что нижней панели нет вообще.
   List<Widget> _buildBottomButtons(BuildContext context) {
-    final MyOrderStatus? status = widget.status;
+    final MyOrderStatus? status = _status;
     if (status == null) {
       return <Widget>[
         PrimaryButton(
