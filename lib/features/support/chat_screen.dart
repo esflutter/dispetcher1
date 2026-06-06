@@ -644,7 +644,13 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused && _isRecording) {
       SttRecorder.instance.cancel();
-      if (mounted) setState(() => _isRecording = false);
+      // Убираем пузырь «🎤 Идёт запись…» — иначе он остаётся в ленте навсегда.
+      if (mounted) {
+        setState(() {
+          _isRecording = false;
+          _messages.removeWhere((m) => m.id == _kVoiceRecId);
+        });
+      }
     }
   }
 
@@ -653,6 +659,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
     if (_isRecording) {
       SttRecorder.instance.cancel();
+      // Снимаем пузырь «🎤 Идёт запись…» из статичной ленты, иначе при
+      // следующем открытии чата он висит вечно.
+      _messages.removeWhere((m) => m.id == _kVoiceRecId);
     }
     SttRecorder.instance.onAutoStop = null;
     _scrollController.dispose();
@@ -738,6 +747,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                       label: 'Разместить заказ',
                       onTap: () {
                         _mode = AiChatKind.slotFillOrder;
+                        AiClient.instance.startFreshSlot(AiChatKind.slotFillOrder);
                         _addBotMessage('Давайте оформлю заказ. Какая техника нужна, на какие даты и в каком городе? Можно голосом. При желании прикрепите фото объекта — добавлю их к заказу.');
                       },
                     ),
