@@ -291,7 +291,14 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     // просит найти исполнителя/технику — уводим в поиск (карточки), а не в
     // FAQ-ответ. И наоборот: вопрос-FAQ в режиме поиска возвращает в чат.
     // Slot-fill (пошаговый сбор) не трогаем.
-    if (_mode == AiChatKind.chat && looksLikeCatalogSearch(text, isCustomer: true)) {
+    // Явное «создай/оформи заказ» текстом — уводим в пошаговый сбор (проверяем
+    // ДО поиска: «создай заказ на экскаватор» содержит и технику, но это
+    // создание, а не поиск). Из режима сбора этот детектор не дёргаем.
+    if ((_mode == AiChatKind.chat || _mode == AiChatKind.search) &&
+        looksLikeCreateOrder(text)) {
+      _mode = AiChatKind.slotFillOrder;
+      AiClient.instance.startFreshSlot(AiChatKind.slotFillOrder);
+    } else if (_mode == AiChatKind.chat && looksLikeCatalogSearch(text, isCustomer: true)) {
       _mode = AiChatKind.search;
     } else if (_mode == AiChatKind.search && looksLikeFaqQuestion(text)) {
       _mode = AiChatKind.chat;
@@ -318,7 +325,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       await UserLocation.ensure();
     }
 
-    const Duration timeout = Duration(seconds: 30);
+    // 50 сек — ВЫШЕ серверного (~45 сек). Если клиент сдаётся раньше сервера,
+    // юзер шлёт повтор в ту же беседу, и лимит ассистента списывается дважды.
+    const Duration timeout = Duration(seconds: 50);
     try {
       // Для обычного chat-режима используем стрим. _streamChatReply сам
       // отрисовывает ошибку в placeholder и НЕ rethrow — иначе outer-catch
@@ -328,7 +337,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           // Внешний таймаут: помечаем стрим устаревшим, чтобы подвисший await
           // for внутри больше НЕ перезаписывал этот пузырь, и мягко завершаем
           // (сохранив накопленный текст и кнопку «Перейти»).
-          _staleStreamId = _lastStreamId;
+          _staleStreamIds.add(_lastStreamId);
           _finishStreamSoftly('__last_stream__', 'Не дождался ответа. Попробуйте ещё раз.');
         });
         return;
@@ -339,7 +348,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
             return AiClient.instance.search(text);
           case AiChatKind.slotFillOrder:
             return AiClient.instance.slotFillOrder(text);
-          case AiChatKind.slotFillService:
           case AiChatKind.chat:
             return AiClient.instance.chat(text);
         }
@@ -364,9 +372,11 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   /// Стриминговый вариант chat. Все ошибки рисуются прямо в placeholder —
   /// НЕ rethrow, иначе outer-catch добавит дубликат-бабл.
   String _lastStreamId = '';
-  // id стрима, помеченного устаревшим внешним таймаутом — его await for больше
-  // не должен писать в пузырь (иначе мерцание «ошибка → кусок ответа»).
-  String _staleStreamId = '';
+  // id стримов, помеченных устаревшими внешним таймаутом — их await for больше
+  // не должен писать в пузырь (иначе мерцание «ошибка → кусок ответа»). Набор,
+  // а не одна строка: при двух подряд протухших стримах одна переменная
+  // «забывала» первый, и его поздний кусок протекал в свой пузырь поверх ошибки.
+  final Set<String> _staleStreamIds = <String>{};
   Future<void> _streamChatReply(String text) async {
     _idCounter++;
     final id = 'stream_$_idCounter';
@@ -381,8 +391,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         // Таймаут МЕЖДУ чанками: если сервер завис и перестал слать данные,
         // прерываем await for → finally внутри chatStream закроет http-клиент.
         // Раньше .timeout() стоял на внешнем Future и подписку не отменял —
-        // сокет висел до конца ответа сервера (до 45 сек).
-        const Duration(seconds: 35),
+        // сокет висел до конца ответа сервера (до 45 сек). 50 сек — выше
+        // серверного потолка, чтобы не оборвать медленный, но живой ответ.
+        const Duration(seconds: 50),
       )) {
         // Экран закрыли посреди генерации — прекращаем читать поток.
         // Выход из await for отменяет подписку, и http-клиент закрывается
@@ -390,7 +401,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         if (!mounted) return;
         // Стрим устарел (внешний таймаут уже завершил пузырь) — не пишем,
         // иначе пользователь увидел бы мерцание «ошибка → кусок ответа».
-        if (_staleStreamId == id) return;
+        if (_staleStreamIds.contains(id)) return;
         final idx = _messages.indexWhere((m) => m.id == id);
         if (idx < 0) return;
         _messages[idx] = ChatMessage(
@@ -422,7 +433,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     } on AiContentFilterError catch (e) {
       _replaceStreamMessage(id, e.message);
     } catch (_) {
-      if (_staleStreamId == id) return;
+      if (_staleStreamIds.contains(id)) return;
       _finishStreamSoftly(
         id,
         'Не удалось получить ответ. Проверьте интернет и попробуйте снова.',
@@ -586,7 +597,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     if (!granted) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: const Text('Нет доступа к микрофону.'),
+        content: const Text('Нет доступа к микрофону. Разрешите его в настройках, чтобы отправлять голосовые.'),
         action: SnackBarAction(
           label: 'Настройки',
           onPressed: () => SttRecorder.instance.openSettings(),
@@ -598,7 +609,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     if (!started) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Не удалось начать запись')),
+          const SnackBar(content: Text('Не удалось начать запись — микрофон занят или недоступен. Напишите, пожалуйста, текстом.')),
         );
       }
       return;

@@ -372,7 +372,8 @@ class CustomerOrdersService {
         timeTo: r['time_to'] as String?,
         exactDate: r['exact_date'] as bool,
         wholeDay: r['whole_day'] as bool,
-        machineryTitles: mIds
+        machineryTitles: CatalogService.instance
+            .machineryIdsInCatalogOrder(mIds)
             .map((int id) => machineryById[id] ?? '')
             .where((String t) => t.isNotEmpty)
             .toList(),
@@ -521,7 +522,8 @@ class CustomerOrdersService {
         executorReviewCount:
             (executor?['review_count_as_executor'] as int?) ?? 0,
         serviceId: service?['id'] as String?,
-        serviceMachineryTitles: machineryIds
+        serviceMachineryTitles: CatalogService.instance
+            .machineryIdsInCatalogOrder(machineryIds)
             .map((int id) => machineryById[id] ?? '')
             .where((String t) => t.isNotEmpty)
             .toList(),
@@ -804,7 +806,8 @@ class CustomerOrdersService {
         agreedPricePerHour: _toDouble(row['agreed_price_per_hour']),
         agreedPricePerDay: _toDouble(row['agreed_price_per_day']),
         agreedMinHours: row['agreed_min_hours'] as int?,
-        serviceMachineryTitles: machineryIds
+        serviceMachineryTitles: CatalogService.instance
+            .machineryIdsInCatalogOrder(machineryIds)
             .map((int id) => machineryById[id] ?? '')
             .where((String t) => t.isNotEmpty)
             .toList(),

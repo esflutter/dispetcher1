@@ -2,7 +2,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// Глобальные настройки из таблицы `public.settings`. Загружаются один
 /// раз при первом обращении и держатся в памяти. RLS пропускает чтение
-/// `key`/`value` всем authenticated, запись — service_role.
+/// до-логиновых ключей (цены, ссылки) и анониму, запись — service_role.
 class SettingsService {
   SettingsService._();
   static final SettingsService instance = SettingsService._();
@@ -11,8 +11,17 @@ class SettingsService {
 
   Map<String, dynamic>? _cache;
 
-  Future<void> _load() async {
-    if (_cache != null) return;
+  // Дедуп параллельных загрузок: несколько геттеров, дёрнутых одновременно,
+  // ждут один сетевой вызов, а не шлют каждый свой.
+  Future<void>? _inFlight;
+
+  Future<void> _load() {
+    if (_cache != null) return Future<void>.value();
+    final Future<void> f = _inFlight ??= _doLoad();
+    return f;
+  }
+
+  Future<void> _doLoad() async {
     try {
       final List<Map<String, dynamic>> rows =
           await _client.from('settings').select('key, value');
@@ -20,28 +29,55 @@ class SettingsService {
         for (final Map<String, dynamic> r in rows) r['key'] as String: r['value'],
       };
     } catch (_) {
-      _cache = const <String, dynamic>{};
+      // Кэш НЕ фиксируем пустым: офлайн-старт раньше навсегда (до перезапуска)
+      // оставлял приложение на зашитых фолбэках. Оставляем null — следующий
+      // геттер повторит запрос, когда сеть появится.
+    } finally {
+      _inFlight = null;
     }
   }
 
+  /// Снимок кэша для геттеров: после неудачной загрузки кэш остаётся null —
+  /// геттеры работают по фолбэкам, следующий вызов снова попробует сеть.
+  Map<String, dynamic> get _values => _cache ?? const <String, dynamic>{};
+
   Future<int> subscriptionMonthlyPriceRub() async {
     await _load();
-    return (_cache!['subscription.monthly_price_rub'] as num?)?.toInt() ?? 1000;
+    return (_values['subscription.monthly_price_rub'] as num?)?.toInt() ?? 490;
   }
 
   Future<int> serviceSlotPriceRub() async {
     await _load();
-    return (_cache!['service_slot.price_rub'] as num?)?.toInt() ?? 1000;
+    return (_values['service_slot.price_rub'] as num?)?.toInt() ?? 99;
   }
 
   Future<int> orderDailyLimit() async {
     await _load();
-    return (_cache!['order.daily_limit'] as num?)?.toInt() ?? 30;
+    return (_values['order.daily_limit'] as num?)?.toInt() ?? 30;
   }
 
   Future<String> termsCurrentVersion() async {
     await _load();
-    return (_cache!['terms.current_version'] as String?) ?? '1.0';
+    return (_values['terms.current_version'] as String?) ?? '1.0';
+  }
+
+  /// Ссылка на мессенджер поддержки (МАХ). Пусто — UI покажет мягкую заглушку.
+  /// Берётся из настроек, чтобы админ задал её без пересборки приложения.
+  Future<String> supportMessengerUrl() async {
+    await _load();
+    return ((_values['support.messenger_url'] as String?) ?? '').trim();
+  }
+
+  /// Ссылка на пользовательское соглашение (оферту). Пусто — не показываем.
+  Future<String> legalTermsUrl() async {
+    await _load();
+    return ((_values['legal.terms_url'] as String?) ?? '').trim();
+  }
+
+  /// Ссылка на политику конфиденциальности. Пусто — не показываем.
+  Future<String> legalPrivacyUrl() async {
+    await _load();
+    return ((_values['legal.privacy_url'] as String?) ?? '').trim();
   }
 
   /// Прогревает кэш настроек на старте приложения. Вызывается из `main()`

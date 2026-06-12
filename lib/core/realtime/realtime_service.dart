@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:dispatcher_1/features/orders/orders_store.dart' show MyOrdersStore;
@@ -29,9 +28,10 @@ class RealtimeService {
   RealtimeService._();
   static final RealtimeService instance = RealtimeService._();
 
-  /// Маяк ленты заказов (каталог). До этого его не было: лента
-  /// перетягивалась только при тапе по фильтру или возврате на экран.
-  static final ValueNotifier<int> ordersFeedBeacon = ValueNotifier<int>(0);
+  // Маяка «ленты заказов» здесь больше нет: каталог у заказчика показывает
+  // ИСПОЛНИТЕЛЕЙ и от изменений заказов/откликов не зависит, а живость
+  // «Моих заказов» обеспечивается прямыми вызовами MyOrdersStore.loadFromDb()
+  // ниже — его revision слушают все нужные экраны.
 
   RealtimeChannel? _ordersChan;
   RealtimeChannel? _matchesChan;
@@ -100,7 +100,6 @@ class RealtimeService {
   void _scheduleOrders() {
     _ordersDebounce?.cancel();
     _ordersDebounce = Timer(_debounceWindow, () {
-      ordersFeedBeacon.value = ordersFeedBeacon.value + 1;
       // loadFromDb сам бампнет revision после загрузки → экран
       // «Мои заказы» перерисуется.
       unawaited(MyOrdersStore.loadFromDb());
@@ -111,7 +110,6 @@ class RealtimeService {
     _matchesDebounce?.cancel();
     _matchesDebounce = Timer(_debounceWindow, () {
       unawaited(MyOrdersStore.loadFromDb());
-      ordersFeedBeacon.value = ordersFeedBeacon.value + 1;
     });
   }
 

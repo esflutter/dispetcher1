@@ -98,7 +98,8 @@ class _SplashScreenState extends State<SplashScreen> {
           .from('profiles')
           .select('agreement_accepted_at')
           .eq('id', session.user.id)
-          .maybeSingle();
+          .maybeSingle()
+          .timeout(const Duration(seconds: 8));
       // Профиль может ещё не существовать (триггер создания строки в
       // `profiles` отрабатывает асинхронно после первой авторизации) —
       // тогда тоже считаем регистрацию незавершённой.

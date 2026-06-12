@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:convert';
 
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -67,8 +68,14 @@ class PushHandler {
     final RemoteNotification? n = message.notification;
     if (n == null) return;
 
+    // Стабильный id локального уведомления: при повторной доставке одного и
+    // того же пуша FCM сохраняет messageId, поэтому второй баннер ПЕРЕЗАПИШЕТ
+    // первый, а не появится дублем. message.hashCode давал каждому приходу
+    // новый id → один пуш мог показаться двумя одинаковыми баннерами.
+    final int localId =
+        message.messageId?.hashCode ?? Object.hash(n.title, n.body);
     await _local.show(
-      message.hashCode,
+      localId,
       n.title,
       n.body,
       const NotificationDetails(
@@ -113,6 +120,13 @@ class PushHandler {
 
   void _safePush(String route) {
     try {
+      // БЕЗ СЕССИИ (пуш остался в шторке после выхода / принудительного
+      // разлогина) переход внутрь приложения давал пустые экраны и ложное
+      // «не найдено» — выглядело как потеря аккаунта. Ведём на вход.
+      if (Supabase.instance.client.auth.currentSession == null) {
+        appRouter.go('/auth/phone');
+        return;
+      }
       // Корневые табы MainShell — переключаем таб, не пушим новый экран
       // вне shell (без bottomNavigationBar, с чужим back arrow).
       // Старые пуши до миграции 017 имели route='/orders' — этот фолбэк

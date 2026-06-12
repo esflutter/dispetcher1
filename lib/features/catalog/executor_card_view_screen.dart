@@ -856,20 +856,26 @@ class _ServiceItem extends StatelessWidget {
           ],
           if (hasHour || hasDay) ...<Widget>[
             SizedBox(height: 10.h),
-            Row(
-              children: <Widget>[
-                if (hasHour) ...<Widget>[
-                  Text('₽ / час', style: labelStyle),
-                  SizedBox(width: 6.w),
-                  Text(priceHour, style: valueStyle),
+            // FittedBox: две максимальные цены (по 7 цифр) впритык не
+            // влезали в плашку — при крупном системном шрифте был overflow.
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Row(
+                children: <Widget>[
+                  if (hasHour) ...<Widget>[
+                    Text('₽ / час', style: labelStyle),
+                    SizedBox(width: 6.w),
+                    Text(priceHour, style: valueStyle),
+                  ],
+                  if (hasHour && hasDay) SizedBox(width: 24.w),
+                  if (hasDay) ...<Widget>[
+                    Text('₽ / день', style: labelStyle),
+                    SizedBox(width: 6.w),
+                    Text(priceDay, style: valueStyle),
+                  ],
                 ],
-                if (hasHour && hasDay) SizedBox(width: 24.w),
-                if (hasDay) ...<Widget>[
-                  Text('₽ / день', style: labelStyle),
-                  SizedBox(width: 6.w),
-                  Text(priceDay, style: valueStyle),
-                ],
-              ],
+              ),
             ),
           ],
         ],

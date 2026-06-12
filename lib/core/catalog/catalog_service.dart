@@ -54,22 +54,50 @@ class CatalogService {
 
   /// То же для категорий.
   List<CategoryRef>? get cachedCategories => _categoryCache;
-  Map<int, String> get _machineryIdToTitle => <int, String>{
-        for (final MachineryRef m in _machineryCache ?? const <MachineryRef>[])
-          m.id: m.title,
-      };
-  Map<String, int> get _machineryTitleToId => <String, int>{
-        for (final MachineryRef m in _machineryCache ?? const <MachineryRef>[])
-          m.title: m.id,
-      };
-  Map<int, String> get _categoryIdToTitle => <int, String>{
-        for (final CategoryRef c in _categoryCache ?? const <CategoryRef>[])
-          c.id: c.title,
-      };
-  Map<String, int> get _categoryTitleToId => <String, int>{
-        for (final CategoryRef c in _categoryCache ?? const <CategoryRef>[])
-          c.title: c.id,
-      };
+  // Производные словари id↔title кэшируем: раньше каждый геттер строил Map
+  // заново на КАЖДОМ обращении, а обращение стоит внутри .map() по каждому
+  // элементу выдачи — тысячи пересборок одинаковых словарей за одну загрузку
+  // списка. Перестраиваем только когда сменился сам список-источник.
+  List<MachineryRef>? _machMapsFor;
+  Map<int, String>? _machIdToTitle;
+  Map<String, int>? _machTitleToId;
+  List<CategoryRef>? _catMapsFor;
+  Map<int, String>? _catIdToTitle;
+  Map<String, int>? _catTitleToId;
+
+  void _ensureMachMaps() {
+    if (identical(_machMapsFor, _machineryCache)) return;
+    final List<MachineryRef> list = _machineryCache ?? const <MachineryRef>[];
+    _machIdToTitle = <int, String>{for (final MachineryRef m in list) m.id: m.title};
+    _machTitleToId = <String, int>{for (final MachineryRef m in list) m.title: m.id};
+    _machMapsFor = _machineryCache;
+  }
+
+  void _ensureCatMaps() {
+    if (identical(_catMapsFor, _categoryCache)) return;
+    final List<CategoryRef> list = _categoryCache ?? const <CategoryRef>[];
+    _catIdToTitle = <int, String>{for (final CategoryRef c in list) c.id: c.title};
+    _catTitleToId = <String, int>{for (final CategoryRef c in list) c.title: c.id};
+    _catMapsFor = _categoryCache;
+  }
+
+  Map<int, String> get _machineryIdToTitle { _ensureMachMaps(); return _machIdToTitle!; }
+  Map<String, int> get _machineryTitleToId { _ensureMachMaps(); return _machTitleToId!; }
+  Map<int, String> get _categoryIdToTitle  { _ensureCatMaps();  return _catIdToTitle!; }
+  Map<String, int> get _categoryTitleToId  { _ensureCatMaps();  return _catTitleToId!; }
+
+  /// id техники в порядке справочника (порядок из админки): названия в
+  /// карточках и деталях идут единообразно, а не в том порядке, в котором
+  /// автор отмечал технику при создании. Неизвестные id — в конец.
+  List<int> machineryIdsInCatalogOrder(Iterable<int> ids) {
+    final List<MachineryRef> cat = _machineryCache ?? const <MachineryRef>[];
+    final Map<int, int> pos = <int, int>{
+      for (int i = 0; i < cat.length; i++) cat[i].id: i,
+    };
+    return ids.toList()
+      ..sort((int a, int b) =>
+          (pos[a] ?? 1 << 20).compareTo(pos[b] ?? 1 << 20));
+  }
 
   Future<List<MachineryRef>> listActiveMachinery() async {
     if (_machineryCache != null) return _machineryCache!;
@@ -106,86 +134,10 @@ class CatalogService {
   /// категорий из памяти с первого кадра.
   Future<void> warmup() => _primeDirectories();
 
-  // ---------------------------------------------------------------
-  // Лента заказов
-  // ---------------------------------------------------------------
-
-  Future<List<OrderListItem>> listPublishedOrders({
-    Set<String> machineryTitles = const <String>{},
-    Set<String> categoryTitles = const <String>{},
-    String? search,
-    DateTime? dateFrom,
-    DateTime? dateTo,
-    String? addressContains,
-    String? timeFrom,
-    String? timeTo,
-    bool? wholeDay,
-    int limit = 200,
-  }) async {
-    await _primeDirectories();
-
-    final List<int> machineryIds = machineryTitles
-        .map((String t) => _machineryTitleToId[t])
-        .whereType<int>()
-        .toList();
-    final List<int> categoryIds = categoryTitles
-        .map((String t) => _categoryTitleToId[t])
-        .whereType<int>()
-        .toList();
-
-    // Собираем фильтр в PostgrestFilterBuilder (до .order/.limit), чтобы
-    // можно было последовательно навешивать условия.
-    PostgrestFilterBuilder<List<Map<String, dynamic>>> q = _client
-        .from('orders')
-        .select(
-          'id, display_number, title, address, date_from, date_to, '
-          'time_from, time_to, exact_date, whole_day, machinery_ids, '
-          'published_at, '
-          'customer:profiles!orders_customer_id_fkey('
-          'id, name, avatar_url, rating_as_customer, review_count_as_customer)',
-        )
-        .eq('status', 'published');
-
-    if (machineryIds.isNotEmpty) {
-      q = q.overlaps('machinery_ids', machineryIds);
-    }
-    if (categoryIds.isNotEmpty) {
-      q = q.overlaps('category_ids', categoryIds);
-    }
-
-    final String? s = search?.trim();
-    if (s != null && s.isNotEmpty) {
-      // Запятая ломает or-синтаксис; `%`/`_` — wildcard-метасимволы LIKE,
-      // юзер ищущий «50%» иначе получит совпадения по любым «50…».
-      final String esc = _escapeLike(s).replaceAll(',', ' ');
-      q = q.or('title.ilike.%$esc%,address.ilike.%$esc%');
-    }
-    if (dateFrom != null) {
-      q = q.gte('date_from', _isoDate(dateFrom));
-    }
-    if (dateTo != null) {
-      // Заказ начинается не позже выбранной верхней даты диапазона.
-      q = q.lte('date_from', _isoDate(dateTo));
-    }
-    if (addressContains != null && addressContains.trim().isNotEmpty) {
-      final String esc =
-          _escapeLike(addressContains.trim()).replaceAll(',', ' ');
-      q = q.ilike('address', '%$esc%');
-    }
-    if (wholeDay == true) {
-      q = q.eq('whole_day', true);
-    }
-    if (timeFrom != null && timeFrom.isNotEmpty) {
-      q = q.gte('time_from', '$timeFrom:00');
-    }
-    if (timeTo != null && timeTo.isNotEmpty) {
-      q = q.lte('time_to', '$timeTo:00');
-    }
-
-    final List<Map<String, dynamic>> rows =
-        await q.order('published_at', ascending: false).limit(limit);
-    return rows.map(_orderListItemFromRow).toList();
-  }
+  // Заказчик чужие заказы не листает — «исполнительские» методы ленты и
+  // деталей чужого заказа (listPublishedOrders / getOrderDetail) были мёртвым
+  // наследием копии из приложения исполнителя и удалены. Хелперы ниже живые:
+  // ими пользуются listCustomerOrders и график занятости.
 
   String _isoDate(DateTime d) =>
       '${d.year.toString().padLeft(4, '0')}-'
@@ -194,7 +146,7 @@ class CatalogService {
 
   OrderListItem _orderListItemFromRow(Map<String, dynamic> r) {
     final List<int> machineryIds = List<int>.from(r['machinery_ids'] as List);
-    final List<String> titles = machineryIds
+    final List<String> titles = machineryIdsInCatalogOrder(machineryIds)
         .map((int id) => _machineryIdToTitle[id] ?? '')
         .where((String t) => t.isNotEmpty)
         .toList();
@@ -227,78 +179,6 @@ class CatalogService {
   }
 
   // ---------------------------------------------------------------
-  // Детали одного заказа
-  // ---------------------------------------------------------------
-
-  Future<OrderDetail?> getOrderDetail(String orderId) async {
-    await _primeDirectories();
-    final Map<String, dynamic>? r = await _client
-        .from('orders')
-        .select(
-          'id, display_number, title, description, address, latitude, '
-          'longitude, date_from, date_to, time_from, time_to, exact_date, '
-          'whole_day, machinery_ids, category_ids, works, photos, '
-          'published_at, '
-          'customer:profiles!orders_customer_id_fkey('
-          'id, name, avatar_url, rating_as_customer, review_count_as_customer)',
-        )
-        .eq('id', orderId)
-        .maybeSingle();
-    if (r == null) return null;
-
-    final List<int> machineryIds = List<int>.from(r['machinery_ids'] as List);
-    final List<int> categoryIds = List<int>.from(r['category_ids'] as List);
-    final List<String> machineryTitles = machineryIds
-        .map((int id) => _machineryIdToTitle[id] ?? '')
-        .where((String t) => t.isNotEmpty)
-        .toList();
-    final List<String> categoryTitles = categoryIds
-        .map((int id) => _categoryIdToTitle[id] ?? '')
-        .where((String t) => t.isNotEmpty)
-        .toList();
-
-    final List<dynamic> worksRaw = (r['works'] as List?) ?? const <dynamic>[];
-    final List<WorkItem> works = worksRaw
-        .whereType<Map<String, dynamic>>()
-        .map(WorkItem.fromJson)
-        .toList();
-
-    final dynamic customerRaw = r['customer'];
-    final CustomerSummary cust = customerRaw is Map<String, dynamic>
-        ? CustomerSummary.fromRow(customerRaw)
-        : const CustomerSummary(
-            id: '',
-            name: 'Пользователь',
-            ratingAsCustomer: 0,
-            reviewCountAsCustomer: 0,
-          );
-
-    return OrderDetail(
-      id: r['id'] as String,
-      displayNumber: r['display_number'] as int,
-      title: r['title'] as String,
-      description: r['description'] as String?,
-      address: r['address'] as String,
-      latitude: (r['latitude'] as num?)?.toDouble(),
-      longitude: (r['longitude'] as num?)?.toDouble(),
-      dateFrom: DateTime.parse(r['date_from'] as String).toLocal(),
-      dateTo: r['date_to'] == null
-          ? null
-          : DateTime.parse(r['date_to'] as String).toLocal(),
-      timeFrom: r['time_from'] as String?,
-      timeTo: r['time_to'] as String?,
-      exactDate: r['exact_date'] as bool,
-      wholeDay: r['whole_day'] as bool,
-      machineryTitles: machineryTitles,
-      categoryTitles: categoryTitles,
-      works: works,
-      photos: List<String>.from((r['photos'] as List?) ?? const <dynamic>[]),
-      publishedAt: DateTime.parse(r['published_at'] as String).toLocal(),
-      customer: cust,
-    );
-  }
-
-  // ---------------------------------------------------------------
   // Каталог исполнителей (видит заказчик)
   // ---------------------------------------------------------------
 
@@ -315,6 +195,11 @@ class CatalogService {
     double? originLng,
     int? radiusKm,
     String? addressContains,
+    // Точка отсчёта ТОЛЬКО для сортировки «ближе — выше» (адрес из фильтра
+    // без радиуса либо тихий GPS). В отличие от originLat/Lng с radiusKm,
+    // НИКОГО не отсекает — лишь влияет на порядок и заполняет distanceKm.
+    double? sortOriginLat,
+    double? sortOriginLng,
     // Цена и сортировка по цене считаются на клиенте ПОСЛЕ выборки (у карточек
     // нет колонки цены — она в услугах). Чтобы лимит не отрезал самых дешёвых
     // ещё до фильтра/сортировки, держим большой запас. Опубликованных
@@ -539,16 +424,27 @@ class CatalogService {
       final double? cardLat = (c['location_lat'] as num?)?.toDouble();
       final double? cardLng = (c['location_lng'] as num?)?.toDouble();
 
+      // Расстояние до карточки — для сортировки «ближе — выше». Точка
+      // отсчёта: адрес фильтра при активном радиусе, иначе sortOrigin
+      // (адрес без радиуса / тихий GPS). Нет точки или координат — null.
+      final double? refLat =
+          (radiusKm != null && originLat != null) ? originLat : sortOriginLat;
+      final double? refLng =
+          (radiusKm != null && originLng != null) ? originLng : sortOriginLng;
+      double? distKm;
+      if (refLat != null && refLng != null &&
+          cardLat != null && cardLng != null) {
+        distKm = haversineKm(refLat, refLng, cardLat, cardLng);
+      }
+
       // Клиентский фильтр радиуса (haversine). Без PostGIS на сервере
       // считаем расстояние от точки фильтра до адреса карточки, и
       // пропускаем только тех, кто в радиусе. Карточки без координат
       // (старые, созданы до подключения DaData) при активном фильтре
       // отсекаем — иначе они «всплывали» бы из-за пропущенной проверки.
       if (radiusKm != null && originLat != null && originLng != null) {
-        if (cardLat == null || cardLng == null) continue;
-        final double d =
-            haversineKm(originLat, originLng, cardLat, cardLng);
-        if (d > radiusKm) continue;
+        if (distKm == null) continue;
+        if (distKm > radiusKm) continue;
       }
 
       out.add(ExecutorCardListItem(
@@ -565,7 +461,7 @@ class CatalogService {
         locationLat: cardLat,
         locationLng: cardLng,
         radiusKm: c['radius_km'] as int?,
-        machineryTitles: agg.machineryIds
+        machineryTitles: machineryIdsInCatalogOrder(agg.machineryIds)
             .map((int id) => _machineryIdToTitle[id] ?? '')
             .where((String t) => t.isNotEmpty)
             .toList(),
@@ -576,9 +472,46 @@ class CatalogService {
         minPricePerHour: cardMinHour,
         minPricePerDay: cardMinDay,
         matchingServices: matching,
+        distanceKm: distKm,
       ));
     }
+    sortByProximityThenRating(out);
     return out;
+  }
+
+  /// Порядок каталога по умолчанию. До этого список наследовал порядок
+  /// запроса — `updated_at DESC` карточки, т.е. «кто позже редактировал
+  /// профиль, тот выше»: для пользователя это выглядело случайной
+  /// перетасовкой (находка тестировщицы).
+  ///
+  /// Теперь два уровня:
+  ///   1. Зона удалённости шагом 10 км (когда расстояние известно): среди
+  ///      ближних — лучшие, потом среди подальше — лучшие. Чистое «по
+  ///      километрам» ставило бы исполнителя 2,0 в километре выше отличника
+  ///      в пяти — для спецтехники это неправильный размен. Карточки без
+  ///      расстояния (нет GPS/адреса или координат карточки) — в конец.
+  ///   2. Внутри зоны: выше рейтинг → при равном рейтинге больше отзывов
+  ///      (4,6 по 50 отзывам надёжнее, чем 4,6 по одному) → имя → id
+  ///      (детерминированный хвост, чтобы порядок не прыгал между
+  ///      перерисовками).
+  ///
+  /// Выбранная в фильтре сортировка «сначала дешевле» применяется ПОВЕРХ
+  /// дальше по конвейеру (applyPriceFilterAndSort) и переопределяет это.
+  /// Статическая чистая функция — покрыта юнит-тестами.
+  static void sortByProximityThenRating(List<ExecutorCardListItem> items) {
+    int zone(ExecutorCardListItem e) =>
+        e.distanceKm == null ? 1 << 30 : (e.distanceKm! / 10).floor();
+    items.sort((ExecutorCardListItem a, ExecutorCardListItem b) {
+      final int z = zone(a).compareTo(zone(b));
+      if (z != 0) return z;
+      final int r = b.ratingAsExecutor.compareTo(a.ratingAsExecutor);
+      if (r != 0) return r;
+      final int c = b.reviewCountAsExecutor.compareTo(a.reviewCountAsExecutor);
+      if (c != 0) return c;
+      final int n = a.name.toLowerCase().compareTo(b.name.toLowerCase());
+      if (n != 0) return n;
+      return a.userId.compareTo(b.userId);
+    });
   }
 
   /// Возвращает множество `user_id`, у которых на интервале
@@ -704,7 +637,7 @@ class CatalogService {
       locationLat: (card['location_lat'] as num?)?.toDouble(),
       locationLng: (card['location_lng'] as num?)?.toDouble(),
       radiusKm: card['radius_km'] as int?,
-      machineryTitles: agg.machineryIds
+      machineryTitles: machineryIdsInCatalogOrder(agg.machineryIds)
           .map((int id) => _machineryIdToTitle[id] ?? '')
           .where((String t) => t.isNotEmpty)
           .toList(),
@@ -775,7 +708,7 @@ class CatalogService {
       id: r['id'] as String,
       title: (r['title'] as String?) ?? '',
       description: r['description'] as String?,
-      machineryTitles: mIds
+      machineryTitles: machineryIdsInCatalogOrder(mIds)
           .map((int id) => _machineryIdToTitle[id] ?? '')
           .where((String t) => t.isNotEmpty)
           .toList(),
@@ -800,7 +733,7 @@ class CatalogService {
       wholeDay: (r['whole_day'] as bool?) ?? false,
       timeFrom: _trimTime(r['time_from'] as String?),
       timeTo: _trimTime(r['time_to'] as String?),
-      machineryTitles: mIds
+      machineryTitles: machineryIdsInCatalogOrder(mIds)
           .map((int id) => _machineryIdToTitle[id] ?? '')
           .where((String t) => t.isNotEmpty)
           .toList(),

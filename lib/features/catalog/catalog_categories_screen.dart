@@ -11,6 +11,7 @@ import 'package:dispatcher_1/core/catalog/models.dart';
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_spacing.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
+import 'package:dispatcher_1/core/user_location.dart';
 import 'package:dispatcher_1/features/catalog/catalog_filter_screen.dart';
 import 'package:dispatcher_1/features/catalog/order_feed_screen.dart';
 import 'package:dispatcher_1/features/catalog/widgets/category_card.dart';
@@ -35,6 +36,9 @@ class _CatalogCategoriesScreenState extends State<CatalogCategoriesScreen> {
   void initState() {
     super.initState();
     _machineryFuture = CatalogService.instance.listActiveMachinery();
+    // Тихий прогрев GPS (без всплывашек) — чтобы поиск с этого экрана сразу
+    // сортировал «ближе — выше». Результат закэшируется в UserLocation.
+    unawaited(UserLocation.ensureQuiet());
   }
 
   final TextEditingController _searchCtrl = TextEditingController();
@@ -91,6 +95,14 @@ class _CatalogCategoriesScreenState extends State<CatalogCategoriesScreen> {
       originLng: radiusActive ? AppliedFilter.addressLng : null,
       radiusKm: radiusActive ? AppliedFilter.radiusKm : null,
       addressContains: radiusActive ? null : AppliedFilter.address,
+      // Точка отсчёта для «ближе — выше» (как в ленте): адрес из фильтра
+      // без радиуса, иначе тихий GPS (если разрешение уже выдано).
+      sortOriginLat: !radiusActive && AppliedFilter.addressLat != null
+          ? AppliedFilter.addressLat
+          : UserLocation.lat,
+      sortOriginLng: !radiusActive && AppliedFilter.addressLng != null
+          ? AppliedFilter.addressLng
+          : UserLocation.lng,
     );
     return CatalogService.applyPriceFilterAndSort(
       raw,

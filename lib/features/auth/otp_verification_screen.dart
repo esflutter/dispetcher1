@@ -99,10 +99,12 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
 
     setState(() => _verifying = true);
     try {
-      final VerifyResult result = await AuthService.instance.verify(
-        e164: e164,
-        code: _pinController.text,
-      );
+      // Таймаут: на плохой связи запрос мог висеть вечно, оставляя кнопку
+      // со спиннером без какого-либо сообщения (экран входа вне общего
+      // сетевого гуарда). 15 секунд — и честная ошибка с подсказкой.
+      final VerifyResult result = await AuthService.instance
+          .verify(e164: e164, code: _pinController.text)
+          .timeout(const Duration(seconds: 15));
       if (!mounted) return;
       if (result.needsRegistration) {
         context.go('/auth/registration');
@@ -131,6 +133,13 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
           });
         }
       });
+    } on TimeoutException {
+      if (!mounted) return;
+      _pinController.clear();
+      setState(() => _verifying = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Сервер не отвечает. Проверьте интернет и попробуйте ещё раз.')),
+      );
     } catch (_) {
       if (!mounted) return;
       // Сбрасываем введённый код, чтобы пользователь не мог повторно
@@ -140,7 +149,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
       _pinController.clear();
       setState(() => _verifying = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Не удалось проверить код. Попробуйте ещё раз.')),
+        const SnackBar(content: Text('Не удалось проверить код. Проверьте интернет и попробуйте ещё раз.')),
       );
     }
   }
@@ -284,9 +293,28 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                               });
                               final String e164 = CropResult.userPhoneE164;
                               if (e164.isNotEmpty) {
+                                // Берём messenger ДО await, чтобы не дёргать
+                                // context через async-разрыв.
+                                final ScaffoldMessengerState messenger =
+                                    ScaffoldMessenger.of(context);
                                 try {
-                                  await AuthService.instance.sendOtp(e164);
-                                } catch (_) {/* swallow — повторная отправка best-effort */}
+                                  await AuthService.instance
+                                      .sendOtp(e164)
+                                      .timeout(const Duration(seconds: 10));
+                                } catch (_) {
+                                  // Раньше сбой глотался молча, а надпись
+                                  // «Новый код отправлен» уже стояла — юзер
+                                  // ждал код, которого не будет.
+                                  if (mounted) {
+                                    setState(() => _codeResent = false);
+                                    messenger.showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                            'Не удалось отправить код. Проверьте интернет и попробуйте ещё раз.'),
+                                      ),
+                                    );
+                                  }
+                                }
                               }
                             },
                             child: RichText(

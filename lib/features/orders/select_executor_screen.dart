@@ -14,6 +14,7 @@ import 'package:dispatcher_1/features/catalog/widgets/order_card.dart';
 import 'package:dispatcher_1/features/orders/orders_store.dart';
 import 'package:dispatcher_1/features/orders/widgets/order_alerts.dart';
 import 'package:dispatcher_1/features/orders/widgets/order_status_pill.dart';
+import 'package:dispatcher_1/core/utils/friendly_error.dart';
 
 /// Экран выбора исполнителя — открывается по тапу на заказ со статусом
 /// «ожидает» с откликами. Источник откликов — таблица `order_matches`
@@ -98,8 +99,10 @@ class _SelectExecutorScreenState extends State<SelectExecutorScreen> {
       if (!mounted) return;
       setState(() => _busy = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Не удалось выбрать: ${e.message}')),
+        SnackBar(content: Text(friendlyError(e, fallback: 'Не удалось выбрать исполнителя. Попробуйте ещё раз.'))),
       );
+      // Мёртвая карточка (отклик отозван) не должна оставаться тапабельной.
+      _reload();
       return;
     } catch (_) {
       if (!mounted) return;

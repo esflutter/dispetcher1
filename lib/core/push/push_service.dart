@@ -75,7 +75,9 @@ class PushService {
     try {
       settings = await FirebaseMessaging.instance
           .requestPermission(alert: true, badge: true, sound: true)
-          .timeout(const Duration(seconds: 5));
+          // 60с: системный диалог разрешения читает ЧЕЛОВЕК — 5с обрывали
+          // future до его ответа, и токен терялся до следующего запуска.
+          .timeout(const Duration(seconds: 60));
     } catch (e) {
       if (kDebugMode) debugPrint('[push] requestPermission failed: $e');
       return;

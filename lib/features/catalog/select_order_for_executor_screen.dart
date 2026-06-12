@@ -12,6 +12,7 @@ import 'package:dispatcher_1/features/orders/create_order_screen.dart';
 import 'package:dispatcher_1/features/orders/orders_store.dart';
 
 import 'package:dispatcher_1/core/widgets/dialog_close_button.dart';
+import 'package:dispatcher_1/core/utils/friendly_error.dart';
 /// Трекер отправленных откликов по executor id. После отправки
 /// предложения исполнителю кнопка «Предложить заказ» на его карточке
 /// сменяется на «Предложение уже отправлено». Сбрасывается, когда
@@ -190,7 +191,7 @@ class _SelectOrderForExecutorScreenState
       if (!mounted) return;
       setState(() => _busy = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Не удалось предложить заказ: $e')),
+        SnackBar(content: Text(friendlyError(e, fallback: 'Не удалось предложить заказ. Попробуйте ещё раз.'))),
       );
       return;
     }

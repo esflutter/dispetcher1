@@ -7,9 +7,9 @@ import 'package:go_router/go_router.dart';
 import 'package:dispatcher_1/core/ai/ai_navigation.dart';
 import 'package:dispatcher_1/core/catalog/catalog_service.dart';
 import 'package:dispatcher_1/core/catalog/models.dart';
-import 'package:dispatcher_1/core/realtime/realtime_service.dart';
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
+import 'package:dispatcher_1/core/user_location.dart';
 import 'package:dispatcher_1/features/catalog/catalog_filter_screen.dart';
 import 'package:dispatcher_1/features/catalog/widgets/catalog_search_bar.dart';
 import 'package:dispatcher_1/features/catalog/widgets/order_card.dart';
@@ -47,26 +47,29 @@ class _OrderFeedScreenState extends State<OrderFeedScreen> {
   void initState() {
     super.initState();
     AppliedFilter.revision.addListener(_onFilterChanged);
-    // Realtime: при изменении любой записи в `orders`/`order_matches`
-    // глобальный RealtimeService бампит ordersFeedBeacon. Лента
-    // пере-фетчит, чтобы новый/изменённый/снятый заказ появлялся /
-    // исчезал «живьём», без pull-to-refresh.
-    RealtimeService.ordersFeedBeacon.addListener(_onFeedChanged);
+    // Это каталог ИСПОЛНИТЕЛЕЙ (listPublishedExecutors). На realtime-маяк
+    // заказов/откликов он не подписан: карточки исполнителей через него
+    // не меняются, и подписка лишь зря пере-фетчила список при любом
+    // изменении заказов во всей базе. Обновление идёт по фильтру/поиску.
     _future = _fetch();
+    // Тихий GPS (только если разрешение уже выдано, без всплывашек) — для
+    // сортировки «ближе — выше». Координаты пришли после первой загрузки —
+    // пересобираем список один раз уже с расстояниями.
+    if (!UserLocation.has) {
+      unawaited(UserLocation.ensureQuiet().then((_) {
+        if (mounted && UserLocation.has) {
+          setState(() => _future = _fetch());
+        }
+      }));
+    }
   }
 
   @override
   void dispose() {
     AppliedFilter.revision.removeListener(_onFilterChanged);
-    RealtimeService.ordersFeedBeacon.removeListener(_onFeedChanged);
     _debounce?.cancel();
     _searchCtrl.dispose();
     super.dispose();
-  }
-
-  void _onFeedChanged() {
-    if (!mounted) return;
-    setState(() => _future = _fetch());
   }
 
   Future<List<ExecutorCardListItem>> _fetch() {
@@ -90,6 +93,15 @@ class _OrderFeedScreenState extends State<OrderFeedScreen> {
       // фильтр по адресу хоть как-то работал. С активным радиусом
       // отбор идёт через haversine, и ilike не нужен.
       addressContains: radiusActive ? null : AppliedFilter.address,
+      // Точка отсчёта для «ближе — выше» (никого не отсекает): адрес из
+      // фильтра, если он выбран без радиуса; иначе тихий GPS. При активном
+      // радиусе сервис сам считает от адреса фильтра.
+      sortOriginLat: !radiusActive && AppliedFilter.addressLat != null
+          ? AppliedFilter.addressLat
+          : UserLocation.lat,
+      sortOriginLng: !radiusActive && AppliedFilter.addressLng != null
+          ? AppliedFilter.addressLng
+          : UserLocation.lng,
     );
   }
 

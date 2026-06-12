@@ -226,6 +226,7 @@ class ExecutorCardListItem {
     required this.minPricePerHour,
     required this.minPricePerDay,
     this.matchingServices = const <MatchingService>[],
+    this.distanceKm,
   });
 
   final String userId;
@@ -254,6 +255,11 @@ class ExecutorCardListItem {
   /// в ленте показывает «Экскаватор — 3 500 ₽/час, от 4 часов» вместо
   /// обобщённых блоков «Спецтехника / Категории услуг».
   final List<MatchingService> matchingServices;
+
+  /// Расстояние (км) от точки отсчёта заказчика (адрес из фильтра либо
+  /// тихий GPS) до адреса карточки. null — точка отсчёта неизвестна или
+  /// у карточки нет координат. Используется сортировкой «ближе — выше».
+  final double? distanceKm;
 }
 
 /// Услуга исполнителя для блока «Услуги» в его карточке. Полные поля

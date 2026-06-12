@@ -8,11 +8,14 @@ import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'app.dart';
+import 'core/analytics/app_analytics.dart';
 import 'core/catalog/catalog_service.dart';
 import 'core/config/env.dart';
 import 'core/push/push_handler.dart';
 import 'core/push/push_service.dart';
+import 'core/auth/auth_reset.dart';
 import 'core/realtime/realtime_service.dart';
+import 'core/router.dart';
 import 'core/settings/settings_service.dart';
 import 'core/theme/system_bar_style.dart';
 import 'features/support/chat_screen.dart';
@@ -65,6 +68,9 @@ Future<void> main() async {
     await PushHandler.instance.initialize();
     PushService.instance.initTokenRefreshListener();
     firebaseReady = true;
+    // Аналитика включается только при живом Firebase: на устройствах
+    // без сервисов Google все её вызовы остаются no-op.
+    AppAnalytics.enable();
   } catch (e) {
     if (kDebugMode) debugPrint('[main] Firebase init failed: $e');
   }
@@ -99,8 +105,32 @@ Future<void> main() async {
         .listen((AuthState event) async {
       if (event.event == AuthChangeEvent.signedOut) {
         await RealtimeService.instance.stop();
+        // Принудительный разлогин (токен истёк/отозван, аккаунт удалён с
+        // другого устройства): уводим на экран входа с пояснением. Раньше
+        // пользователь оставался на текущем экране, который молча пустел.
+        // Ручной «Выйти» тоже проходит здесь — он и так ведёт на /auth/phone,
+        // повторный go на тот же маршрут безвреден.
+        final String loc =
+            appRouter.routerDelegate.currentConfiguration.uri.toString();
+        if (!loc.startsWith('/auth') && !loc.startsWith('/onboarding') && loc != '/') {
+          appRouter.go('/auth/phone');
+          final BuildContext? ctx =
+              appRouter.routerDelegate.navigatorKey.currentContext;
+          if (ctx != null && ctx.mounted) {
+            ScaffoldMessenger.of(ctx).showSnackBar(
+              const SnackBar(
+                content: Text('Сессия завершена — войдите заново.'),
+              ),
+            );
+          }
+        }
+
         // Чистим переписку ассистента — иначе следующий юзер увидит чужие сообщения.
         ChatScreen.resetHistory();
+        // ПОЛНЫЙ сброс статических сторов (профиль, заказы, услуги, фильтры,
+        // верификация/подписка): раньше при принудительном разлогине они
+        // переживали смену пользователя — юзер Б видел данные юзера А.
+        clearAllLocalState();
         // Push-токен инвалидируется в signOut()/deleteAccount() ДО закрытия
         // сессии (пока запрос к БД ещё авторизован). Здесь, после signedOut,
         // сессия уже мертва и RLS отклонил бы update — поэтому не дублируем.
@@ -115,6 +145,14 @@ Future<void> main() async {
       unawaited(PushService.instance.registerForCurrentUser());
     }
   }
+
+  // Просмотры экранов для аналитики: роутер уведомляет о каждой смене
+  // маршрута (включая переключение вкладок и переход с пуша).
+  appRouter.routerDelegate.addListener(() {
+    AppAnalytics.screen(
+      appRouter.routerDelegate.currentConfiguration.uri.toString(),
+    );
+  });
 
   runApp(const DispatcherApp());
 }

@@ -16,11 +16,30 @@ import 'package:dispatcher_1/features/orders/select_executor_screen.dart';
 import 'package:dispatcher_1/features/orders/widgets/my_order_card.dart';
 import 'package:dispatcher_1/features/orders/widgets/order_status_pill.dart';
 import 'package:dispatcher_1/features/profile/account_block.dart';
+import 'package:dispatcher_1/core/utils/friendly_error.dart';
 
 /// Экран «Мои заказы» — три вкладки «На рассмотрении / Принятые / Архив».
 /// Когда всех списков пусто — показываем заглушку «Здесь появятся ваши заказы».
 class MyOrdersScreen extends StatefulWidget {
   const MyOrdersScreen({super.key, this.onGoToCatalog, this.isBlocked = false});
+
+  /// Пояснение, почему создание заказов недоступно при блокировке.
+  /// Раньше кнопки просто гасли без объяснений — заказчик недоумевал
+  /// (находка тестировщицы). Текст согласован с плашкой в профиле.
+  static void showBlockedNote(BuildContext context) {
+    final DateTime? until = AccountBlock.blockedUntil;
+    // Вечная блокировка от администратора кодируется датой в далёком
+    // будущем — показывать «до 2090 года» бессмысленно.
+    final bool forever = until != null && until.year >= 2090;
+    final String text = forever
+        ? 'Создание заказов недоступно: профиль заблокирован. '
+            'Если это ошибка — напишите в поддержку (раздел «Профиль»).'
+        : 'Создание заказов недоступно: ваш рейтинг ниже 2 звёзд, доступ '
+            'временно ограничен ${AccountBlock.blockedUntilText ?? 'на 30 дней'}';
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(text)));
+  }
 
   /// Колбэк переключения нижнего таба на «Каталог».
   /// Передаётся из MainShell, потому что мы уже находимся внутри /shell —
@@ -155,7 +174,7 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
   void _onStoreError(Object e) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Сервер не принял изменение: $e')),
+      SnackBar(content: Text(friendlyError(e, fallback: 'Не удалось применить изменение. Попробуйте ещё раз.'))),
     );
   }
 
@@ -257,8 +276,10 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
           // плюсиком в шапке избыточно.
           if (!_isEmpty) ...<Widget>[
             IconButton(
+              // При блокировке кнопка не мёртвая, а объясняет причину —
+              // молча некликабельный плюс оставлял заказчика в недоумении.
               onPressed: _blocked
-                  ? null
+                  ? () => MyOrdersScreen.showBlockedNote(context)
                   : () async {
                       final int before = MyOrdersStore.newOrders.length;
                       await DailyOrderLimit.openCreateOrAlert(context);
@@ -735,12 +756,20 @@ class _EmptyOrders extends StatelessWidget {
             textAlign: TextAlign.center,
           ),
           SizedBox(height: 26.h),
-          PrimaryButton(
-            label: 'Создать заказ',
-            enabled: !blocked,
-            onPressed: blocked
-                ? null
-                : () => DailyOrderLimit.openCreateOrAlert(context),
+          // При блокировке кнопка выглядит выключенной (как раньше), но тап
+          // по ней не игнорируется, а объясняет причину — иначе заказчик
+          // не понимал, почему «Создать заказ» не работает.
+          GestureDetector(
+            onTap: blocked
+                ? () => MyOrdersScreen.showBlockedNote(context)
+                : null,
+            child: PrimaryButton(
+              label: 'Создать заказ',
+              enabled: !blocked,
+              onPressed: blocked
+                  ? null
+                  : () => DailyOrderLimit.openCreateOrAlert(context),
+            ),
           ),
         ],
       ),

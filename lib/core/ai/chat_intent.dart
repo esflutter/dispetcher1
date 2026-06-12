@@ -136,6 +136,26 @@ bool looksLikeCatalogSearch(String raw, {required bool isCustomer}) {
   return false;
 }
 
+/// Явное намерение СОЗДАТЬ заказ текстом («создай заказ на экскаватор», «оформи
+/// заявку», «хочу разместить заказ») — чтобы из обычного чата увести в пошаговый
+/// сбор (slot-fill), а не в FAQ-инструкцию или поиск. Проверяется ДО поиска.
+/// «Как создать заказ?» — это FAQ (вопрос-инструкция), его НЕ перехватываем.
+bool looksLikeCreateOrder(String raw) {
+  final String t = ' ${raw.toLowerCase().trim()} ';
+  if (_faqHowto.hasMatch(t)) return false;
+  final bool createVerb = RegExp(
+    r'(созда[й]|создат|оформ|размест|опубликов|выложи|выклад|заведи|завест|сформиру)')
+      .hasMatch(t);
+  final bool orderObject = RegExp(r'(заказ|заявк)').hasMatch(t);
+  if (createVerb && orderObject) return true;
+  // «хочу/нужно создать/оформить заказ» — тот же интент без названной техники.
+  if (RegExp(r'(хочу|хочется|нужно|надо|хотел[аи]?\s+бы)\s+\S*\s*'
+      r'(созда|оформ|размест|опубликов)').hasMatch(t)) {
+    return true;
+  }
+  return false;
+}
+
 /// Похоже ли сообщение на FAQ/вопрос про аккаунт — чтобы в режиме поиска
 /// вернуться в обычный чат. Уточнения поиска (подешевле/поближе/…) сюда не
 /// попадают и остаются в поиске.

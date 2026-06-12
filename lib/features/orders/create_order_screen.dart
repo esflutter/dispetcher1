@@ -6,6 +6,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'package:dispatcher_1/core/analytics/app_analytics.dart';
 import 'package:dispatcher_1/core/catalog/catalog_service.dart';
 import 'package:dispatcher_1/core/catalog/models.dart' as cat;
 import 'package:dispatcher_1/core/customer_orders/customer_orders_service.dart';
@@ -23,6 +24,7 @@ import 'package:dispatcher_1/features/orders/widgets/order_status_pill.dart';
 import 'package:dispatcher_1/features/support/chat_screen.dart';
 
 import 'package:dispatcher_1/core/widgets/dialog_close_button.dart';
+import 'package:dispatcher_1/core/utils/friendly_error.dart';
 /// Антиспам-лимит: не более [maxPerDay] заказов в сутки на пользователя.
 /// Значение лимита читается один раз из `public.settings`
 /// (`order.daily_limit`) и кэшируется. Счётчик сбрасывается автоматически
@@ -406,6 +408,14 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
     }
     _dateFrom = parseSmartDate(draft['date_from'] as String?);
     _dateTo   = parseSmartDate(draft['date_to']   as String?);
+    // Ассистент мог сложить диапазон «задом наперёд» (конец раньше начала) —
+    // форма в таком виде молча блокировала «Создать» без подсказки.
+    // Разворачиваем диапазон: намерение пользователя очевидно, пусть создаёт.
+    if (_dateFrom != null && _dateTo != null && _dateTo!.isBefore(_dateFrom!)) {
+      final DateTime tmp = _dateFrom!;
+      _dateFrom = _dateTo;
+      _dateTo = tmp;
+    }
     _exactDate = (draft['exact_date'] as bool?) ?? (_dateTo == null);
     _wholeDay  = (draft['whole_day']  as bool?) ?? false;
 
@@ -709,12 +719,13 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
       if (!mounted) return;
       setState(() => _creating = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Не удалось опубликовать: $e')),
+        SnackBar(content: Text(friendlyError(e, fallback: 'Не удалось опубликовать заказ. Попробуйте ещё раз.'))),
       );
       return;
     }
 
     DailyOrderLimit.increment();
+    AppAnalytics.log('order_created');
     // MyOrdersStore — локальный кэш UI. Используем DB-id, чтобы при
     // следующем `loadFromDb` запись из БД совпала с локальной по id и
     // мы не получили заказ-дубль в списке «Мои заказы».
