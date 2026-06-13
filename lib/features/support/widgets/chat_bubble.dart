@@ -100,6 +100,8 @@ class ChatBubble extends StatelessWidget {
                             width: 88.r,
                             height: 88.r,
                             fit: BoxFit.cover,
+                            // Декод в размер виджета, не полные 2560px (память).
+                            cacheWidth: 264,
                             errorBuilder: (_, _, _) => Container(
                               width: 88.r,
                               height: 88.r,

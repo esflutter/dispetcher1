@@ -1508,6 +1508,9 @@ class _PhotosGrid extends StatelessWidget {
                         width: 72.r,
                         height: 72.r,
                         fit: BoxFit.cover,
+                        // Декод в размер виджета, не полные 2560px (память):
+                        // у исполнителя такое же превью уже с cacheWidth.
+                        cacheWidth: 216,
                       ),
               ),
               Positioned(

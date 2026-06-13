@@ -197,7 +197,9 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                   children: [
                     SizedBox(height: 16.h),
                     Text(
-                      'Верификация',
+                      // Не «Верификация»: канцелярит. Заголовок продолжает
+                      // прошлый экран: «Введите номер телефона» → «Введите код».
+                      'Введите код',
                       style: AppTextStyles.h1Phone.copyWith(color: AppColors.textBlack),
                     ),
                     SizedBox(height: 16.h),
@@ -301,17 +303,20 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                                   await AuthService.instance
                                       .sendOtp(e164)
                                       .timeout(const Duration(seconds: 10));
-                                } catch (_) {
-                                  // Раньше сбой глотался молча, а надпись
-                                  // «Новый код отправлен» уже стояла — юзер
-                                  // ждал код, которого не будет.
+                                } catch (e) {
+                                  // Сбой отправки: снимаем кулдаун и надпись
+                                  // (иначе ложный отсчёт на экране) и
+                                  // показываем КОНКРЕТНУЮ причину — лимит
+                                  // устройства, часовой лимит номера, нет
+                                  // сети — вместо общего «проверьте интернет».
                                   if (mounted) {
-                                    setState(() => _codeResent = false);
+                                    _timer?.cancel();
+                                    setState(() {
+                                      _codeResent = false;
+                                      _secondsLeft = 0;
+                                    });
                                     messenger.showSnackBar(
-                                      const SnackBar(
-                                        content: Text(
-                                            'Не удалось отправить код. Проверьте интернет и попробуйте ещё раз.'),
-                                      ),
+                                      SnackBar(content: Text(authErrorToRu(e))),
                                     );
                                   }
                                 }
