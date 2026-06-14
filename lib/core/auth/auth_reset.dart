@@ -1,7 +1,9 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:dispatcher_1/core/push/push_service.dart';
+import 'package:dispatcher_1/core/push/pending_deep_link.dart';
 import 'package:dispatcher_1/core/realtime/realtime_service.dart';
+import 'package:dispatcher_1/core/user_location.dart';
 import 'package:dispatcher_1/core/utils/photo_source.dart' show clearSignedUrlCache;
 import 'package:dispatcher_1/features/auth/photo_crop_screen.dart';
 import 'package:dispatcher_1/features/catalog/catalog_filter_screen.dart';
@@ -89,8 +91,17 @@ void _clearAll() {
   // черновик, увидел бы кнопку заблокированной с текстом «Заказ опубликован».
   PublishedDraftRegistry.clear();
 
+  // Отложенный deep-link на заказ из пуша. Без сброса пуш, пришедший юзеру А
+  // и не открытый до выхода, увёл бы юзера Б на чужой заказ (RLS данные не
+  // отдаст — покажет «не найдено», но и этого быть не должно).
+  pendingOrderDeepLink.value = null;
+
   // Активная вкладка нижней навигации.
   MainShell.selectedTab.value = 0;
+
+  // Кэш геопозиции для ассистента — чтобы «рядом со мной» у следующего
+  // пользователя на устройстве не считалось от координат предыдущего.
+  UserLocation.clear();
 
   // Кэш подписанных URL приватных файлов. Без сброса следующий юзер
   // мог теоретически получить живой URL от чужой записи storage.

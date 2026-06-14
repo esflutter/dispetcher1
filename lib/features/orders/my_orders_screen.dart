@@ -126,31 +126,40 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
     }
   }
 
+  // Идёт ли уже обработка перехода по пушу. Второй пуш, пришедший за время
+  // загрузки данных по первому, иначе запустил бы обработчик параллельно и
+  // положил бы второй экран деталей поверх первого.
+  bool _deepLinkBusy = false;
+
   Future<void> _onPendingDeepLink() async {
     final String? id = pendingOrderDeepLink.value;
-    if (id == null || !mounted) return;
+    if (id == null || !mounted || _deepLinkBusy) return;
+    _deepLinkBusy = true;
+    try {
+      // Пуш мог прийти ПОСЛЕ устаревшей загрузки списка (например, исполнитель
+      // только что принял заказ — статус сменился с «ждёт подтверждения» на
+      // «принят»). ВСЕГДА тянем свежие данные из БД перед открытием детали,
+      // иначе откроется со старым статусом.
+      await MyOrdersStore.loadFromDb();
+      if (!mounted) return;
+      final OrderMock? order = _findInStore(id);
 
-    // Пуш мог прийти ПОСЛЕ устаревшей загрузки списка (например, исполнитель
-    // только что принял заказ — статус сменился с «ждёт подтверждения» на
-    // «принят»). ВСЕГДА тянем свежие данные из БД перед открытием детали,
-    // иначе откроется со старым статусом.
-    await MyOrdersStore.loadFromDb();
-    if (!mounted) return;
-    final OrderMock? order = _findInStore(id);
+      if (!mounted) return;
+      // Сбрасываем notifier ДО открытия экрана — иначе при возврате с
+      // деталей listener сработает повторно и попытается открыть снова.
+      pendingOrderDeepLink.value = null;
 
-    if (!mounted) return;
-    // Сбрасываем notifier ДО открытия экрана — иначе при возврате с
-    // деталей listener сработает повторно и попытается открыть снова.
-    pendingOrderDeepLink.value = null;
-
-    if (order != null) {
-      _openOrderDetail(context, order);
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Заказ не найден или у вас нет доступа'),
-        ),
-      );
+      if (order != null) {
+        _openOrderDetail(context, order);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Заказ не найден или у вас нет доступа'),
+          ),
+        );
+      }
+    } finally {
+      _deepLinkBusy = false;
     }
   }
 

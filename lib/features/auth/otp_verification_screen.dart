@@ -33,6 +33,9 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
   bool _hasError = false;
   bool _codeResent = false;
   bool _verifying = false;
+  // Защёлка против двойного тапа по «Отправить повторно»: без неё очень
+  // быстрый двойной тап (до перерисовки) отправил бы две платные СМС.
+  bool _resending = false;
   int _secondsLeft = 0;
   Timer? _timer;
 
@@ -283,6 +286,9 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                           )
                         : GestureDetector(
                             onTap: () async {
+                              if (_resending) return;
+                              _resending = true;
+                              try {
                               _pinController.clear();
                               setState(() {
                                 _hasError = false;
@@ -320,6 +326,9 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                                     );
                                   }
                                 }
+                              }
+                              } finally {
+                                _resending = false;
                               }
                             },
                             child: RichText(

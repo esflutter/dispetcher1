@@ -89,6 +89,9 @@ class _SelectExecutorScreenState extends State<SelectExecutorScreen> {
     } on MatchAlreadyTakenException {
       if (!mounted) return;
       setState(() => _busy = false);
+      // Заказ уже ушёл другому — перезагружаем список сразу, чтобы мёртвые
+      // карточки откликов не оставались тапабельными (не ждём realtime).
+      _reload();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('По этому заказу уже выбран другой исполнитель.'),
