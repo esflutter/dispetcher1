@@ -71,8 +71,17 @@ class _SplashScreenState extends State<SplashScreen> {
     // вместо ранее сохранённых значений показывается «—». Грузим
     // оба разом, чтобы на старте был полный профиль; ошибки
     // глотаем — экраны сами догрузят при необходимости.
+    //
+    // Таймаут на оба запроса обязателен: на «полуживой» сети (Wi-Fi есть,
+    // но реально не работает — captive-portal, открытый TCP без ответа)
+    // голый запрос висит до системного таймаута сокета (десятки секунд) и
+    // пользователь застревает на сплэше с крутящимся индикатором. По
+    // истечении таймаута TimeoutException ловится тем же catch и мы идём
+    // дальше — к проверке оферты (у неё свой таймаут) и в каталог.
     try {
-      final MyProfile? p = await ProfileService.instance.loadMine();
+      final MyProfile? p = await ProfileService.instance
+          .loadMine()
+          .timeout(const Duration(seconds: 6));
       if (p != null) {
         if (CropResult.userName.isEmpty) {
           CropResult.userName = p.name;
@@ -86,7 +95,9 @@ class _SplashScreenState extends State<SplashScreen> {
       }
     } catch (_) {/* silent */}
     try {
-      final MyPrivate? priv = await ProfileService.instance.loadMyPrivate();
+      final MyPrivate? priv = await ProfileService.instance
+          .loadMyPrivate()
+          .timeout(const Duration(seconds: 6));
       if (priv?.email != null && priv!.email!.isNotEmpty &&
           CropResult.userEmail.isEmpty) {
         CropResult.userEmail = priv.email!;

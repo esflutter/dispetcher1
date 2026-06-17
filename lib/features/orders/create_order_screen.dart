@@ -720,7 +720,7 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
       if (!mounted) return;
       setState(() => _creating = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Не удалось опубликовать: ${e.message}')),
+        SnackBar(content: Text(friendlyError(e, fallback: 'Не удалось опубликовать заказ. Попробуйте ещё раз.'))),
       );
       return;
     } catch (e) {

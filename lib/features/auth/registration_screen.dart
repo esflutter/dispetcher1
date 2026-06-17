@@ -9,6 +9,7 @@ import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:dispatcher_1/core/analytics/app_analytics.dart';
+import 'package:dispatcher_1/core/utils/friendly_error.dart';
 import 'package:dispatcher_1/core/auth/auth_service.dart';
 import 'package:dispatcher_1/core/storage/storage_service.dart';
 import 'package:dispatcher_1/core/theme/app_colors.dart';
@@ -98,7 +99,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
       if (!mounted) return;
       setState(() => _submitting = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Ошибка сохранения: ${e.message}')),
+        SnackBar(content: Text(friendlyError(e, fallback: 'Не удалось сохранить. Попробуйте ещё раз.'))),
       );
     } on AuthException catch (e) {
       if (!mounted) return;

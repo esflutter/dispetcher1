@@ -4,6 +4,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:dispatcher_1/core/theme/app_colors.dart';
+import 'package:dispatcher_1/core/utils/friendly_error.dart';
 import 'package:dispatcher_1/core/theme/system_bar_style.dart';
 import 'package:dispatcher_1/core/widgets/primary_button.dart';
 import 'package:dispatcher_1/features/orders/widgets/order_alerts.dart';
@@ -68,7 +69,7 @@ class _ReviewScreenState extends State<ReviewScreen> {
         if (!mounted) return;
         setState(() => _submitting = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Не удалось отправить отзыв: ${e.message}')),
+          SnackBar(content: Text(friendlyError(e, fallback: 'Не удалось отправить отзыв. Попробуйте ещё раз.'))),
         );
         return;
       } catch (_) {

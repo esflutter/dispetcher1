@@ -37,9 +37,6 @@ workflows:
       flutter: 3.41.7                           # как в локальной сборке
       xcode: latest
       cocoapods: default
-      ios_signing:
-        distribution_type: app_store
-        bundle_identifier: com.dispatcher1.dispatcher1
 
     scripts:
       - name: GoogleService-Info.plist из переменной
@@ -51,8 +48,20 @@ workflows:
       - name: CocoaPods
         script: |
           find . -name "Podfile" -execdir pod install \;
-      - name: Применить профили подписи
-        script: xcode-project use-profiles
+      - name: Подпись iOS — сертификат и профиль (создаём, если их ещё нет)
+        # Явная подпись вместо автоматического ios_signing (тот не создаёт
+        # профиль/сертификат для нового приложения, падал «No matching profiles»
+        # / «No valid code signing certificates»). Дистрибуционный сертификат
+        # переиспользуется тот же, что у исполнителя (один CERTIFICATE_PRIVATE_KEY
+        # на весь Apple-аккаунт) — создаётся лишь новый профиль под этот bundle id.
+        script: |
+          keychain initialize
+          app-store-connect fetch-signing-files "com.dispatcher1.dispatcher1" \
+            --type IOS_APP_STORE \
+            --certificate-key @env:CERTIFICATE_PRIVATE_KEY \
+            --create
+          keychain add-certificates
+          xcode-project use-profiles
       - name: Сборка IPA
         script: |
           flutter build ipa --release \
