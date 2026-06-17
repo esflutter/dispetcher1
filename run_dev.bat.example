@@ -10,7 +10,10 @@ rem работают с одной БД Supabase.
 
 set SUPABASE_URL=https://your-subdomain.beget.app
 set SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.xxx.yyy
+rem DaData — подсказки адресов (опц.). Mapbox заказчику не нужен (карты нет):
+set DADATA_API_KEY=
 
 flutter run ^
   --dart-define=SUPABASE_URL=%SUPABASE_URL% ^
-  --dart-define=SUPABASE_ANON_KEY=%SUPABASE_ANON_KEY%
+  --dart-define=SUPABASE_ANON_KEY=%SUPABASE_ANON_KEY% ^
+  --dart-define=DADATA_API_KEY=%DADATA_API_KEY%

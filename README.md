@@ -4,9 +4,9 @@ Flutter-приложение для заказчика биржи спецтех
 
 ## Стек
 
-- Flutter 3.10+ / Dart 3.10+
+- Flutter **3.41.7** / Dart 3.10+ (CI iOS собирается на этой версии — см. `codemagic.yaml`; локально собирать на ней же)
 - Supabase (Auth, Storage, PostgREST) — self-hosted на Beget
-- SMS-авторизация: GoTrue Send-SMS Hook → Edge Function → sms.ru
+- SMS-авторизация: GoTrue Send-SMS Hook → Edge Function → **RedSMS**
 - Адреса: DaData Suggest API
 - Навигация: go_router
 - Адаптив: flutter_screenutil (целевой Pixel 9, 1080×2424)
@@ -15,13 +15,13 @@ Flutter-приложение для заказчика биржи спецтех
 
 ## Запуск
 
-Нужны три ключа, передаются через `--dart-define`:
+Нужны ключи, передаются через `--dart-define` (Mapbox заказчику не нужен — карты у него нет):
 
-| Переменная | Где взять |
-|------------|-----------|
-| `SUPABASE_URL` | URL self-hosted Supabase, например `https://jokaynapesbem.beget.app` |
-| `SUPABASE_ANON_KEY` | Публичный anon-JWT из Supabase Studio → Settings → API |
-| `DADATA_API_KEY` | Token (не Secret!) из dadata.ru → Профиль → API-ключи |
+| Переменная | Где взять | Обязательность |
+|------------|-----------|----------------|
+| `SUPABASE_URL` | URL self-hosted Supabase, например `https://jokaynapesbem.beget.app` | обязательна |
+| `SUPABASE_ANON_KEY` | Публичный anon-JWT из Supabase Studio → Settings → API | обязательна |
+| `DADATA_API_KEY` | Token (не Secret!) из dadata.ru → Профиль → API-ключи | опциональна (без неё подсказки адресов пустые) |
 
 ### Debug-сборка
 
