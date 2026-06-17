@@ -23,6 +23,8 @@ Flutter-приложение для заказчика биржи спецтех
 | `SUPABASE_ANON_KEY` | Публичный anon-JWT из Supabase Studio → Settings → API | обязательна |
 | `DADATA_API_KEY` | Token (не Secret!) из dadata.ru → Профиль → API-ключи | опциональна (без неё подсказки адресов пустые) |
 
+> ⚠️ **Firebase-конфиги (в `.gitignore`, в репозитории их нет):** перед сборкой Android положи `google-services.json` в `android/app/` — иначе Gradle упадёт на плагине google-services («File google-services.json is missing»). Для iOS — `GoogleService-Info.plist` в `ios/Runner/`. Оба файла берутся из передаваемой папки «4. Firebase» или из консоли Firebase (проект `dispetcher-8c871`).
+
 ### Debug-сборка
 
 ```bash
