@@ -26,7 +26,10 @@ class PushHandler {
   final FlutterLocalNotificationsPlugin _local =
       FlutterLocalNotificationsPlugin();
 
-  static const String _channelId = 'default';
+  // v2: старый канал 'default' на части устройств застрял без звука (Android
+  // фиксирует настройки канала при первом создании и не даёт их менять). Новый
+  // id заставляет систему создать канал заново — с правильными звуком и важностью.
+  static const String _channelId = 'default_v2';
   static const String _channelName = 'Уведомления';
 
   bool _initialized = false;
@@ -41,11 +44,15 @@ class PushHandler {
       description: 'Основные уведомления приложения',
       importance: Importance.high,
       playSound: true,
+      enableVibration: true,
     );
-    await _local
-        .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>()
-        ?.createNotificationChannel(channel);
+    final AndroidFlutterLocalNotificationsPlugin? androidImpl =
+        _local.resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>();
+    // Удаляем старый беззвучный канал 'default' (его настройки уже не изменить),
+    // затем создаём новый — со звуком и вибрацией.
+    await androidImpl?.deleteNotificationChannel('default');
+    await androidImpl?.createNotificationChannel(channel);
 
     const AndroidInitializationSettings androidInit =
         AndroidInitializationSettings('@mipmap/ic_launcher');
