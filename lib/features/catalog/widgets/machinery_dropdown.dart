@@ -68,10 +68,11 @@ class MachineryDropdown extends StatelessWidget {
   }
 
   Future<void> _openPicker(BuildContext context) async {
-    // Сентинел для пункта «сбросить»: пустая строка отличима от любого
-    // реального вида техники (у тех названия непустые).
-    const String clearSentinel = '';
-    final String? picked = await showModalBottomSheet<String>(
+    // Результат шторки: либо «сбросить выбор» (clear: true), либо конкретный
+    // вид техники (value). Отдельные поля вместо «пустая строка как маркер» —
+    // чтобы выбор техники с любым названием нельзя было спутать со сбросом.
+    final ({bool clear, String? value})? picked =
+        await showModalBottomSheet<({bool clear, String? value})>(
       context: context,
       backgroundColor: AppColors.surface,
       shape: RoundedRectangleBorder(
@@ -101,7 +102,8 @@ class MachineryDropdown extends StatelessWidget {
                           ? Icon(Icons.check_rounded,
                               color: AppColors.primary, size: 22.r)
                           : null,
-                      onTap: () => Navigator.of(ctx).pop(clearSentinel),
+                      onTap: () =>
+                          Navigator.of(ctx).pop((clear: true, value: null)),
                     ),
                   for (final String m in items)
                     ListTile(
@@ -110,7 +112,8 @@ class MachineryDropdown extends StatelessWidget {
                           ? Icon(Icons.check_rounded,
                               color: AppColors.primary, size: 22.r)
                           : null,
-                      onTap: () => Navigator.of(ctx).pop(m),
+                      onTap: () =>
+                          Navigator.of(ctx).pop((clear: false, value: m)),
                     ),
                 ],
               ),
@@ -121,6 +124,6 @@ class MachineryDropdown extends StatelessWidget {
       ),
     );
     if (picked == null) return; // шторку закрыли свайпом — выбор не менялся
-    onChanged(picked == clearSentinel ? null : picked);
+    onChanged(picked.clear ? null : picked.value);
   }
 }

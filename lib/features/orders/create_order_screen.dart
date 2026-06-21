@@ -274,7 +274,6 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
   double? _lat;
   double? _lon;
   final List<String> _photos = <String>[];
-  final Set<String> _selCat = <String>{};
   final Set<String> _selMach = <String>{};
   final List<_WorkItem> _works = <_WorkItem>[_WorkItem()];
 
@@ -309,18 +308,16 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
     // (раньше каждая буква перестраивала всю форму ~1600 строк).
     final List<cat.MachineryRef>? mc =
         CatalogService.instance.cachedMachinery;
-    final List<cat.CategoryRef>? cc =
-        CatalogService.instance.cachedCategories;
     if (mc != null) {
       _machinery =
           mc.map((cat.MachineryRef e) => e.title).toList(growable: false);
     }
-    if (mc == null || cc == null) {
+    if (mc == null) {
       _loadDirectories();
     }
     // Применяем черновик от ИИ-ассистента (если был передан).
     if (widget.aiDraft != null) {
-      _applyAiDraft(widget.aiDraft!, mc, cc);
+      _applyAiDraft(widget.aiDraft!, mc);
     }
   }
 
@@ -330,7 +327,6 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
   void _applyAiDraft(
     Map<String, dynamic> draft,
     List<cat.MachineryRef>? mcCached,
-    List<cat.CategoryRef>? ccCached,
   ) {
     // Title / description
     final title = (draft['title'] as String? ?? '').trim();
@@ -342,27 +338,19 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
     final machIds = (draft['machinery_ids'] is List)
         ? (draft['machinery_ids'] as List).whereType<int>().toSet()
         : <int>{};
-    final catIds = (draft['category_ids'] is List)
-        ? (draft['category_ids'] as List).whereType<int>().toSet()
-        : <int>{};
 
     void mapIds() {
       final mc = mcCached ?? CatalogService.instance.cachedMachinery;
-      final cc = ccCached ?? CatalogService.instance.cachedCategories;
       if (mc != null) {
-        // Техника в заказе теперь одиночная (выпадающий список) — берём
-        // первый матч в порядке каталога, чтобы выбор в форме и
-        // сохранённый заказ совпадали.
+        // Техника в заказе одиночная (выпадающий список) — берём первый
+        // матч в порядке каталога. Категории из заказа убраны полностью:
+        // ассистентские category_ids больше не применяем, чтобы заказ не
+        // уезжал с категориями, которых заказчик не видит.
         for (final m in mc) {
           if (machIds.contains(m.id)) {
             _selMach.add(m.title);
             break;
           }
-        }
-      }
-      if (cc != null) {
-        for (final c in cc) {
-          if (catIds.contains(c.id)) _selCat.add(c.title);
         }
       }
     }
@@ -373,7 +361,7 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
     // медленной сети/холодном старте справочник не успевал, выбор техники и
     // категории не подставлялся, а кнопка «Создать» молча оставалась
     // неактивной (обязательные поля пустые). Теперь ждём фактического прогрева.
-    if (mcCached == null || ccCached == null) {
+    if (mcCached == null) {
       CatalogService.instance.warmup().then((_) {
         if (!mounted) return;
         setState(mapIds);
@@ -500,9 +488,6 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
     try {
       final List<cat.MachineryRef> m =
           await CatalogService.instance.listActiveMachinery();
-      // Прогреваем кэш категорий (нужен ИИ-черновику для id→title), но
-      // в форме их больше не показываем.
-      await CatalogService.instance.listActiveCategories();
       if (!mounted) return;
       setState(() {
         _machinery =
@@ -782,7 +767,8 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
       description: _descCtrl.text.trim().isEmpty
           ? null
           : _descCtrl.text.trim(),
-      categoryTitles: _selCat.toList(),
+      // Категории убраны из заказа полностью — всегда пусто.
+      categoryTitles: const <String>[],
       machineryTitles: _selMach.toList(),
       works: _works.where(_isWorkFilled).map((_WorkItem w) {
         // volume — свободный текст до 10 символов («22» или «10x30x5»).
@@ -844,7 +830,7 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
       rentDate: _formatRentDateTime(),
       address: _address ?? '',
       machinery: _selMach.toList(),
-      categories: _selCat.toList(),
+      categories: const <String>[],
       works: _works
           .where(_isWorkFilled)
           .map((_WorkItem w) =>
