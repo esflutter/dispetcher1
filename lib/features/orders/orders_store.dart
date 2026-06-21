@@ -190,6 +190,8 @@ class OrderMock {
     String? customerAvatarUrl,
     String? matchId,
     String? executorId,
+    double? executorRating,
+    int? executorReviewCount,
     bool clearContacts = false,
   }) {
     return OrderMock(
@@ -217,8 +219,9 @@ class OrderMock {
           : (customerAvatarUrl ?? this.customerAvatarUrl),
       matchId: clearContacts ? null : (matchId ?? this.matchId),
       executorId: clearContacts ? null : (executorId ?? this.executorId),
-      executorRating: clearContacts ? 0 : executorRating,
-      executorReviewCount: clearContacts ? 0 : executorReviewCount,
+      executorRating: clearContacts ? 0 : (executorRating ?? this.executorRating),
+      executorReviewCount:
+          clearContacts ? 0 : (executorReviewCount ?? this.executorReviewCount),
       number: number,
       description: description,
       categories: categories,
@@ -697,6 +700,8 @@ class MyOrdersStore {
     String? avatarUrl,
     String? matchId,
     String? executorId,
+    double? rating,
+    int? reviewCount,
   }) {
     final int idx = newOrders.indexWhere((OrderMock x) => x.id == o.id);
     if (idx < 0) return;
@@ -708,6 +713,11 @@ class MyOrdersStore {
       customerAvatarUrl: avatarUrl,
       matchId: matchId,
       executorId: executorId,
+      // Рейтинг ВЫБРАННОГО исполнителя (а не «лучшего» отклика, который лежал
+      // в заказе) — чтобы карточка принятого заказа сразу показала верное
+      // число, не дожидаясь следующей загрузки из БД.
+      executorRating: rating,
+      executorReviewCount: reviewCount,
     );
     newOrders.removeAt(idx);
     accepted.insert(0, moved);

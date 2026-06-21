@@ -43,6 +43,8 @@ class SelectExecutorScreen extends StatefulWidget {
     String executorName,
     String executorId,
     String? executorAvatarUrl,
+    double executorRating,
+    int executorReviewCount,
   ) onExecutorSelected;
 
   @override
@@ -133,6 +135,8 @@ class _SelectExecutorScreenState extends State<SelectExecutorScreen> {
       r.executorName,
       r.executorId,
       r.executorAvatarUrl,
+      r.executorRating,
+      r.executorReviewCount,
     );
   }
 

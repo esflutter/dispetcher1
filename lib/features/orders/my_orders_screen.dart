@@ -472,6 +472,8 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
               String name,
               String executorId,
               String? avatarUrl,
+              double executorRating,
+              int executorReviewCount,
             ) {
               // Заказчик принял откликнувшегося — БД переводит мэтч
               // в `accepted` (CustomerOrdersService.acceptResponse).
@@ -483,8 +485,16 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
                   phone: '',
                   avatarUrl: avatarUrl,
                   matchId: matchId,
-                  executorId: executorId);
-              final OrderMock updated = MyOrdersStore.newOrders.firstWhere(
+                  executorId: executorId,
+                  rating: executorRating,
+                  reviewCount: executorReviewCount);
+              // acceptResponse уже перенёс заказ из newOrders в accepted,
+              // поэтому ищем сначала там; запасной orElse собирает карточку
+              // из исходного заказа, подставляя рейтинг ВЫБРАННОГО исполнителя.
+              final OrderMock updated = <OrderMock>[
+                ...MyOrdersStore.accepted,
+                ...MyOrdersStore.newOrders,
+              ].firstWhere(
                 (OrderMock x) => x.id == o.id,
                 orElse: () => o.copyWith(
                   status: MyOrderStatus.accepted,
@@ -492,6 +502,8 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
                   customerPhone: '',
                   matchId: matchId,
                   executorId: executorId,
+                  executorRating: executorRating,
+                  executorReviewCount: executorReviewCount,
                 ),
               );
               _swapToAcceptedOrderDetail(updated);
