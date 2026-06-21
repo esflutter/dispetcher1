@@ -18,6 +18,7 @@ import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:dispatcher_1/core/ai/device_id.dart';
 import 'package:dispatcher_1/core/config/env.dart';
 import 'package:dispatcher_1/core/user_location.dart';
 
@@ -297,18 +298,21 @@ class AiClient {
   Stream<AiChatChunk> chatStream(String message) async* {
     final sb = _sb;
     final session = sb.auth.currentSession;
-    if (session == null) {
-      throw Exception('unauthorized');
-    }
+    // Гость (без сессии) общается с ассистентом по device_id и анонимному ключу —
+    // сервер применит гостевые дневные лимиты.
+    final bool guest = session == null;
+    final String bearer = guest ? Env.supabaseAnonKey : session.accessToken;
+    final String? deviceId = guest ? await DeviceId.get() : null;
     final url = '${Env.supabaseUrl}/functions/v1/ai-chat-stream';
     final req = http.Request('POST', Uri.parse(url));
     req.headers['Content-Type']  = 'application/json';
-    req.headers['Authorization'] = 'Bearer ${session.accessToken}';
+    req.headers['Authorization'] = 'Bearer $bearer';
     req.headers['apikey']        = Env.supabaseAnonKey;
     req.body = jsonEncode(<String, dynamic>{
       'message': message,
       'app':     app,
       'session_id': ?_sessionIds[AiChatKind.chat],
+      'device_id':  ?deviceId,
     });
 
     // Держим Client в переменной, чтобы закрыть его в finally — иначе
@@ -436,6 +440,9 @@ class AiClient {
     AiChatKind kind,
     String? intent,
   ) async {
+    // Гость (без сессии) — передаём device_id для гостевой квоты ассистента.
+    final String? deviceId =
+        _sb.auth.currentSession == null ? await DeviceId.get() : null;
     final body = <String, dynamic>{
       'message': message,
       'app':     app,
@@ -447,6 +454,7 @@ class AiClient {
       // геокодер), чтобы не переспрашивать. Ключи опускаются, если координат нет.
       'origin_lat': ?UserLocation.lat,
       'origin_lng': ?UserLocation.lng,
+      'device_id':  ?deviceId,
     };
 
     // supabase_flutter functions_client@2.5.0 бросает FunctionException
@@ -546,6 +554,10 @@ class AiClient {
     final Map<String, dynamic> qp = <String, dynamic>{'format': format};
     // Для сырого PCM (фолбэк без Opus) серверу нужна частота дискретизации.
     if (format == 'lpcm') qp['sample_rate'] = '16000';
+    // Гость: device_id для гостевой квоты голоса (тело занято аудио → в query).
+    if (_sb.auth.currentSession == null) {
+      qp['device_id'] = await DeviceId.get();
+    }
     try {
       final FunctionResponse res = await _sb.functions.invoke(
         'stt-yandex',

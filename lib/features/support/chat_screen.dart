@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import 'package:dispatcher_1/core/ai/ai_client.dart';
 import 'package:dispatcher_1/core/ai/chat_intent.dart';
 import 'package:dispatcher_1/core/ai/stt_recorder.dart';
+import 'package:dispatcher_1/core/auth/guest_gate.dart';
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
 import 'package:dispatcher_1/core/theme/system_bar_style.dart';
@@ -116,6 +117,20 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     }
 
     if (initial == 'create_order' || initial == 'Разместить заказ') {
+      // Гость создать заказ не может — для этого нужен аккаунт. Остаёмся в чате
+      // и зовём войти; поиск и вопросы доступны без входа.
+      if (isGuest) {
+        _mode = AiChatKind.chat;
+        _addBotMessage('Чтобы создать и разместить заказ, нужно войти в аккаунт. '
+            'Найти технику и задать вопрос можно и без входа.');
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            showGuestAuthPrompt(context,
+                message: 'Войдите, чтобы создать и разместить заказ.');
+          }
+        });
+        return;
+      }
       _mode = AiChatKind.slotFillOrder;
       // Чистим прошлую слот-сессию — «Новый заказ» должен начинаться с пустого
       // черновика, а не продолжать предыдущий заказ этого же запуска.
@@ -284,6 +299,18 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _sendToAssistant(String text) async {
+    // Гость не может создавать заказ — для этого нужен аккаунт. Перехватываем
+    // намерение «создай заказ» (и режим сбора, если в него как-то попали) до
+    // обработки и зовём войти. Поиск и FAQ работают без входа.
+    if (isGuest &&
+        (_mode == AiChatKind.slotFillOrder ||
+            ((_mode == AiChatKind.chat || _mode == AiChatKind.search) &&
+                looksLikeCreateOrder(text)))) {
+      if (_mode == AiChatKind.slotFillOrder) _mode = AiChatKind.chat;
+      await showGuestAuthPrompt(context,
+          message: 'Войдите, чтобы создать и разместить заказ.');
+      return;
+    }
     setState(() => _isProcessing = true);
     _scrollToBottom();
 
@@ -819,6 +846,12 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                     _QuickActionChip(
                       label: 'Разместить заказ',
                       onTap: () {
+                        // Гость заказ создать не может — нужен аккаунт.
+                        if (isGuest) {
+                          showGuestAuthPrompt(context,
+                              message: 'Войдите, чтобы создать и разместить заказ.');
+                          return;
+                        }
                         _mode = AiChatKind.slotFillOrder;
                         AiClient.instance.startFreshSlot(AiChatKind.slotFillOrder);
                         _addBotMessage('Давайте оформлю заказ. Какая техника нужна, на какие даты и в каком городе? Можно голосом. При желании прикрепите фото объекта — добавлю их к заказу.');
