@@ -3,11 +3,13 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 
 import 'package:dispatcher_1/core/ai/ai_navigation.dart';
 import 'package:dispatcher_1/core/auth/guest_gate.dart';
+import 'package:dispatcher_1/core/auth/phone_format.dart';
 import 'package:dispatcher_1/core/catalog/catalog_service.dart';
 import 'package:dispatcher_1/core/catalog/models.dart';
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_spacing.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
+import 'package:dispatcher_1/core/utils/phone_dial.dart';
 import 'package:dispatcher_1/core/utils/plural.dart';
 import 'package:dispatcher_1/core/widgets/avatar_circle.dart';
 import 'package:dispatcher_1/core/widgets/clickable_address.dart';
@@ -64,11 +66,18 @@ class ExecutorCardViewScreen extends StatefulWidget {
 
 class _ExecutorCardViewScreenState extends State<ExecutorCardViewScreen> {
   late Future<ExecutorCardFull?> _future;
+  // Телефон грузим один раз и только вошедшему (гостю сервер номер не отдаст).
+  // Держим в поле, а не во FutureBuilder инлайном — иначе каждый ребилд
+  // (revision-листенеры ниже) дёргал бы RPC заново.
+  Future<String?>? _phoneFuture;
 
   @override
   void initState() {
     super.initState();
     _future = CatalogService.instance.getExecutorFull(widget.executorId);
+    if (!isGuest) {
+      _phoneFuture = CatalogService.instance.getExecutorPhone(widget.executorId);
+    }
     OfferSubmissions.revision.addListener(_onRevision);
     AccountBlock.notifier.addListener(_onRevision);
     MyOrdersStore.revision.addListener(_onRevision);
@@ -300,6 +309,12 @@ class _ExecutorCardViewScreenState extends State<ExecutorCardViewScreen> {
             ratingText: _fmtRating(e.ratingAsExecutor),
           ),
           SizedBox(height: 20.h),
+          // Телефон + кнопка «позвонить». Вошедший видит номер и звонит из
+          // каталога; гость — маску и приглашение войти (в режиме выбора
+          // исполнителя из откликнувшихся контакт не нужен — он уже после мэтча).
+          if (!widget.selectMode) ...<Widget>[
+            _ContactSection(phoneFuture: _phoneFuture),
+          ],
           if (e.locationAddress != null &&
               e.locationAddress!.trim().isNotEmpty) ...<Widget>[
             const _SectionTitle('Местоположение'),
@@ -373,6 +388,97 @@ class _ExecutorCardViewScreenState extends State<ExecutorCardViewScreen> {
               ),
             ],
           ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Блок «Телефон» в карточке исполнителя.
+/// [phoneFuture] == null → гость: показываем маску и по тапу зовём войти.
+/// Иначе грузим номер (вошедший); пока грузится — маска без активной кнопки;
+/// номер пришёл — показываем его и активную кнопку звонка; номера нет — прячем.
+class _ContactSection extends StatelessWidget {
+  const _ContactSection({this.phoneFuture});
+
+  final Future<String?>? phoneFuture;
+
+  /// Маска для гостя/загрузки — реальных цифр не раскрывает.
+  static const String _masked = '+7 ••• •••-••-••';
+
+  @override
+  Widget build(BuildContext context) {
+    if (phoneFuture == null) {
+      return _row(
+        context,
+        phoneText: _masked,
+        muted: true,
+        onCall: () => showGuestAuthPrompt(
+          context,
+          message: 'Войдите, чтобы увидеть телефон и позвонить исполнителю.',
+        ),
+      );
+    }
+    return FutureBuilder<String?>(
+      future: phoneFuture,
+      builder: (BuildContext context, AsyncSnapshot<String?> snap) {
+        if (snap.connectionState == ConnectionState.waiting) {
+          return _row(context, phoneText: _masked, muted: true, onCall: null);
+        }
+        final String? phone = snap.data;
+        if (phone == null || phone.isEmpty) return const SizedBox.shrink();
+        return _row(
+          context,
+          phoneText: PhoneFormat.toPretty(phone),
+          muted: false,
+          onCall: () => dialPhone(context, phone),
+        );
+      },
+    );
+  }
+
+  Widget _row(
+    BuildContext context, {
+    required String phoneText,
+    required bool muted,
+    required VoidCallback? onCall,
+  }) {
+    return Padding(
+      padding: EdgeInsets.only(bottom: 16.h),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          const _SectionTitle('Телефон'),
+          SizedBox(height: 8.h),
+          Row(
+            children: <Widget>[
+              Expanded(
+                child: Text(
+                  phoneText,
+                  style: AppTextStyles.body.copyWith(
+                    color:
+                        muted ? AppColors.textTertiary : AppColors.textPrimary,
+                    letterSpacing: muted ? 1.5 : 0,
+                  ),
+                ),
+              ),
+              SizedBox(width: 12.w),
+              GestureDetector(
+                onTap: onCall,
+                child: Container(
+                  width: 44.r,
+                  height: 44.r,
+                  decoration: BoxDecoration(
+                    color: onCall == null
+                        ? AppColors.textTertiary
+                        : AppColors.primary,
+                    borderRadius: BorderRadius.circular(10.r),
+                  ),
+                  child: Icon(Icons.phone, color: Colors.white, size: 22.r),
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );

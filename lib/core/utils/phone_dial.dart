@@ -11,7 +11,15 @@ Future<void> dialPhone(BuildContext context, String? phone) async {
   // на пробелах/дефисах.
   final String cleaned = phone.replaceAll(RegExp(r'[^\d+]'), '');
   final Uri uri = Uri.parse('tel:$cleaned');
-  final bool ok = await launchUrl(uri);
+  // launchUrl на отказ может ВЕРНУТЬ false ИЛИ БРОСИТЬ PlatformException
+  // (например, на устройстве вообще нет звонилки). Сводим оба исхода к одному:
+  // показываем снекбар, а не оставляем кнопку «молча мёртвой».
+  bool ok = false;
+  try {
+    ok = await launchUrl(uri);
+  } catch (_) {
+    ok = false;
+  }
   if (!ok && context.mounted) {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
