@@ -578,16 +578,19 @@ class MyOrdersStore {
   /// Возвращает новый статус, чтобы вызывающий экран решил, куда
   /// навигировать (в каталог или в список откликов).
   static MyOrderStatus pickAnotherFromAwaiting(OrderMock o) {
+    final int idx = newOrders.indexWhere((OrderMock x) => x.id == o.id);
+    // Берём АКТУАЛЬНЫЙ снимок из стора: realtime мог обновить счётчик
+    // откликов, пока экран деталей открыт с застывшим параметром o.
+    final OrderMock cur = idx >= 0 ? newOrders[idx] : o;
     // В статусе awaitingExecutor respondersCount всегда учитывает САМ
     // персональный мэтч (awaiting_executor, нетерминальный), который мы
-    // сейчас и отзываем. Поэтому «есть другие отклики» — это > 1, а не > 0:
+    // сейчас и отзываем. Поэтому «есть ДРУГИЕ отклики» — это > 1, а не > 0:
     // иначе при личном предложении без органических откликов мы уводили бы
     // заказчика в пустой экран выбора вместо каталога.
-    final bool hasResponders = (o.respondersCount ?? 0) > 1;
+    final bool hasResponders = (cur.respondersCount ?? 0) > 1;
     final MyOrderStatus newStatus = hasResponders
         ? MyOrderStatus.waitingChoose
         : MyOrderStatus.waiting;
-    final int idx = newOrders.indexWhere((OrderMock x) => x.id == o.id);
     if (idx < 0) return newStatus;
     final OrderMock prev = newOrders[idx];
     // Прежнее предложение тоже надо отозвать в БД, иначе исполнитель
