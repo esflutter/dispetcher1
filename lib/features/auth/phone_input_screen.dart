@@ -113,7 +113,16 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return PopScope(
+      // Гость приходит сюда из каталога. Системная «Назад» должна вернуть
+      // его в каталог, а не закрыть приложение целиком (после входа экран
+      // всё равно заменяется через go('/shell')). Для вышедшего из аккаунта
+      // возврат в гостевой каталог тоже корректен.
+      canPop: false,
+      onPopInvokedWithResult: (bool didPop, Object? _) {
+        if (!didPop && context.mounted) context.go('/shell');
+      },
+      child: Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
         child: Column(
@@ -124,7 +133,18 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    SizedBox(height: 16.h),
+                    SizedBox(height: 8.h),
+                    // Видимая «Назад» в каталог — для гостя, зашедшего из каталога.
+                    GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () => context.go('/shell'),
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(vertical: 6.h),
+                        child: Icon(Icons.arrow_back_ios_new_rounded,
+                            size: 22.r, color: AppColors.textBlack),
+                      ),
+                    ),
+                    SizedBox(height: 8.h),
                     Text(
                       'Введите номер\nтелефона',
                       style: AppTextStyles.h1Phone.copyWith(color: AppColors.textBlack),
@@ -163,6 +183,7 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
             ),
           ],
         ),
+      ),
       ),
     );
   }

@@ -187,7 +187,14 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
       ),
     );
 
-    return Scaffold(
+    return PopScope(
+      // Системная «Назад» возвращает к вводу номера, а не закрывает
+      // приложение (гость/вышедший не должен попасть в тупик).
+      canPop: false,
+      onPopInvokedWithResult: (bool didPop, Object? _) {
+        if (!didPop && context.mounted) context.go('/auth/phone');
+      },
+      child: Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
         child: Column(
@@ -389,6 +396,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
             ),
           ],
         ),
+      ),
       ),
     );
   }

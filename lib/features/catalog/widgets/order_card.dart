@@ -164,28 +164,33 @@ class OrderCard extends StatelessWidget {
             height: 1.78,
           ),
         ),
-        SizedBox(height: 10.h),
-        Text(
-          'Категории услуг',
-          style: AppTextStyles.body.copyWith(
-            fontWeight: FontWeight.w700,
-            color: AppColors.textPrimary,
+        // «Категории услуг» показываем только если они есть: после их
+        // удаления у новых исполнителей список пуст — иначе висел бы
+        // заголовок без содержимого.
+        if (categories.isNotEmpty) ...<Widget>[
+          SizedBox(height: 10.h),
+          Text(
+            'Категории услуг',
+            style: AppTextStyles.body.copyWith(
+              fontWeight: FontWeight.w700,
+              color: AppColors.textPrimary,
+            ),
           ),
-        ),
-        SizedBox(height: 4.h),
-        Text.rich(
-          TextSpan(children: _buildSpans(categories, highlightCategories)),
-          textHeightBehavior: const TextHeightBehavior(
-            applyHeightToLastDescent: false,
+          SizedBox(height: 4.h),
+          Text.rich(
+            TextSpan(children: _buildSpans(categories, highlightCategories)),
+            textHeightBehavior: const TextHeightBehavior(
+              applyHeightToLastDescent: false,
+            ),
+            style: TextStyle(
+              fontFamily: 'Roboto',
+              fontSize: 14.sp,
+              fontWeight: FontWeight.w400,
+              color: AppColors.textPrimary,
+              height: 1.78,
+            ),
           ),
-          style: TextStyle(
-            fontFamily: 'Roboto',
-            fontSize: 14.sp,
-            fontWeight: FontWeight.w400,
-            color: AppColors.textPrimary,
-            height: 1.78,
-          ),
-        ),
+        ],
       ],
     );
   }
