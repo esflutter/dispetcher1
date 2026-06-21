@@ -9,6 +9,7 @@ import 'package:dispatcher_1/core/theme/app_text_styles.dart';
 import 'package:dispatcher_1/core/ai/ai_navigation.dart';
 import 'package:dispatcher_1/core/catalog/format.dart';
 import 'package:dispatcher_1/core/utils/photo_source.dart';
+import 'package:dispatcher_1/core/utils/plural.dart';
 import 'package:dispatcher_1/features/catalog/executor_card_view_screen.dart';
 import 'package:dispatcher_1/features/orders/create_order_screen.dart';
 
@@ -456,7 +457,8 @@ class _ExecutorTile extends StatelessWidget {
               Text(
                 [
                   '⭐ ${rating is num ? rating.toStringAsFixed(1) : rating}',
-                  if (reviews != null) '($reviews отзывов)',
+                  if (reviews != null)
+                    '($reviews ${reviewsWord((reviews as num).toInt())})',
                 ].join(' '),
                 style: AppTextStyles.body.copyWith(
                   color: AppColors.textTertiary, fontSize: 12.sp,
