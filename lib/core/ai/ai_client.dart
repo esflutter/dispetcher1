@@ -554,9 +554,11 @@ class AiClient {
     final Map<String, dynamic> qp = <String, dynamic>{'format': format};
     // Для сырого PCM (фолбэк без Opus) серверу нужна частота дискретизации.
     if (format == 'lpcm') qp['sample_rate'] = '16000';
-    // Гость: device_id для гостевой квоты голоса (тело занято аудио → в query).
+    // Гость: device_id + app для гостевой квоты голоса (тело занято аудио → в
+    // query). app=customer — сервер допускает гостя только в заказчике.
     if (_sb.auth.currentSession == null) {
       qp['device_id'] = await DeviceId.get();
+      qp['app'] = app;
     }
     try {
       final FunctionResponse res = await _sb.functions.invoke(
