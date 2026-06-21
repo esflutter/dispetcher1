@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 
 import 'package:dispatcher_1/core/ai/ai_navigation.dart';
+import 'package:dispatcher_1/core/auth/guest_gate.dart';
 import 'package:dispatcher_1/core/catalog/catalog_service.dart';
 import 'package:dispatcher_1/core/catalog/models.dart';
 import 'package:dispatcher_1/core/theme/app_colors.dart';
@@ -90,6 +91,12 @@ class _ExecutorCardViewScreenState extends State<ExecutorCardViewScreen> {
   /// заказ, который можно предлагать. Затем — экран выбора заказа,
   /// который пишет в БД через [CustomerOrdersService.proposeOrderToExecutor].
   Future<void> _onPropose(ExecutorCardListItem e) async {
+    // Гость каталог смотрит, но предложить заказ может только после входа.
+    if (isGuest) {
+      await showGuestAuthPrompt(context,
+          message: 'Войдите, чтобы предложить заказ исполнителю.');
+      return;
+    }
     if (AccountBlock.isBlocked) {
       await showBlockedProfileDialog(context);
       return;

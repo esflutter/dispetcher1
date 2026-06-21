@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 
 import 'package:dispatcher_1/core/ai/ai_navigation.dart';
+import 'package:dispatcher_1/core/auth/guest_gate.dart';
 import 'package:dispatcher_1/core/network_status.dart';
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/system_bar_style.dart';
@@ -31,10 +32,27 @@ class MainShell extends StatefulWidget {
 }
 
 class _MainShellState extends State<MainShell> {
+  // Гость (без входа) видит каталог, но «Заказы» и «Профиль» — это аккаунтные
+  // разделы: вместо контента показываем заглушку с предложением войти. Состояние
+  // гостя фиксировано на время жизни shell (после входа открывается новый shell
+  // через переход на /shell), поэтому считаем один раз.
   late final List<Widget> _screens = <Widget>[
     const CatalogCategoriesScreen(),
-    MyOrdersScreen(onGoToCatalog: () => MainShell.selectedTab.value = 0),
-    const ProfileScreen(),
+    isGuest
+        ? const GuestLockedView(
+            icon: Icons.assignment_outlined,
+            title: 'Войдите в аккаунт',
+            subtitle:
+                'Чтобы видеть свои заказы и отклики, войдите или зарегистрируйтесь.',
+          )
+        : MyOrdersScreen(onGoToCatalog: () => MainShell.selectedTab.value = 0),
+    isGuest
+        ? const GuestLockedView(
+            icon: Icons.person_outline,
+            title: 'Войдите в аккаунт',
+            subtitle: 'Чтобы открыть профиль, войдите или зарегистрируйтесь.',
+          )
+        : const ProfileScreen(),
   ];
 
   @override
@@ -54,6 +72,14 @@ class _MainShellState extends State<MainShell> {
   }
 
   void _openSupport() {
+    // Гость: ассистент пока за входом. Полноценный гостевой ассистент с
+    // дневными лимитами — отдельная задача; до неё показываем попап входа,
+    // чтобы гость не упёрся в серверную 401-ошибку чата.
+    if (isGuest) {
+      showGuestAuthPrompt(context,
+          message: 'Войдите, чтобы общаться с ассистентом.');
+      return;
+    }
     // Стартовый экран ассистента («С чего хотите начать?») показывается
     // только один раз — сразу после регистрации (см. registration_screen.dart).
     // По FAB всегда открываем чат напрямую.

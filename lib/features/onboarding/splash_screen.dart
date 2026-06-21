@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/auth/phone_format.dart';
+import '../../core/onboarding_prefs.dart';
 import '../../core/profile/profile_service.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
@@ -52,7 +53,11 @@ class _SplashScreenState extends State<SplashScreen> {
       session = null;
     }
     if (session == null) {
-      if (mounted) context.go('/onboarding');
+      // Гость: после первого онбординга пускаем сразу в каталог (просмотр без
+      // входа разрешён, см. миграцию 090). Вход требуется только на аккаунтных
+      // разделах («Заказы», «Профиль») и действиях — там покажем экран/попап.
+      final bool onbSeen = await OnboardingPrefs.seen();
+      if (mounted) context.go(onbSeen ? '/shell' : '/onboarding');
       return;
     }
     // Восстанавливаем телефон в CropResult из auth-сессии. Поле

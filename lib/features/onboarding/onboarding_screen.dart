@@ -3,6 +3,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
 import 'package:smooth_page_indicator/smooth_page_indicator.dart';
 
+import '../../core/onboarding_prefs.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../core/widgets/primary_button.dart';
@@ -61,7 +62,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         curve: Curves.easeOut,
       );
     } else {
-      context.go('/auth/phone');
+      // Конец онбординга → сразу в каталог (гостевой просмотр без входа).
+      // Запоминаем, что онбординг показан, чтобы при следующем запуске
+      // сплэш вёл гостя прямо в каталог. Вход потребуем на «Заказах»,
+      // «Профиле» и при действиях в каталоге (см. guest_gate.dart).
+      OnboardingPrefs.markSeen();
+      context.go('/shell');
     }
   }
 
