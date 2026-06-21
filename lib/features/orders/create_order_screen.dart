@@ -472,7 +472,12 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
         final String wName = (w['name'] as String? ?? '').trim();
         item.nameCtrl.text =
             wName.length > 60 ? wName.substring(0, 60) : wName;
-        item.volumeCtrl.text = w['volume']?.toString().trim() ?? '';
+        // Объём — лимит схемы orders.works 10 символов; обрезаем, как имя
+        // работы выше, иначе длинный объём из ИИ-черновика валит публикацию
+        // по CHECK с непонятным «Не удалось опубликовать».
+        final String wVol = w['volume']?.toString().trim() ?? '';
+        item.volumeCtrl.text =
+            wVol.length > 10 ? wVol.substring(0, 10) : wVol;
         final unit = (w['unit'] as String? ?? '').trim();
         if (_workUnits.contains(unit)) item.unit = unit;
         _works.add(item);

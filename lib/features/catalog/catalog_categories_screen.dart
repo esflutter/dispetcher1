@@ -244,6 +244,11 @@ class _CatalogCategoriesScreenState extends State<CatalogCategoriesScreen> {
                 rating: e.ratingAsExecutor,
                 equipment: e.machineryTitles,
                 categories: e.categoryTitles,
+                // Как в ленте: при выбранной технике показываем построчные
+                // цены по ней и оранжевую подсветку, а не общий блок.
+                matchingServices: e.matchingServices,
+                highlightEquipment: AppliedFilter.equipment,
+                highlightCategories: AppliedFilter.categories,
                 onTap: () =>
                     context.push('/catalog/executor/${e.userId}'),
               ),

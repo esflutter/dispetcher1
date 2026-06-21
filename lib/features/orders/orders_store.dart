@@ -572,14 +572,18 @@ class MyOrdersStore {
   }
 
   /// «Выбрать другого исполнителя» из статуса `awaitingExecutor`.
-  /// Если у заказа есть другие отклики (`respondersCount > 0`) —
-  /// переводим в `waitingChoose`, чтобы заказчик выбрал из списка.
-  /// Если других откликов нет — возвращаем заказ в `waiting`, чтобы
-  /// пользователь сам поискал исполнителя в каталоге.
+  /// Если у заказа есть ДРУГИЕ отклики — переводим в `waitingChoose`,
+  /// чтобы заказчик выбрал из списка. Если других нет — возвращаем заказ
+  /// в `waiting`, чтобы пользователь сам поискал исполнителя в каталоге.
   /// Возвращает новый статус, чтобы вызывающий экран решил, куда
   /// навигировать (в каталог или в список откликов).
   static MyOrderStatus pickAnotherFromAwaiting(OrderMock o) {
-    final bool hasResponders = (o.respondersCount ?? 0) > 0;
+    // В статусе awaitingExecutor respondersCount всегда учитывает САМ
+    // персональный мэтч (awaiting_executor, нетерминальный), который мы
+    // сейчас и отзываем. Поэтому «есть другие отклики» — это > 1, а не > 0:
+    // иначе при личном предложении без органических откликов мы уводили бы
+    // заказчика в пустой экран выбора вместо каталога.
+    final bool hasResponders = (o.respondersCount ?? 0) > 1;
     final MyOrderStatus newStatus = hasResponders
         ? MyOrderStatus.waitingChoose
         : MyOrderStatus.waiting;
