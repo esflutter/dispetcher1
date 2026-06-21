@@ -18,6 +18,7 @@ import 'package:dispatcher_1/core/theme/app_text_styles.dart';
 import 'package:dispatcher_1/core/utils/photo_source.dart';
 import 'package:dispatcher_1/core/widgets/primary_button.dart';
 import 'package:dispatcher_1/features/catalog/catalog_filter_screen.dart';
+import 'package:dispatcher_1/features/catalog/widgets/machinery_dropdown.dart';
 import 'package:dispatcher_1/features/orders/orders_store.dart';
 import 'package:dispatcher_1/features/orders/order_detail_screen.dart';
 import 'package:dispatcher_1/features/orders/widgets/order_status_pill.dart';
@@ -280,10 +281,11 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
   static const List<String> _workUnits = <String>['м', 'м²', 'м³'];
   static const int _maxWorks = 20;
 
-  // Справочники тянем из БД через CatalogService — те же id↔title, что и
-  // в фильтре каталога/в createOrder. Сначала берём из in-memory кэша
+  // Справочник техники тянем из БД через CatalogService — те же id↔title,
+  // что и в фильтре каталога/в createOrder. Сначала берём из in-memory кэша
   // (прогрет в main.dart), при отсутствии — догружаем асинхронно.
-  List<String> _categories = const <String>[];
+  // Категории из формы убраны, но справочник категорий всё равно
+  // прогреваем — он нужен ИИ-черновику, чтобы сопоставить id→title.
   List<String> _machinery = const <String>[];
 
   /// true пока идёт INSERT + загрузка фото + UPDATE. Блокирует:
@@ -312,10 +314,6 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
     if (mc != null) {
       _machinery =
           mc.map((cat.MachineryRef e) => e.title).toList(growable: false);
-    }
-    if (cc != null) {
-      _categories =
-          cc.map((cat.CategoryRef e) => e.title).toList(growable: false);
     }
     if (mc == null || cc == null) {
       _loadDirectories();
@@ -352,8 +350,14 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
       final mc = mcCached ?? CatalogService.instance.cachedMachinery;
       final cc = ccCached ?? CatalogService.instance.cachedCategories;
       if (mc != null) {
+        // Техника в заказе теперь одиночная (выпадающий список) — берём
+        // первый матч в порядке каталога, чтобы выбор в форме и
+        // сохранённый заказ совпадали.
         for (final m in mc) {
-          if (machIds.contains(m.id)) _selMach.add(m.title);
+          if (machIds.contains(m.id)) {
+            _selMach.add(m.title);
+            break;
+          }
         }
       }
       if (cc != null) {
@@ -496,17 +500,16 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
     try {
       final List<cat.MachineryRef> m =
           await CatalogService.instance.listActiveMachinery();
-      final List<cat.CategoryRef> c =
-          await CatalogService.instance.listActiveCategories();
+      // Прогреваем кэш категорий (нужен ИИ-черновику для id→title), но
+      // в форме их больше не показываем.
+      await CatalogService.instance.listActiveCategories();
       if (!mounted) return;
       setState(() {
         _machinery =
             m.map((cat.MachineryRef e) => e.title).toList(growable: false);
-        _categories =
-            c.map((cat.CategoryRef e) => e.title).toList(growable: false);
       });
     } catch (_) {
-      // Без справочников чипы техники/категорий остаются пустыми,
+      // Без справочника техники список в выпадашке остаётся пустым,
       // юзер не понимает почему. Раньше catch был тихий — теперь
       // показываем snackbar, чтобы стало ясно что это сетевая проблема,
       // а не «у нас нет техники в каталоге».
@@ -670,7 +673,6 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
   }
 
   bool get _canCreate =>
-      _selCat.isNotEmpty &&
       _selMach.isNotEmpty &&
       _titleCtrl.text.trim().isNotEmpty &&
       _descCtrl.text.trim().isNotEmpty &&
@@ -1242,25 +1244,14 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
                   ],
                   _AddPhotosButton(onTap: _addPhoto),
                   SizedBox(height: 16.h),
-                  _SectionTitle('Категория услуг'),
-                  SizedBox(height: 8.h),
-                  _ChipWrap(
-                    items: _categories,
-                    selected: _selCat,
-                    onToggle: (String v) => setState(() {
-                      _selCat.contains(v) ? _selCat.remove(v) : _selCat.add(v);
-                    }),
-                  ),
-                  SizedBox(height: 16.h),
                   _SectionTitle('Требуемая спецтехника'),
                   SizedBox(height: 8.h),
-                  _ChipWrap(
+                  MachineryDropdown(
                     items: _machinery,
-                    selected: _selMach,
-                    onToggle: (String v) => setState(() {
-                      _selMach.contains(v)
-                          ? _selMach.remove(v)
-                          : _selMach.add(v);
+                    selected: _selMach.isEmpty ? null : _selMach.first,
+                    onChanged: (String? v) => setState(() {
+                      _selMach.clear();
+                      if (v != null) _selMach.add(v);
                     }),
                   ),
                   SizedBox(height: 16.h),
@@ -1429,58 +1420,6 @@ class _TintField extends StatelessWidget {
           borderSide: const BorderSide(color: AppColors.primary),
         ),
       ),
-    );
-  }
-}
-
-class _ChipWrap extends StatelessWidget {
-  const _ChipWrap({
-    required this.items,
-    required this.selected,
-    required this.onToggle,
-  });
-  final List<String> items;
-  final Set<String> selected;
-  final void Function(String) onToggle;
-
-  @override
-  Widget build(BuildContext context) {
-    return Wrap(
-      spacing: 8.w,
-      runSpacing: 8.h,
-      children: items.map((String label) {
-        final bool on = selected.contains(label);
-        return GestureDetector(
-          onTap: () => onToggle(label),
-          child: Container(
-            padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 6.h),
-            decoration: BoxDecoration(
-              color: on ? AppColors.primary : AppColors.surface,
-              border: Border.all(color: AppColors.primary, width: 1),
-              borderRadius: BorderRadius.circular(100.r),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontFamily: 'Roboto',
-                    fontSize: 13.sp,
-                    fontWeight: FontWeight.w400,
-                    height: 1.3,
-                    color: on ? Colors.white : AppColors.textPrimary,
-                  ),
-                ),
-                if (on) ...<Widget>[
-                  SizedBox(width: 6.w),
-                  Icon(Icons.close_rounded, size: 14.r, color: Colors.white),
-                ],
-              ],
-            ),
-          ),
-        );
-      }).toList(),
     );
   }
 }

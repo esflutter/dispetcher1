@@ -15,10 +15,10 @@ import 'package:dispatcher_1/core/theme/app_text_styles.dart';
 import 'package:dispatcher_1/core/utils/thousand_separator_formatter.dart';
 import 'package:dispatcher_1/core/widgets/primary_button.dart';
 import 'package:dispatcher_1/features/catalog/widgets/catalog_search_bar.dart';
+import 'package:dispatcher_1/features/catalog/widgets/machinery_dropdown.dart';
 
-/// Длинная форма фильтра каталога. Точная вёрстка по Figma «фильтр»:
-/// — Категории услуг (chips, выбранные оранжево-залитые с ×)
-/// — Спецтехника (chips)
+/// Длинная форма фильтра каталога:
+/// — Спецтехника (выпадающий список, одиночный выбор)
 /// — Дата аренды (поля «С» / «По» + чек «Точная дата»)
 /// — Время работы (поля «С» / «По» + чек «Весь день»)
 /// — Местоположение (поле адреса + 3 радиуса)
@@ -30,15 +30,15 @@ class CatalogFilterScreen extends StatefulWidget {
 }
 
 class _CatalogFilterScreenState extends State<CatalogFilterScreen> {
-  /// Списки техники/категорий тянем из БД, чтобы строки точно совпадали
-  /// с теми, по которым внутри `CatalogService` строится фильтр (он
-  /// маппит title → id через справочники из БД). Раньше тут был хардкод
-  /// и при малейшем расхождении (например, «Экскаватор» в коде vs
-  /// «Экскаватор гусеничный» в БД) фильтр молча возвращал «всех».
+  /// Список техники тянем из БД, чтобы строки точно совпадали с теми,
+  /// по которым внутри `CatalogService` строится фильтр (он маппит
+  /// title → id через справочник из БД). Раньше тут был хардкод и при
+  /// малейшем расхождении (например, «Экскаватор» в коде vs «Экскаватор
+  /// гусеничный» в БД) фильтр молча возвращал «всех».
   List<String> _machineryTitles = const <String>[];
-  List<String> _categoryTitles = const <String>[];
 
-  final Set<String> _selectedCategories = <String>{};
+  /// Выбранная техника. Внутри — множество (так его читает
+  /// `CatalogService`), но выбор одиночный: 0 или 1 элемент.
   final Set<String> _selectedEquipment = <String>{};
 
   final TextEditingController _priceHourCtrl = TextEditingController();
@@ -67,7 +67,6 @@ class _CatalogFilterScreenState extends State<CatalogFilterScreen> {
   @override
   void initState() {
     super.initState();
-    _selectedCategories.addAll(AppliedFilter.categories);
     _selectedEquipment.addAll(AppliedFilter.equipment);
     _priceHourCtrl.text = AppliedFilter.priceHour ?? '';
     _priceDayCtrl.text = AppliedFilter.priceDay ?? '';
@@ -84,22 +83,16 @@ class _CatalogFilterScreenState extends State<CatalogFilterScreen> {
     _addressLng = AppliedFilter.addressLng;
 
     // Синхронно берём то, что уже в кэше CatalogService — обычно
-    // справочники прогреты на главном экране каталога, и чипы
-    // отрисовываются с первого кадра без сетевого запроса.
+    // справочник прогрет на главном экране каталога, и список техники
+    // готов с первого кадра без сетевого запроса.
     final List<MachineryRef>? mc = CatalogService.instance.cachedMachinery;
-    final List<CategoryRef>? cc = CatalogService.instance.cachedCategories;
     if (mc != null) {
       _machineryTitles =
           mc.map((MachineryRef e) => e.title).toList(growable: false);
     }
-    if (cc != null) {
-      _categoryTitles =
-          cc.map((CategoryRef e) => e.title).toList(growable: false);
-    }
     // Если кэша ещё нет (зашли в фильтр в обход каталога) — асинхронно
-    // догружаем и обновляем чипы. listActiveMachinery/Categories
-    // сами поддержат кэш для следующих экранов.
-    if (mc == null || cc == null) {
+    // догружаем. listActiveMachinery сам поддержит кэш для следующих экранов.
+    if (mc == null) {
       _loadDirectories();
     }
   }
@@ -108,17 +101,13 @@ class _CatalogFilterScreenState extends State<CatalogFilterScreen> {
     try {
       final List<MachineryRef> m =
           await CatalogService.instance.listActiveMachinery();
-      final List<CategoryRef> c =
-          await CatalogService.instance.listActiveCategories();
       if (!mounted) return;
       setState(() {
         _machineryTitles =
             m.map((MachineryRef e) => e.title).toList(growable: false);
-        _categoryTitles =
-            c.map((CategoryRef e) => e.title).toList(growable: false);
       });
     } catch (_) {
-      // БД упала — оставляем чипы пустыми, фильтр временно недоступен.
+      // БД упала — оставляем список пустым, фильтр техники временно недоступен.
     }
   }
 
@@ -130,9 +119,9 @@ class _CatalogFilterScreenState extends State<CatalogFilterScreen> {
   }
 
   void _applyFilter() {
-    AppliedFilter.categories
-      ..clear()
-      ..addAll(_selectedCategories);
+    // Категории убраны из фильтра — гарантированно сбрасываем, чтобы не
+    // осталось залипшего значения от прежней версии/сессии.
+    AppliedFilter.categories.clear();
     AppliedFilter.equipment
       ..clear()
       ..addAll(_selectedEquipment);
@@ -236,27 +225,17 @@ class _CatalogFilterScreenState extends State<CatalogFilterScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
-                      _SectionTitle('Категории услуг'),
-                      SizedBox(height: 12.h),
-                      _ChipGrid(
-                        values: _categoryTitles,
-                        selected: _selectedCategories,
-                        onToggle: (String v) => setState(() {
-                          if (!_selectedCategories.add(v)) {
-                            _selectedCategories.remove(v);
-                          }
-                        }),
-                      ),
-                      SizedBox(height: 24.h),
                       _SectionTitle('Спецтехника'),
                       SizedBox(height: 12.h),
-                      _ChipGrid(
-                        values: _machineryTitles,
-                        selected: _selectedEquipment,
-                        onToggle: (String v) => setState(() {
-                          if (!_selectedEquipment.add(v)) {
-                            _selectedEquipment.remove(v);
-                          }
+                      MachineryDropdown(
+                        items: _machineryTitles,
+                        selected: _selectedEquipment.isEmpty
+                            ? null
+                            : _selectedEquipment.first,
+                        clearable: true,
+                        onChanged: (String? v) => setState(() {
+                          _selectedEquipment.clear();
+                          if (v != null) _selectedEquipment.add(v);
                         }),
                       ),
                       SizedBox(height: 24.h),
@@ -521,57 +500,6 @@ class _SectionTitle extends StatelessWidget {
     return Text(text,
         style: AppTextStyles.bodyL
             .copyWith(fontWeight: FontWeight.w700));
-  }
-}
-
-class _ChipGrid extends StatelessWidget {
-  const _ChipGrid({
-    required this.values,
-    required this.selected,
-    required this.onToggle,
-  });
-  final List<String> values;
-  final Set<String> selected;
-  final ValueChanged<String> onToggle;
-
-  @override
-  Widget build(BuildContext context) {
-    return Wrap(
-      spacing: 8.w,
-      runSpacing: 8.h,
-      children: values.map((String v) {
-        final bool sel = selected.contains(v);
-        return GestureDetector(
-          onTap: () => onToggle(v),
-          child: Container(
-            padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 6.h),
-            decoration: BoxDecoration(
-              color: sel ? AppColors.primary : AppColors.surface,
-              border: Border.all(color: AppColors.primary, width: 1),
-              borderRadius: BorderRadius.circular(100.r),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                Text(
-                  v,
-                  style: AppTextStyles.chip.copyWith(
-                    color: sel ? Colors.white : AppColors.textPrimary,
-                    fontSize: 13.sp,
-                    fontWeight: FontWeight.w400,
-                  ),
-                ),
-                if (sel) ...<Widget>[
-                  SizedBox(width: 6.w),
-                  Icon(Icons.close_rounded,
-                      size: 14.r, color: Colors.white),
-                ],
-              ],
-            ),
-          ),
-        );
-      }).toList(),
-    );
   }
 }
 
