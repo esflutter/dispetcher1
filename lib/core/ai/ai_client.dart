@@ -274,6 +274,22 @@ class AiClient {
     ];
     if (ids.isEmpty) return const <Map<String, dynamic>>[];
     try {
+      // Гость (без сессии) не может читать ai_messages напрямую (RLS только для
+      // вошедших). Историю отдаёт RPC по device_id — она вернёт сообщения только
+      // тех сессий, чей device_id совпадает (его знает только это устройство).
+      if (_sb.auth.currentSession == null) {
+        final String deviceId = await DeviceId.get();
+        final List<dynamic> grows = await _sb.rpc(
+          'get_guest_history',
+          params: <String, dynamic>{
+            'p_session_ids': ids,
+            'p_device_id': deviceId,
+          },
+        );
+        return grows
+            .whereType<Map<String, dynamic>>()
+            .toList(growable: false);
+      }
       final List<dynamic> rows = await _sb
           .from('ai_messages')
           .select('role, content, data, created_at')
@@ -334,6 +350,16 @@ class AiClient {
             msg = obj['message'] as String;
           }
         } catch (_) {/* тела нет/не JSON — оставляем дефолт */}
+        throw AiQuotaExceeded(msg);
+      }
+      if (resp.statusCode == 429) {
+        // Часовой лимит по IP (гость): показываем дружелюбный текст из тела.
+        String msg = 'Слишком много запросов за короткое время. '
+            'Попробуйте чуть позже или войдите в аккаунт.';
+        try {
+          final dynamic o = jsonDecode(await resp.stream.bytesToString());
+          if (o is Map && o['message'] is String) msg = o['message'] as String;
+        } catch (_) {/* тела нет — оставляем дефолт */}
         throw AiQuotaExceeded(msg);
       }
       if (resp.statusCode == 400) {
@@ -502,6 +528,10 @@ class AiClient {
       if (status == 402) {
         throw AiQuotaExceeded(json['message'] as String? ?? 'Лимит исчерпан');
       }
+      if (status == 429) {
+        throw AiQuotaExceeded(json['message'] as String? ??
+            'Слишком много запросов. Попробуйте чуть позже.');
+      }
       if (status == 422 && json['error'] == 'content_filter') {
         throw AiContentFilterError(
           json['message'] as String? ?? 'Не удалось обработать запрос',
@@ -582,6 +612,10 @@ class AiClient {
       final int status = e.status;
       if (status == 402) {
         throw AiQuotaExceeded(json['message'] as String? ?? 'Лимит исчерпан');
+      }
+      if (status == 429) {
+        throw AiQuotaExceeded(json['message'] as String? ??
+            'Слишком много запросов. Попробуйте чуть позже.');
       }
       if (status == 413 || json['error'] == 'audio_too_large') {
         throw AiAudioTooLargeError();

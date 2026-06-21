@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:dispatcher_1/core/utils/geo_distance.dart';
@@ -702,23 +701,16 @@ class CatalogService {
   /// Телефон исполнителя для звонка из каталога. Сервер (RPC `get_executor_phone`)
   /// отдаёт номер ТОЛЬКО вошедшему заказчику и ТОЛЬКО для исполнителя, реально
   /// видимого в каталоге. Гостю звать не нужно — он телефон не получит.
-  /// Возвращает E.164 (`+7XXXXXXXXXX`) или null, если номер недоступен.
+  /// Возвращает E.164 (`+7XXXXXXXXXX`) или null, если номер скрыт. Ошибку сети
+  /// НЕ глотаем — пробрасываем, чтобы карточка предложила «повторить», а не
+  /// прятала блок навсегда при разовом обрыве.
   Future<String?> getExecutorPhone(String executorId) async {
-    try {
-      final dynamic res = await _client.rpc(
-        'get_executor_phone',
-        params: <String, dynamic>{'p_executor_id': executorId},
-      );
-      if (res is String && res.trim().isNotEmpty) return res.trim();
-      return null;
-    } catch (e) {
-      // Нет доступа / сеть — телефон просто не покажем (fail-closed). Метод
-      // зовётся только для вошедшего, поэтому любая ошибка здесь неожиданна
-      // (сеть или рассогласование контракта с сервером) — логируем в debug,
-      // чтобы регрессия не пряталась молча.
-      if (kDebugMode) debugPrint('[catalog] getExecutorPhone failed: ${e.runtimeType}');
-      return null;
-    }
+    final dynamic res = await _client.rpc(
+      'get_executor_phone',
+      params: <String, dynamic>{'p_executor_id': executorId},
+    );
+    if (res is String && res.trim().isNotEmpty) return res.trim();
+    return null;
   }
 
   ExecutorService _executorServiceFromRow(Map<String, dynamic> r) {

@@ -66,18 +66,11 @@ class ExecutorCardViewScreen extends StatefulWidget {
 
 class _ExecutorCardViewScreenState extends State<ExecutorCardViewScreen> {
   late Future<ExecutorCardFull?> _future;
-  // Телефон грузим один раз и только вошедшему (гостю сервер номер не отдаст).
-  // Держим в поле, а не во FutureBuilder инлайном — иначе каждый ребилд
-  // (revision-листенеры ниже) дёргал бы RPC заново.
-  Future<String?>? _phoneFuture;
 
   @override
   void initState() {
     super.initState();
     _future = CatalogService.instance.getExecutorFull(widget.executorId);
-    if (!isGuest) {
-      _phoneFuture = CatalogService.instance.getExecutorPhone(widget.executorId);
-    }
     OfferSubmissions.revision.addListener(_onRevision);
     AccountBlock.notifier.addListener(_onRevision);
     MyOrdersStore.revision.addListener(_onRevision);
@@ -313,7 +306,7 @@ class _ExecutorCardViewScreenState extends State<ExecutorCardViewScreen> {
           // каталога; гость — маску и приглашение войти (в режиме выбора
           // исполнителя из откликнувшихся контакт не нужен — он уже после мэтча).
           if (!widget.selectMode) ...<Widget>[
-            _ContactSection(phoneFuture: _phoneFuture),
+            _ContactSection(executorId: e.userId),
           ],
           if (e.locationAddress != null &&
               e.locationAddress!.trim().isNotEmpty) ...<Widget>[
@@ -395,53 +388,82 @@ class _ExecutorCardViewScreenState extends State<ExecutorCardViewScreen> {
 }
 
 /// Блок «Телефон» в карточке исполнителя.
-/// [phoneFuture] == null → гость: показываем маску и по тапу зовём войти.
-/// Иначе грузим номер (вошедший); пока грузится — маска без активной кнопки;
-/// номер пришёл — показываем его и активную кнопку звонка; номера нет — прячем.
-class _ContactSection extends StatelessWidget {
-  const _ContactSection({this.phoneFuture});
+/// Гость: маска и по тапу — зов войти. Вошедший: грузим номер один раз; пока
+/// грузится — маска без кнопки; номер есть — показываем и активная кнопка
+/// звонка; номер скрыт — прячем блок; ошибка сети — маска + кнопка «обновить»
+/// (разовый обрыв не прячет блок навсегда).
+class _ContactSection extends StatefulWidget {
+  const _ContactSection({required this.executorId});
 
-  final Future<String?>? phoneFuture;
+  final String executorId;
 
-  /// Маска для гостя/загрузки — реальных цифр не раскрывает.
+  @override
+  State<_ContactSection> createState() => _ContactSectionState();
+}
+
+class _ContactSectionState extends State<_ContactSection> {
+  /// Маска — реальных цифр не раскрывает.
   static const String _masked = '+7 ••• •••-••-••';
+
+  // Грузим один раз и держим в поле — иначе ребилды (revision-листенеры
+  // родителя) дёргали бы RPC заново. null у гостя — ему сервер номер не отдаёт.
+  Future<String?>? _future;
+
+  @override
+  void initState() {
+    super.initState();
+    if (!isGuest) {
+      _future = CatalogService.instance.getExecutorPhone(widget.executorId);
+    }
+  }
+
+  void _retry() {
+    setState(() {
+      _future = CatalogService.instance.getExecutorPhone(widget.executorId);
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
-    if (phoneFuture == null) {
+    if (_future == null) {
+      // Гость.
       return _row(
-        context,
         phoneText: _masked,
         muted: true,
-        onCall: () => showGuestAuthPrompt(
+        icon: Icons.phone,
+        onTap: () => showGuestAuthPrompt(
           context,
           message: 'Войдите, чтобы увидеть телефон и позвонить исполнителю.',
         ),
       );
     }
     return FutureBuilder<String?>(
-      future: phoneFuture,
+      future: _future,
       builder: (BuildContext context, AsyncSnapshot<String?> snap) {
         if (snap.connectionState == ConnectionState.waiting) {
-          return _row(context, phoneText: _masked, muted: true, onCall: null);
+          return _row(phoneText: _masked, muted: true, icon: Icons.phone, onTap: null);
+        }
+        if (snap.hasError) {
+          // Разовый обрыв сети при загрузке — не прячем блок, даём повторить.
+          return _row(phoneText: _masked, muted: true, icon: Icons.refresh, onTap: _retry);
         }
         final String? phone = snap.data;
         if (phone == null || phone.isEmpty) return const SizedBox.shrink();
         return _row(
-          context,
           phoneText: PhoneFormat.toPretty(phone),
           muted: false,
-          onCall: () => dialPhone(context, phone),
+          icon: Icons.phone,
+          onTap: () => dialPhone(context, phone),
         );
       },
     );
   }
 
-  Widget _row(
-    BuildContext context, {
+  Widget _row({
     required String phoneText,
     required bool muted,
-    required VoidCallback? onCall,
+    required IconData icon,
+    required VoidCallback? onTap,
   }) {
     return Padding(
       padding: EdgeInsets.only(bottom: 16.h),
@@ -464,17 +486,16 @@ class _ContactSection extends StatelessWidget {
               ),
               SizedBox(width: 12.w),
               GestureDetector(
-                onTap: onCall,
+                onTap: onTap,
                 child: Container(
                   width: 44.r,
                   height: 44.r,
                   decoration: BoxDecoration(
-                    color: onCall == null
-                        ? AppColors.textTertiary
-                        : AppColors.primary,
+                    color:
+                        onTap == null ? AppColors.textTertiary : AppColors.primary,
                     borderRadius: BorderRadius.circular(10.r),
                   ),
-                  child: Icon(Icons.phone, color: Colors.white, size: 22.r),
+                  child: Icon(icon, color: Colors.white, size: 22.r),
                 ),
               ),
             ],
