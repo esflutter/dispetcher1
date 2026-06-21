@@ -125,6 +125,13 @@ class _SelectExecutorScreenState extends State<SelectExecutorScreen> {
       avatarUrl: r.executorAvatarUrl,
       matchId: r.matchId,
       executorId: r.executorId,
+      // Рейтинг ВЫБРАННОГО исполнителя кладём уже в этот (первый) вызов:
+      // он уносит заказ из newOrders в accepted, и повторный вызов из
+      // onExecutorSelected до заказа уже не дотянется (idx<0 → no-op).
+      // Без этого карточка «В работе» секунду показывала рейтинг «лучшего»
+      // отклика, а не выбранного.
+      rating: r.executorRating,
+      reviewCount: r.executorReviewCount,
     );
 
     if (!mounted) return;
