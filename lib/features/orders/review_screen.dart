@@ -11,8 +11,8 @@ import 'package:dispatcher_1/features/orders/widgets/order_alerts.dart';
 
 /// Экран «Как всё прошло?» — оценка пользователя + комментарий + кнопка.
 /// Сохраняет отзыв в `public.reviews`. Если [targetUserId] не передан
-/// (legacy callsite), отзыв в БД не уходит — показывается только диалог
-/// «отзыв отправлен».
+/// (legacy callsite), отзыв оставить нельзя: показываем snackbar и
+/// закрываем экран без пометки заказа оценённым.
 class ReviewScreen extends StatefulWidget {
   const ReviewScreen({
     super.key,
@@ -52,7 +52,18 @@ class _ReviewScreenState extends State<ReviewScreen> {
     if (_submitting) return;
     setState(() => _submitting = true);
     final String? targetId = widget.targetUserId;
-    if (targetId != null && targetId.isNotEmpty) {
+    if (targetId == null || targetId.isEmpty) {
+      // Некому ставить оценку (исполнитель недоступен) — отзыв в БД не уйдёт.
+      // Не показываем ложный успех и не помечаем заказ оценённым: просто
+      // закрываем экран без результата.
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Сейчас оставить отзыв нельзя: исполнитель недоступен.')),
+      );
+      Navigator.of(context).pop();
+      return;
+    }
+    {
       try {
         final SupabaseClient c = Supabase.instance.client;
         final User? me = c.auth.currentUser;

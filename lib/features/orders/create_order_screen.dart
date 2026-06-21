@@ -15,6 +15,7 @@ import 'package:dispatcher_1/core/dadata/dadata_service.dart';
 import 'package:dispatcher_1/core/settings/settings_service.dart';
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
+import 'package:dispatcher_1/core/utils/client_uid.dart';
 import 'package:dispatcher_1/core/utils/photo_source.dart';
 import 'package:dispatcher_1/core/widgets/primary_button.dart';
 import 'package:dispatcher_1/features/catalog/catalog_filter_screen.dart';
@@ -297,6 +298,13 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
   // предпросмотра, и публикация обоих создавала два заказа (у каждого свой
   // client_uid — серверная идемпотентность тут не помогает).
   bool _opening = false;
+  // Идемпотентный ключ этой публикации. Генерируется один раз перед первой
+  // отправкой и переиспользуется при всех повторных попытках после ошибки —
+  // если предыдущий INSERT прошёл на сервере, но ACK не дошёл, сервер вернёт
+  // ту же запись по уникальному индексу, а не создаст второй заказ. После
+  // успешной публикации сбрасываем в null, чтобы следующий заказ получил
+  // свой новый ключ.
+  String? _clientUid;
 
   @override
   void initState() {
@@ -328,11 +336,17 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
     Map<String, dynamic> draft,
     List<cat.MachineryRef>? mcCached,
   ) {
-    // Title / description
+    // Title / description. Обрезаем по лимитам БД (orders_title_check ≤50,
+    // description ≤500): слишком длинный черновик от ассистента иначе валит
+    // INSERT по CHECK с непонятным «Не удалось опубликовать».
     final title = (draft['title'] as String? ?? '').trim();
     final desc  = (draft['description'] as String? ?? '').trim();
-    if (title.isNotEmpty) _titleCtrl.text = title;
-    if (desc.isNotEmpty)  _descCtrl.text  = desc;
+    if (title.isNotEmpty) {
+      _titleCtrl.text = title.length > 50 ? title.substring(0, 50) : title;
+    }
+    if (desc.isNotEmpty) {
+      _descCtrl.text = desc.length > 500 ? desc.substring(0, 500) : desc;
+    }
 
     // Категории / техника: id → title через справочник.
     final machIds = (draft['machinery_ids'] is List)
@@ -454,7 +468,10 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
       for (final w in worksRaw.take(_maxWorks)) {
         if (w is! Map) continue;
         final item = _WorkItem();
-        item.nameCtrl.text   = (w['name']   as String? ?? '').trim();
+        // Имя работы обрезаем до 60 символов — лимит схемы orders.works.
+        final String wName = (w['name'] as String? ?? '').trim();
+        item.nameCtrl.text =
+            wName.length > 60 ? wName.substring(0, 60) : wName;
         item.volumeCtrl.text = w['volume']?.toString().trim() ?? '';
         final unit = (w['unit'] as String? ?? '').trim();
         if (_workUnits.contains(unit)) item.unit = unit;
@@ -701,8 +718,11 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
               !p.startsWith('assets/') && !p.startsWith('http'))
           .map(File.new)
           .toList();
+      // Ключ генерируем лениво при первой попытке и переиспользуем при
+      // повторных — защита от дубль-заказа, если ответ сервера потерялся.
+      _clientUid ??= generateClientUid();
       result = await CustomerOrdersService.instance
-          .createOrder(dbDraft, photoFiles: photoFiles);
+          .createOrder(dbDraft, photoFiles: photoFiles, clientUid: _clientUid);
     } on PostgrestException catch (e) {
       if (!mounted) return;
       setState(() => _creating = false);
@@ -719,6 +739,9 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
       return;
     }
 
+    // Публикация удалась — сбрасываем ключ, чтобы следующий заказ (если юзер
+    // создаст ещё один) получил свой новый, а не переиспользовал этот.
+    _clientUid = null;
     DailyOrderLimit.increment();
     AppAnalytics.log('order_created');
     // MyOrdersStore — локальный кэш UI. Используем DB-id, чтобы при

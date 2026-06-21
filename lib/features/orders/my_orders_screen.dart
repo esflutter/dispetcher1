@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 
-import 'package:dispatcher_1/core/customer_orders/customer_orders_service.dart';
 import 'package:dispatcher_1/core/push/pending_deep_link.dart';
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/utils/phone_dial.dart';
@@ -417,31 +416,34 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
     );
   }
 
-  /// «Выбрать другого исполнителя» / «Перейти в каталог»: отзываем
-  /// текущий awaiting-мэтч в БД, закрываем экран и переключаемся на
-  /// каталог. Раньше переход в каталог не сопровождался UPDATE'ом —
-  /// старый мэтч оставался в `awaiting_executor` навечно: исполнитель
-  /// видел «призрачное» предложение в своих откликах, а заказчик
-  /// продолжал считать заказ «выбран другой».
+  /// «Выбрать другого исполнителя» на заказе «ждёт подтверждения».
+  /// Отзываем текущий awaiting-мэтч в БД и решаем, куда вести заказчика:
+  /// если на заказ уже пришли отклики — переводим заказ в «выбор из
+  /// откликов» (`waitingChoose`) и возвращаемся к списку «Мои заказы»,
+  /// где карточка уже ведёт на экран выбора. Если откликов ещё нет —
+  /// прежнее поведение: возвращаем заказ в `waiting` и уводим в каталог,
+  /// чтобы заказчик сам нашёл исполнителя.
   ///
-  /// Используем `withdrawProposal` (→ `expired`), а не `rejectResponse`
-  /// (→ `rejected_by_customer`): FSM-триггер не разрешает переход
-  /// `awaiting_executor` → `rejected_by_customer`, и старый код с
-  /// `rejectResponse` молча падал в catch — мэтч оставался в
-  /// `awaiting_executor`, а заказ — ровно той самой «висячей»
-  /// ситуацией, ради которой этот метод и появился.
+  /// Отзыв мэтча и переключение статуса делает умный метод стора
+  /// `pickAnotherFromAwaiting`: он использует `withdrawProposal`
+  /// (→ `expired`), а не `rejectResponse` (→ `rejected_by_customer`),
+  /// потому что FSM-триггер не разрешает переход `awaiting_executor` →
+  /// `rejected_by_customer`. Без отзыва старый мэтч оставался бы в
+  /// `awaiting_executor` навечно: исполнитель видел «призрачное»
+  /// предложение в своих откликах, а заказчик продолжал считать заказ
+  /// «выбран другой». Ошибки БД (и откат) метод стора обрабатывает сам.
   Future<void> _handlePickAnotherFromAwaiting(
       BuildContext screenCtx, OrderMock o) async {
-    final String? matchId = o.matchId;
-    if (matchId != null) {
-      try {
-        await CustomerOrdersService.instance.withdrawProposal(matchId);
-      } catch (_) {/* пусть UI продолжит — следующая загрузка из БД
-        синхронизирует статус */}
-    }
+    final MyOrderStatus newStatus =
+        MyOrdersStore.pickAnotherFromAwaiting(o);
     if (!screenCtx.mounted) return;
     Navigator.of(screenCtx).maybePop();
-    widget.onGoToCatalog?.call();
+    // Есть отклики → заказ уже в «выбор из откликов», карточка в списке
+    // сама откроет экран выбора. В каталог уводим только когда выбирать
+    // не из кого.
+    if (newStatus != MyOrderStatus.waitingChoose) {
+      widget.onGoToCatalog?.call();
+    }
   }
 
   /// Открывает подробности заказа. Для заказов, созданных заказчиком

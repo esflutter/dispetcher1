@@ -907,7 +907,10 @@ class _ServiceItem extends StatelessWidget {
   final ExecutorService service;
   final VoidCallback? onTap;
 
-  String? get _equipmentTag => service.machineryTitles.isEmpty
+  // Серый тег над заголовком прячем, когда вид техники равен названию
+  // услуги — иначе «Экскаватор» стоит ровно над «Экскаватор».
+  String? get _equipmentTag => service.machineryTitles.isEmpty ||
+          service.machineryTitles.first == service.title
       ? null
       : service.machineryTitles.first;
 

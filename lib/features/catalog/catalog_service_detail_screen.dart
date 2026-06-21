@@ -220,7 +220,12 @@ class _CatalogServiceDetailScreenState
                         style: AppTextStyles.body
                             .copyWith(fontSize: 14.sp, height: 1.4)),
                   ],
-                  if (s.machineryTitles.isNotEmpty) ...<Widget>[
+                  // Секцию «Спецтехника» прячем, когда она сводится к одной
+                  // позиции, равной заголовку услуги — иначе вид техники
+                  // дублируется (крупный заголовок + тот же чип ниже).
+                  if (s.machineryTitles.isNotEmpty &&
+                      !(s.machineryTitles.length == 1 &&
+                          s.machineryTitles.first == s.title)) ...<Widget>[
                     SizedBox(height: 16.h),
                     const _SectionTitle('Спецтехника'),
                     SizedBox(height: 8.h),

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
@@ -109,7 +110,8 @@ class PushService {
     await sb.from('device_tokens').upsert({
       'user_id': userId,
       'token': token,
-      'platform': 'android',
+      // Платформу определяем по факту — на iPhone токен помечаем 'ios'.
+      'platform': Platform.isIOS ? 'ios' : 'android',
       // Это приложение заказчика — пуши с target_app='customer' идут сюда,
       // с target_app='executor' — отсекаются на сервере. Пуши без target_app
       // (отзывы, блокировка аккаунта) идут в оба.

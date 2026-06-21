@@ -112,7 +112,7 @@ class CustomerOrdersService {
     final ({double lat, double lng}) coords =
         (d.latitude != null && d.longitude != null)
             ? (lat: d.latitude!, lng: d.longitude!)
-            : _stableMoscowCoordsForAddress(d.address);
+            : _stableFallbackCoordsForAddress(d.address);
 
     final Map<String, dynamic> payload = <String, dynamic>{
       'customer_id': user.id,
@@ -824,14 +824,15 @@ class CustomerOrdersService {
       '${d.month.toString().padLeft(2, '0')}-'
       '${d.day.toString().padLeft(2, '0')}';
 
-  /// Детерминированная точка в пределах Москвы (≈ ±11 км по широте,
-  /// ±10 км по долготе от центра) из хэша адреса. Используется как
-  /// fallback, когда заказ создан без выбора подсказки DaData. Один и
-  /// тот же адрес всегда даёт одну и ту же точку — это стабильнее
-  /// рандома, который заставлял бы заказ «прыгать» между fetch'ами.
-  ({double lat, double lng}) _stableMoscowCoordsForAddress(String address) {
-    const double centerLat = 55.7558;
-    const double centerLon = 37.6173;
+  /// Детерминированная точка вокруг города запуска (Новосибирск,
+  /// ≈ ±11 км по широте, ±10 км по долготе от центра) из хэша адреса.
+  /// Используется как fallback, когда заказ создан без выбора подсказки
+  /// DaData. Один и тот же адрес всегда даёт одну и ту же точку — это
+  /// стабильнее рандома, который заставлял бы заказ «прыгать» между
+  /// fetch'ами. При мультигороде позже — пересмотреть.
+  ({double lat, double lng}) _stableFallbackCoordsForAddress(String address) {
+    const double centerLat = 55.0084;
+    const double centerLon = 82.9357;
     // FNV-1a 32-bit — быстрый стабильный хэш строки. Берём два независимых
     // байтовых среза для широты и долготы, чтобы они не коррелировали.
     int hash = 0x811c9dc5;

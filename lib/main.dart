@@ -18,6 +18,7 @@ import 'core/realtime/realtime_service.dart';
 import 'core/router.dart';
 import 'core/settings/settings_service.dart';
 import 'core/theme/system_bar_style.dart';
+import 'features/shell/main_shell.dart';
 import 'features/support/chat_screen.dart';
 
 /// Обработчик пушей в фоне / при закрытом приложении.
@@ -145,6 +146,11 @@ Future<void> main() async {
         // На холодном старте уже-вошедшего юзера приходит initialSession (не
         // signedIn), поэтому лишнего сброса при перезапуске не будет.
         ChatScreen.resetHistory();
+        // Гость мог стоять на «Профиле»/«Заказах» — выбранная вкладка живёт в
+        // статическом сторе и переживает пересоздание shell. После входа
+        // возвращаем на каталог, иначе юзер попадёт на ту же вкладку, а не
+        // на стартовый экран.
+        MainShell.selectedTab.value = 0;
       }
     });
 
