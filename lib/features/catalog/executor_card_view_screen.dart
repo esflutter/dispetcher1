@@ -324,12 +324,6 @@ class _ExecutorCardViewScreenState extends State<ExecutorCardViewScreen> {
             _FilledChipWrap(items: e.machineryTitles),
             SizedBox(height: 16.h),
           ],
-          if (e.categoryTitles.isNotEmpty) ...<Widget>[
-            const _SectionTitle('Категории услуг'),
-            SizedBox(height: 8.h),
-            _FilledChipWrap(items: e.categoryTitles),
-            SizedBox(height: 16.h),
-          ],
           if (e.experienceYears != null && e.experienceYears! > 0) ...<Widget>[
             const _SectionTitle('Опыт работы'),
             SizedBox(height: 4.h),
@@ -343,12 +337,6 @@ class _ExecutorCardViewScreenState extends State<ExecutorCardViewScreen> {
             const _SectionTitle('Статус'),
             SizedBox(height: 4.h),
             Text(_legalStatusLabel(e.legalStatus), style: AppTextStyles.body),
-            SizedBox(height: 16.h),
-          ],
-          if (e.about != null && e.about!.trim().isNotEmpty) ...<Widget>[
-            const _SectionTitle('О себе'),
-            SizedBox(height: 4.h),
-            Text(e.about!, style: AppTextStyles.body),
             SizedBox(height: 16.h),
           ],
           _AvailabilitySection(

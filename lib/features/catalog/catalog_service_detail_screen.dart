@@ -226,12 +226,6 @@ class _CatalogServiceDetailScreenState
                     SizedBox(height: 8.h),
                     _ChipRow(items: s.machineryTitles),
                   ],
-                  if (s.categoryTitles.isNotEmpty) ...<Widget>[
-                    SizedBox(height: 16.h),
-                    const _SectionTitle('Категория работ'),
-                    SizedBox(height: 8.h),
-                    _ChipRow(items: s.categoryTitles),
-                  ],
                   if (s.photos.isNotEmpty) ...<Widget>[
                     SizedBox(height: 16.h),
                     const _SectionTitle('Фото'),
