@@ -216,7 +216,13 @@ class _CustomerRow extends StatelessWidget {
             ],
           ),
         ),
-        if (onContact != null) ...<Widget>[
+        // Кнопку звонка показываем только при НЕПУСТОМ телефоне: сразу после
+        // выбора исполнителя контакты подгружаются вдогонку (get_partner_
+        // contacts), и в это короткое окно phone='' — раньше кнопка была видна,
+        // но тап по ней молча не открывал номеронабиратель. Появится, как только
+        // контакт подтянется (карточка перестроится). Тот же гейт, что на
+        // детальном экране заказа.
+        if (onContact != null && phone.isNotEmpty) ...<Widget>[
           SizedBox(width: 8.w),
           GestureDetector(
             onTap: onContact,
