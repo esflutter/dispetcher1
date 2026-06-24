@@ -391,10 +391,9 @@ class _EditExecutorCardScreenState extends State<EditExecutorCardScreen> {
                   };
                   try {
                     // Всегда выставляет customer_card_saved_at = now(),
-                    // чтобы UI ушёл из empty-state даже когда оба поля
-                    // (about/legal_status) пустые — они опциональные.
+                    // чтобы UI ушёл из empty-state даже когда
+                    // legal_status пустой — поле опциональное.
                     await ProfileService.instance.saveCustomerCard(
-                      about: null,
                       legalStatus: legalStatus,
                     );
                   } catch (e) {

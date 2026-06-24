@@ -108,15 +108,13 @@ class ProfileService {
 
   /// Сохранение карточки заказчика. В отличие от обычного [update],
   /// всегда проставляет `customer_card_saved_at = now()`, чтобы UI
-  /// корректно ушёл из empty-state даже если юзер сохранил пустые
-  /// `about` и `legal_status` — поля опциональные, но факт сохранения
-  /// всё равно фиксируется.
+  /// корректно ушёл из empty-state даже если юзер сохранил пустой
+  /// `legal_status` — поле опциональное, но факт сохранения фиксируется.
   ///
-  /// Передаваемые `about`/`legalStatus` пишутся как есть (включая
-  /// `null` — это «очистить поле»), потому что для карточки заказчика
-  /// эти поля редактируются всегда вместе и null означает «пусто».
+  /// Поле «О себе» из карточки убрано, поэтому `about` здесь НЕ трогаем:
+  /// иначе при каждом сохранении затирался бы унаследованный текст,
+  /// оставшийся в базе с прежних версий приложения.
   Future<void> saveCustomerCard({
-    String? about,
     String? legalStatus,
   }) async {
     final User? user = _client.auth.currentUser;
@@ -124,7 +122,6 @@ class ProfileService {
       throw const AuthException('Нет активной сессии');
     }
     await _client.from('profiles').update(<String, dynamic>{
-      'about': about,
       'legal_status': legalStatus,
       'customer_card_saved_at': DateTime.now().toUtc().toIso8601String(),
     }).eq('id', user.id);
