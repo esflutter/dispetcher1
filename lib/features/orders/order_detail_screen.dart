@@ -286,10 +286,6 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
       addSection('Требуемая спецтехника', _ChipRow(items: draft.machinery));
     }
 
-    if (draft.categories.isNotEmpty) {
-      addSection('Категория работ', _ChipRow(items: draft.categories));
-    }
-
     if (draft.works.isNotEmpty) {
       addSection(
         'Характер работ',
