@@ -8,6 +8,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/auth/phone_format.dart';
 import '../../core/onboarding_prefs.dart';
 import '../../core/profile/profile_service.dart';
+import '../../core/push/push_handler.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../auth/photo_crop_screen.dart';
@@ -126,7 +127,15 @@ class _SplashScreenState extends State<SplashScreen> {
       // при действительной проблеме шторка ошибок будет уже на каталоге.
     }
     if (!mounted) return;
-    context.go(needsRegistration ? '/auth/registration' : '/shell');
+    if (needsRegistration) {
+      context.go('/auth/registration');
+    } else {
+      context.go('/shell');
+      // Холодный старт по тапу из пуша: базовый экран установлен, теперь
+      // открываем нужный экран поверх — стек получается [/shell, экран],
+      // и кнопка «назад» ведёт на главную (а не в пустой сплэш).
+      unawaited(PushHandler.instance.consumeColdStartRoute());
+    }
   }
 
   @override

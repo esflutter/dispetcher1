@@ -434,7 +434,16 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
       _dateFrom = _dateTo;
       _dateTo = tmp;
     }
-    _exactDate = (draft['exact_date'] as bool?) ?? (_dateTo == null);
+    // Единственная дата (конец не задан или не распарсился) — по смыслу
+    // всегда «точная»: ставим флаг принудительно, не доверяя exact_date из
+    // черновика. Ассистент иногда присылает exact_date:false вместе с
+    // диапазоном, у которого date_to не распознался (например «5 июля» или
+    // «июль») — тогда без этой подстраховки кнопка «Создать» молча гасла
+    // (см. _canCreate: «_exactDate || _dateTo != null»), и пользователь не
+    // понимал, почему форма заполнена, а опубликовать нельзя.
+    _exactDate = _dateTo == null
+        ? true
+        : ((draft['exact_date'] as bool?) ?? false);
     _wholeDay  = (draft['whole_day']  as bool?) ?? false;
 
     // Время

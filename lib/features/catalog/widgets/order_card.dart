@@ -156,6 +156,11 @@ class OrderCard extends StatelessWidget {
         SizedBox(height: 4.h),
         Text.rich(
           TextSpan(children: _buildSpans(equipment, highlightEquipment)),
+          // Не растягиваем на много строк: обычно техника влезает в одну.
+          // Длинное название с дефисом (напр. «Кран-манипулятор») может уйти
+          // на вторую строку, дальше — многоточие, а не бесконечный перенос.
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
           style: TextStyle(
             fontFamily: 'Roboto',
             fontSize: 14.sp,

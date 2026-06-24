@@ -31,7 +31,7 @@ class GuestLockedView extends StatelessWidget {
   Widget build(BuildContext context) {
     return Center(
       child: Padding(
-        padding: EdgeInsets.symmetric(horizontal: 32.w),
+        padding: EdgeInsets.symmetric(horizontal: 16.w),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
@@ -47,11 +47,11 @@ class GuestLockedView extends StatelessWidget {
               subtitle,
               textAlign: TextAlign.center,
               style: AppTextStyles.bodyMRegular
-                  .copyWith(color: AppColors.textSecondary),
+                  .copyWith(color: AppColors.textTertiary),
             ),
             SizedBox(height: 24.h),
             SizedBox(
-              width: 200.w,
+              width: double.infinity,
               child: PrimaryButton(
                 label: 'Войти',
                 onPressed: () => context.go('/auth/phone'),
@@ -97,7 +97,7 @@ Future<bool> showGuestAuthPrompt(
             ),
             SizedBox(height: 12.h),
             Text(
-              'Нужен вход',
+              'Требуется авторизация',
               textAlign: TextAlign.center,
               style: AppTextStyles.titleL.copyWith(fontWeight: FontWeight.w700),
             ),
@@ -113,15 +113,24 @@ Future<bool> showGuestAuthPrompt(
               label: 'Войти',
               onPressed: () => Navigator.of(ctx).pop(true),
             ),
-            SizedBox(height: 6.h),
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
-              child: Text(
-                'Позже',
-                style: AppTextStyles.bodyMRegular
-                    .copyWith(color: AppColors.textTertiary),
+            SizedBox(height: 20.h),
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => Navigator.of(ctx).pop(false),
+              child: Center(
+                child: Text(
+                  'Позже',
+                  style: TextStyle(
+                    fontFamily: 'Roboto',
+                    fontSize: 16.sp,
+                    fontWeight: FontWeight.w500,
+                    height: 1.3,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
               ),
             ),
+            SizedBox(height: 8.h),
           ],
         ),
       ),

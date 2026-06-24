@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:dispatcher_1/core/catalog/format.dart';
 import 'package:dispatcher_1/core/customer_orders/customer_orders_service.dart';
@@ -316,16 +317,19 @@ class MyOrdersStore {
   /// через [loadFromDb]; в стартовом состоянии пуст.
   static final List<OrderMock> rejected = <OrderMock>[];
 
-  /// Все заказы во вкладке «В работе»: `accepted` кроме `completed`.
+  /// «В работе»: принятые, ещё не завершённые — ПЛЮС завершённые, по которым
+  /// заказчик ещё НЕ оставил отзыв. Заказ не уходит в архив, пока работу не
+  /// оценили: так «Завершён. Оставьте отзыв» остаётся в активной вкладке.
   static List<OrderMock> get inWork => accepted
-      .where((OrderMock o) => o.status != MyOrderStatus.completed)
+      .where((OrderMock o) =>
+          o.status != MyOrderStatus.completed || !o.reviewLeft)
       .toList();
 
-  /// Все заказы во вкладке «Архив»: отменённые/не нашёлся + завершённые.
+  /// «Архив»: отменённые/не нашёлся + завершённые, по которым отзыв УЖЕ оставлен.
   static List<OrderMock> get archive => <OrderMock>[
         ...rejected,
-        ...accepted
-            .where((OrderMock o) => o.status == MyOrderStatus.completed),
+        ...accepted.where((OrderMock o) =>
+            o.status == MyOrderStatus.completed && o.reviewLeft),
       ];
 
   /// Заказы, которые можно предложить исполнителю из каталога:
@@ -361,13 +365,16 @@ class MyOrdersStore {
   }
 
   // Маппинг (orders.status, лучший order_matches.status) → UI-статус.
-  // Приоритет: явное cancelled/archived (заказчик/cron поставили) >
-  // мэтч (есть accepted/completed) > только что собранные отклики.
+  // Приоритет: cancelled > завершённый мэтч (completed) > archived без
+  // завершения («Исполнитель не найден») > остальные мэтчи/отклики.
+  // ВАЖНО: completed проверяем РАНЬШЕ archived — заказ уходит в archived
+  // и при успешном завершении тоже, иначе «Завершён» подменялся бы на
+  // «Исполнитель не найден» и пропадала кнопка «Оставить отзыв».
   static MyOrderStatus _mapStatus(CustomerOrderListItem r) {
     if (r.status == 'cancelled') return MyOrderStatus.rejectedDeclined;
-    if (r.status == 'archived') return MyOrderStatus.rejectedOther;
     final String? bestStatus = r.bestMatchStatus;
     if (bestStatus == 'completed') return MyOrderStatus.completed;
+    if (r.status == 'archived') return MyOrderStatus.rejectedOther;
     if (bestStatus == 'accepted') return MyOrderStatus.accepted;
     if (bestStatus == 'awaiting_executor') {
       return MyOrderStatus.awaitingExecutor;
@@ -409,8 +416,22 @@ class MyOrdersStore {
     }
     _loadingFromDb = true;
     try {
+      // Кто инициировал загрузку. На общем устройстве realtime-событие могло
+      // запустить loadFromDb прямо перед выходом из аккаунта: пока ждём ответ
+      // БД, пользователь успевает выйти (или войти другой). Запоминаем uid и
+      // ниже, после await, сверяем — иначе догнавший ответ переписал бы списки
+      // заказами ПРОШЛОГО пользователя (с его телефоном/адресом и контактами
+      // исполнителя) уже ПОСЛЕ clear(), и они мелькнули бы у следующего.
+      final String? uidAtStart =
+          Supabase.instance.client.auth.currentUser?.id;
       final List<CustomerOrderListItem> rows =
           await CustomerOrdersService.instance.listMine();
+      final String? uidNow = Supabase.instance.client.auth.currentUser?.id;
+      if (uidNow == null || uidNow != uidAtStart) {
+        // Сессия закрылась или сменилась за время запроса — результат прошлого
+        // пользователя выбрасываем, списки не трогаем (их уже очистил clear()).
+        return;
+      }
       final Set<String> dbIds = <String>{for (final r in rows) r.id};
       // Локально-созданные заказы (`addCreated`), которых ещё нет в БД,
       // оставляем нетронутыми — иначе только что добавленный заказ

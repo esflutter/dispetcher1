@@ -229,13 +229,14 @@ class _CatalogFilterScreenState extends State<CatalogFilterScreen> {
                       SizedBox(height: 12.h),
                       MachineryDropdown(
                         items: _machineryTitles,
-                        selected: _selectedEquipment.isEmpty
-                            ? null
-                            : _selectedEquipment.first,
+                        // Множественный выбор: для поиска можно отметить
+                        // несколько видов техники (как было с прежними чипами).
+                        multiSelected: _selectedEquipment,
                         clearable: true,
-                        onChanged: (String? v) => setState(() {
-                          _selectedEquipment.clear();
-                          if (v != null) _selectedEquipment.add(v);
+                        onMultiChanged: (Set<String> sel) => setState(() {
+                          _selectedEquipment
+                            ..clear()
+                            ..addAll(sel);
                         }),
                       ),
                       SizedBox(height: 24.h),

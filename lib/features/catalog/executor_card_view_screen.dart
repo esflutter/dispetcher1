@@ -14,7 +14,6 @@ import 'package:dispatcher_1/core/utils/plural.dart';
 import 'package:dispatcher_1/core/widgets/avatar_circle.dart';
 import 'package:dispatcher_1/core/widgets/clickable_address.dart';
 import 'package:dispatcher_1/core/widgets/primary_button.dart';
-import 'package:dispatcher_1/features/catalog/catalog_service_detail_screen.dart';
 import 'package:dispatcher_1/features/catalog/select_order_for_executor_screen.dart';
 import 'package:dispatcher_1/features/catalog/widgets/catalog_search_bar.dart';
 import 'package:dispatcher_1/features/executor_card/executor_card_screen.dart';
@@ -33,6 +32,14 @@ String _fmtThousands(int value) {
     out.write(s[i]);
   }
   return out.toString();
+}
+
+/// Склонение «час» после числа: «от 1 часа», «от 4 часов».
+String _hoursWord(int n) {
+  final int mod100 = n % 100;
+  if (mod100 >= 11 && mod100 <= 14) return 'часов';
+  if (n % 10 == 1) return 'часа';
+  return 'часов';
 }
 
 /// Просмотр чужой карточки исполнителя (открывается заказчиком из
@@ -67,13 +74,118 @@ class ExecutorCardViewScreen extends StatefulWidget {
 class _ExecutorCardViewScreenState extends State<ExecutorCardViewScreen> {
   late Future<ExecutorCardFull?> _future;
 
+  /// Контакты исполнителя грузим один раз. Гостю сервер их не отдаёт —
+  /// у него телефон показывается маской, почта скрыта.
+  static const String _maskedPhone = '+7 XXX XXX-XX-XX';
+  String? _phone;
+  String? _email;
+  bool _contactLoading = false;
+  bool _contactError = false;
+
   @override
   void initState() {
     super.initState();
     _future = CatalogService.instance.getExecutorFull(widget.executorId);
+    // В режиме выбора исполнителя из откликнувшихся контакты не показываем
+    // (они уже после мэтча) — не дёргаем телефон/почту зря.
+    if (!isGuest && !widget.selectMode) _loadContacts();
     OfferSubmissions.revision.addListener(_onRevision);
     AccountBlock.notifier.addListener(_onRevision);
     MyOrdersStore.revision.addListener(_onRevision);
+  }
+
+  Future<void> _loadContacts() async {
+    if (mounted) {
+      setState(() {
+        _contactLoading = true;
+        _contactError = false;
+      });
+    }
+    try {
+      final List<String?> r = await Future.wait(<Future<String?>>[
+        CatalogService.instance.getExecutorPhone(widget.executorId),
+        CatalogService.instance.getExecutorEmail(widget.executorId),
+      ]);
+      if (!mounted) return;
+      setState(() {
+        _phone = r[0];
+        _email = r[1];
+        _contactLoading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _contactLoading = false;
+        _contactError = true;
+      });
+    }
+  }
+
+  /// Колбэк кнопки звонка в шапке (как после мэтча). Гость — зов войти; идёт
+  /// загрузка — кнопки нет; ошибка — повтор; есть номер — звонок; номера нет —
+  /// кнопки нет.
+  VoidCallback? _callAction() {
+    if (widget.selectMode) return null;
+    if (isGuest) {
+      return () => showGuestAuthPrompt(
+            context,
+            message:
+                'Авторизуйтесь, чтобы увидеть телефон и позвонить исполнителю.',
+          );
+    }
+    if (_contactLoading) return null;
+    if (_contactError) return _loadContacts;
+    final String? p = _phone;
+    if (p == null || p.isEmpty) return null;
+    return () => dialPhone(context, p);
+  }
+
+  /// Номер телефона и почта обычным текстом под шапкой (как после мэтча).
+  Widget _buildContactRows() {
+    final List<Widget> rows = <Widget>[];
+    if (isGuest) {
+      rows.add(_contactTextRow(title: 'Номер телефона', value: _maskedPhone));
+    } else if (_contactLoading || _contactError) {
+      rows.add(_contactTextRow(
+          title: 'Номер телефона', value: _maskedPhone, muted: true));
+    } else if (_phone != null && _phone!.isNotEmpty) {
+      rows.add(_contactTextRow(
+          title: 'Номер телефона', value: PhoneFormat.toPretty(_phone!)));
+    }
+    if (!isGuest && _email != null && _email!.isNotEmpty) {
+      rows.add(_contactTextRow(title: 'Электронная почта', value: _email!));
+    }
+    if (rows.isEmpty) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: rows,
+    );
+  }
+
+  Widget _contactTextRow({
+    required String title,
+    required String value,
+    bool muted = false,
+  }) {
+    return Padding(
+      padding: EdgeInsets.only(bottom: 16.h),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          _SectionTitle(title),
+          SizedBox(height: 4.h),
+          Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: AppTextStyles.body.copyWith(
+              color: muted ? AppColors.textTertiary : AppColors.textPrimary,
+              letterSpacing: muted ? 1.5 : 0,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -96,7 +208,7 @@ class _ExecutorCardViewScreenState extends State<ExecutorCardViewScreen> {
     // Гость каталог смотрит, но предложить заказ может только после входа.
     if (isGuest) {
       await showGuestAuthPrompt(context,
-          message: 'Войдите, чтобы предложить заказ исполнителю.');
+          message: 'Авторизуйтесь, чтобы предложить заказ исполнителю.');
       return;
     }
     if (AccountBlock.isBlocked) {
@@ -300,14 +412,14 @@ class _ExecutorCardViewScreenState extends State<ExecutorCardViewScreen> {
               ),
             ),
             ratingText: _fmtRating(e.ratingAsExecutor),
+            // Кнопка звонка — в шапке, как в деталях заказа после мэтча.
+            onCall: _callAction(),
           ),
           SizedBox(height: 20.h),
-          // Телефон + кнопка «позвонить». Вошедший видит номер и звонит из
-          // каталога; гость — маску и приглашение войти (в режиме выбора
-          // исполнителя из откликнувшихся контакт не нужен — он уже после мэтча).
-          if (!widget.selectMode) ...<Widget>[
-            _ContactSection(executorId: e.userId),
-          ],
+          // Номер телефона и почта — обычным текстом под шапкой (как после
+          // мэтча). Звонок — иконкой в шапке. В режиме выбора исполнителя
+          // контакт не нужен (он уже после мэтча).
+          if (!widget.selectMode) _buildContactRows(),
           if (e.locationAddress != null &&
               e.locationAddress!.trim().isNotEmpty) ...<Widget>[
             const _SectionTitle('Местоположение'),
@@ -350,22 +462,7 @@ class _ExecutorCardViewScreenState extends State<ExecutorCardViewScreen> {
             for (int i = 0; i < full.services.length; i++) ...<Widget>[
               if (i > 0) SizedBox(height: 16.h),
               _ServiceTile(
-                child: _ServiceItem(
-                  service: full.services[i],
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => CatalogServiceDetailScreen(
-                        service: full.services[i],
-                        executorId: e.userId,
-                        executorName: e.name,
-                        executorAvatarUrl: e.avatarUrl,
-                        executorMachinery: e.machineryTitles,
-                        selectMode: widget.selectMode,
-                        onSelectExecutor: widget.onSelectExecutor,
-                      ),
-                    ),
-                  ),
-                ),
+                child: _ServiceItem(service: full.services[i]),
               ),
             ],
           ],
@@ -375,124 +472,9 @@ class _ExecutorCardViewScreenState extends State<ExecutorCardViewScreen> {
   }
 }
 
-/// Блок «Телефон» в карточке исполнителя.
-/// Гость: маска и по тапу — зов войти. Вошедший: грузим номер один раз; пока
-/// грузится — маска без кнопки; номер есть — показываем и активная кнопка
-/// звонка; номер скрыт — прячем блок; ошибка сети — маска + кнопка «обновить»
-/// (разовый обрыв не прячет блок навсегда).
-class _ContactSection extends StatefulWidget {
-  const _ContactSection({required this.executorId});
-
-  final String executorId;
-
-  @override
-  State<_ContactSection> createState() => _ContactSectionState();
-}
-
-class _ContactSectionState extends State<_ContactSection> {
-  /// Маска — реальных цифр не раскрывает.
-  static const String _masked = '+7 ••• •••-••-••';
-
-  // Грузим один раз и держим в поле — иначе ребилды (revision-листенеры
-  // родителя) дёргали бы RPC заново. null у гостя — ему сервер номер не отдаёт.
-  Future<String?>? _future;
-
-  @override
-  void initState() {
-    super.initState();
-    if (!isGuest) {
-      _future = CatalogService.instance.getExecutorPhone(widget.executorId);
-    }
-  }
-
-  void _retry() {
-    setState(() {
-      _future = CatalogService.instance.getExecutorPhone(widget.executorId);
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (_future == null) {
-      // Гость.
-      return _row(
-        phoneText: _masked,
-        muted: true,
-        icon: Icons.phone,
-        onTap: () => showGuestAuthPrompt(
-          context,
-          message: 'Войдите, чтобы увидеть телефон и позвонить исполнителю.',
-        ),
-      );
-    }
-    return FutureBuilder<String?>(
-      future: _future,
-      builder: (BuildContext context, AsyncSnapshot<String?> snap) {
-        if (snap.connectionState == ConnectionState.waiting) {
-          return _row(phoneText: _masked, muted: true, icon: Icons.phone, onTap: null);
-        }
-        if (snap.hasError) {
-          // Разовый обрыв сети при загрузке — не прячем блок, даём повторить.
-          return _row(phoneText: _masked, muted: true, icon: Icons.refresh, onTap: _retry);
-        }
-        final String? phone = snap.data;
-        if (phone == null || phone.isEmpty) return const SizedBox.shrink();
-        return _row(
-          phoneText: PhoneFormat.toPretty(phone),
-          muted: false,
-          icon: Icons.phone,
-          onTap: () => dialPhone(context, phone),
-        );
-      },
-    );
-  }
-
-  Widget _row({
-    required String phoneText,
-    required bool muted,
-    required IconData icon,
-    required VoidCallback? onTap,
-  }) {
-    return Padding(
-      padding: EdgeInsets.only(bottom: 16.h),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          const _SectionTitle('Телефон'),
-          SizedBox(height: 8.h),
-          Row(
-            children: <Widget>[
-              Expanded(
-                child: Text(
-                  phoneText,
-                  style: AppTextStyles.body.copyWith(
-                    color:
-                        muted ? AppColors.textTertiary : AppColors.textPrimary,
-                    letterSpacing: muted ? 1.5 : 0,
-                  ),
-                ),
-              ),
-              SizedBox(width: 12.w),
-              GestureDetector(
-                onTap: onTap,
-                child: Container(
-                  width: 44.r,
-                  height: 44.r,
-                  decoration: BoxDecoration(
-                    color:
-                        onTap == null ? AppColors.textTertiary : AppColors.primary,
-                    borderRadius: BorderRadius.circular(10.r),
-                  ),
-                  child: Icon(icon, color: Colors.white, size: 22.r),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
+/// Номер телефона и почта обычным текстом (как в деталях заказа после мэтча).
+/// Кнопка звонка — в шапке карточки. Гость видит маску номера; почта для гостя
+/// скрыта.
 
 class _CustomerHeader extends StatelessWidget {
   const _CustomerHeader({
@@ -502,6 +484,7 @@ class _CustomerHeader extends StatelessWidget {
     required this.reviewsCount,
     required this.onReviewsTap,
     required this.ratingText,
+    this.onCall,
   });
 
   final String name;
@@ -510,6 +493,7 @@ class _CustomerHeader extends StatelessWidget {
   final int reviewsCount;
   final VoidCallback onReviewsTap;
   final String ratingText;
+  final VoidCallback? onCall;
 
   @override
   Widget build(BuildContext context) {
@@ -550,6 +534,21 @@ class _CustomerHeader extends StatelessWidget {
             ],
           ),
         ),
+        if (onCall != null) ...<Widget>[
+          SizedBox(width: 8.w),
+          GestureDetector(
+            onTap: onCall,
+            child: Container(
+              width: 40.r,
+              height: 40.r,
+              decoration: BoxDecoration(
+                color: AppColors.primary,
+                borderRadius: BorderRadius.circular(10.r),
+              ),
+              child: Icon(Icons.phone, color: Colors.white, size: 22.r),
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -724,9 +723,13 @@ class _AvailabilitySectionState extends State<_AvailabilitySection> {
           children: <Widget>[
             const _SectionTitle('Занятость'),
             const Spacer(),
-            Text(
-              '${_monthsNominative[_selected.month - 1]}, ${_selected.year}',
-              style: AppTextStyles.body,
+            Flexible(
+              child: Text(
+                '${_monthsNominative[_selected.month - 1]}, ${_selected.year}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppTextStyles.body,
+              ),
             ),
             SizedBox(width: 8.w),
             Opacity(
@@ -814,7 +817,10 @@ class _AvailabilitySectionState extends State<_AvailabilitySection> {
         ),
         SizedBox(height: 12.h),
         if (selectedDayOff)
-          Text('Нерабочий день', style: AppTextStyles.body)
+          Text('Нерабочий день',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppTextStyles.body)
         else if (info != null) ...<Widget>[
           if (info.machineryTitles.isNotEmpty) ...<Widget>[
             _FilledChipWrap(items: info.machineryTitles),
@@ -822,12 +828,16 @@ class _AvailabilitySectionState extends State<_AvailabilitySection> {
           ],
           if (_formatTimeRange(info).isNotEmpty) ...<Widget>[
             Text(_formatTimeRange(info),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: AppTextStyles.body.copyWith(fontSize: 14.sp)),
             SizedBox(height: 10.h),
           ],
           if ((info.radiusKm ?? widget.defaultRadiusKm) != null)
             Text(
               'Заказы в радиусе ${info.radiusKm ?? widget.defaultRadiusKm} км',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: AppTextStyles.caption
                   .copyWith(color: AppColors.textTertiary),
             ),
@@ -892,6 +902,10 @@ class _ServiceTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
+      // Тянем плашку на всю ширину. Раньше ширину держал длинный текст
+      // описания услуги; после его удаления без явной ширины плашка
+      // ужималась под содержимое и справа появлялся большой отступ.
+      width: double.infinity,
       decoration: BoxDecoration(
         color: AppColors.fieldFill,
         borderRadius: BorderRadius.circular(14.r),
@@ -903,9 +917,8 @@ class _ServiceTile extends StatelessWidget {
 }
 
 class _ServiceItem extends StatelessWidget {
-  const _ServiceItem({required this.service, this.onTap});
+  const _ServiceItem({required this.service});
   final ExecutorService service;
-  final VoidCallback? onTap;
 
   // Серый тег над заголовком прячем, когда вид техники равен названию
   // услуги — иначе «Экскаватор» стоит ровно над «Экскаватор».
@@ -929,13 +942,22 @@ class _ServiceItem extends StatelessWidget {
       fontWeight: FontWeight.w700,
       color: AppColors.primary,
     );
+    final TextStyle minStyle = TextStyle(
+      fontFamily: 'Roboto',
+      fontSize: 13.sp,
+      fontWeight: FontWeight.w400,
+      color: AppColors.textSecondary,
+      height: 1.3,
+    );
     final String? priceHour = _fmtPrice(service.pricePerHour);
     final String? priceDay = _fmtPrice(service.pricePerDay);
     final bool hasHour = priceHour != null;
     final bool hasDay = priceDay != null;
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
+    final bool hasMin = service.minHours != null && service.minHours! > 0;
+    // Услуги в карточке исполнителя некликабельны: вся информация (вид
+    // техники, цены, минимальный заказ) видна прямо в плашке. Отступы между
+    // строками одинаковые.
+    return Padding(
       padding: EdgeInsets.all(16.r),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -951,7 +973,7 @@ class _ServiceItem extends StatelessWidget {
                 height: 1.78,
               ),
             ),
-            SizedBox(height: 4.h),
+            SizedBox(height: 8.h),
           ],
           Text(
             service.title,
@@ -965,22 +987,8 @@ class _ServiceItem extends StatelessWidget {
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
           ),
-          if (service.description != null &&
-              service.description!.trim().isNotEmpty) ...<Widget>[
-            SizedBox(height: 6.h),
-            Text(
-              service.description!,
-              style: TextStyle(
-                fontFamily: 'Roboto',
-                fontSize: 14.sp,
-                fontWeight: FontWeight.w400,
-                color: AppColors.textSecondary,
-                height: 1.4,
-              ),
-            ),
-          ],
           if (hasHour || hasDay) ...<Widget>[
-            SizedBox(height: 10.h),
+            SizedBox(height: 8.h),
             // FittedBox: две максимальные цены (по 7 цифр) впритык не
             // влезали в плашку — при крупном системном шрифте был overflow.
             FittedBox(
@@ -1003,8 +1011,14 @@ class _ServiceItem extends StatelessWidget {
               ),
             ),
           ],
+          if (hasMin) ...<Widget>[
+            SizedBox(height: 8.h),
+            Text(
+              'Минимальный заказ от ${service.minHours} ${_hoursWord(service.minHours!)}',
+              style: minStyle,
+            ),
+          ],
         ],
-      ),
       ),
     );
   }

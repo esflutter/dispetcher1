@@ -279,6 +279,8 @@ class _Header extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
               Text(fullName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: AppTextStyles.titleS),
               SizedBox(height: 4.h),
               GestureDetector(
@@ -292,7 +294,14 @@ class _Header extends StatelessWidget {
                       Image.asset('assets/images/catalog/star.webp',
                           width: 20.r, height: 20.r),
                       SizedBox(width: 4.w),
-                      Text(ratingText, style: AppTextStyles.body),
+                      Flexible(
+                        child: Text(
+                          ratingText,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTextStyles.body,
+                        ),
+                      ),
                       SizedBox(width: 16.w),
                     ],
                     Text(
@@ -333,7 +342,12 @@ class _ProfileMenuItem extends StatelessWidget {
           child: Row(
             children: <Widget>[
               Expanded(
-                child: Text(label, style: AppTextStyles.body),
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTextStyles.body,
+                ),
               ),
               Image.asset('assets/icons/profile/arrow_right.webp',
                   width: 16.r, height: 16.r),

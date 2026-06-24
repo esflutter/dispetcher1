@@ -145,6 +145,9 @@ class _SelectExecutorScreenState extends State<SelectExecutorScreen> {
       r.executorRating,
       r.executorReviewCount,
     );
+    // На успешном выборе экран обычно закрывается родителем; на случай, если
+    // он остаётся в дереве — снимаем _busy, чтобы кнопки не залипли.
+    if (mounted) setState(() => _busy = false);
   }
 
   /// Открывает полную карточку исполнителя в режиме «выбор». Кнопка

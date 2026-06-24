@@ -78,6 +78,19 @@ class _ReviewScreenState extends State<ReviewScreen> {
         });
       } on PostgrestException catch (e) {
         if (!mounted) return;
+        // 23505 — уникальный индекс (match_id, author_id): отзыв на этот заказ
+        // уже был оставлен (например, в прошлой сессии, а локальная отметка
+        // «оценено» не подтянулась из-за сбоя выборки reviews — и кнопка
+        // «Оставить отзыв» снова показалась). Это не ошибка ввода: относимся
+        // как к «уже оставлен» — помечаем заказ оценённым (pop true) и
+        // закрываем, чтобы он ушёл из «В работе», а не зацикливал ошибку.
+        if (e.code == '23505') {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Вы уже оставили отзыв на этот заказ.')),
+          );
+          Navigator.of(context).pop(true);
+          return;
+        }
         setState(() => _submitting = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(friendlyError(e, fallback: 'Не удалось отправить отзыв. Попробуйте ещё раз.'))),

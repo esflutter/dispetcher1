@@ -49,7 +49,7 @@ class AuthService {
     }
     final Map<String, dynamic>? profile = await _client
         .from('profiles')
-        .select('name, avatar_url, agreement_accepted_at')
+        .select('name, avatar_url, agreement_accepted_at, customer_card_saved_at')
         .eq('id', user.id)
         .maybeSingle();
     final bool registered = profile != null &&
@@ -66,6 +66,7 @@ class AuthService {
       needsRegistration: !registered,
       name: profile?['name'] as String?,
       avatarUrl: profile?['avatar_url'] as String?,
+      hasCustomerCard: profile?['customer_card_saved_at'] != null,
     );
   }
 
@@ -98,12 +99,19 @@ class VerifyResult {
     required this.needsRegistration,
     this.name,
     this.avatarUrl,
+    this.hasCustomerCard = false,
   });
 
   final String userId;
   final bool needsRegistration;
   final String? name;
   final String? avatarUrl;
+
+  /// `profiles.customer_card_saved_at != null` — карточка заказчика уже
+  /// сохранена. Нужно, чтобы при тёплом входе (без перезапуска приложения)
+  /// восстановить флаг-гейт «Предложить заказ»; иначе после выхода/входа
+  /// показывался ложный попап «создайте карточку».
+  final bool hasCustomerCard;
 }
 
 /// Если ошибка — «SMS на этот номер уже отправляли, повторно можно через

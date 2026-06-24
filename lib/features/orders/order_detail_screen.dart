@@ -424,6 +424,8 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                       SizedBox(height: 4.h),
                       Text(
                         executorPhone,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: AppTextStyles.subBody
                             .copyWith(fontWeight: FontWeight.w400),
                       ),
@@ -446,6 +448,8 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                       SizedBox(height: 4.h),
                       Text(
                         executorEmail,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: AppTextStyles.subBody
                             .copyWith(fontWeight: FontWeight.w400),
                       ),
@@ -655,6 +659,8 @@ class _ExecutorHeader extends StatelessWidget {
                     children: <Widget>[
                       Text(
                         name.trim().isEmpty ? 'Пользователь' : name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           fontFamily: 'Roboto',
                           fontSize: 16.sp,
@@ -694,6 +700,8 @@ class _ExecutorHeader extends StatelessWidget {
                             onTap: onReviewsTap,
                             child: Text(
                               '$reviewCount ${reviewsWord(reviewCount)}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                               style: TextStyle(
                                 fontFamily: 'Roboto',
                                 fontSize: 16.sp,

@@ -222,6 +222,9 @@ class _NavButton extends StatelessWidget {
         ),
         child: Text(
           label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.center,
           style: AppTextStyles.body.copyWith(
             color: AppColors.primary,
             fontSize: 14.sp,
@@ -621,6 +624,9 @@ class _DraftReadyHandoffState extends State<_DraftReadyHandoff> {
                   published
                       ? (isOrder ? 'Заказ опубликован' : 'Услуга опубликована')
                       : (isOrder ? 'Открыть форму заказа' : 'Открыть форму услуги'),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
                   style: AppTextStyles.body.copyWith(
                     color: published ? AppColors.textTertiary : Colors.white,
                     fontSize: 15.sp, fontWeight: FontWeight.w600,

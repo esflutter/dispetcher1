@@ -143,15 +143,22 @@ class OrderStatusPill extends StatelessWidget {
         color: status.bg,
         borderRadius: BorderRadius.circular(100.r),
       ),
-      child: Text(
-        label,
-        textAlign: TextAlign.center,
-        style: TextStyle(
-          fontFamily: 'Roboto',
-          fontSize: 12.sp,
-          fontWeight: FontWeight.w600,
-          height: 1.0,
-          color: status.fg,
+      // Длинный статус (напр. «Выберите исполнителя (15)») при крупном
+      // системном шрифте переносился на 2 строки и вылезал за высоту пилюли.
+      // FittedBox ужимает подпись в одну строку, не теряя текст.
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Text(
+          label,
+          maxLines: 1,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontFamily: 'Roboto',
+            fontSize: 12.sp,
+            fontWeight: FontWeight.w600,
+            height: 1.0,
+            color: status.fg,
+          ),
         ),
       ),
     );

@@ -13,6 +13,8 @@ import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
 import 'package:dispatcher_1/core/widgets/primary_button.dart';
 import 'package:dispatcher_1/features/auth/photo_crop_screen.dart';
+import 'package:dispatcher_1/features/executor_card/executor_card_screen.dart'
+    show ExecutorCardScreen;
 
 class OtpVerificationScreen extends StatefulWidget {
   const OtpVerificationScreen({super.key, this.phone});
@@ -115,6 +117,11 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
         if (result.name != null && result.name!.trim().isNotEmpty) {
           CropResult.userName = result.name!;
         }
+        // Тёплый вход (без перезапуска приложения) — восстанавливаем флаг
+        // «карточка заказчика создана», как это делает заставка на холодном
+        // старте. Иначе после выхода/входа гейт «Предложить заказ» ложно
+        // показывал попап «создайте карточку», хотя она есть в БД.
+        ExecutorCardScreen.cardCreated = result.hasCustomerCard;
         // Регистрация FCM-токена сразу после OTP. Не блокируем переход —
         // если сеть тормозит, юзер уже на экране shell, а токен подтянется
         // в фоне (внутри single-flight + дедуп 5 мин).

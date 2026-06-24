@@ -399,6 +399,8 @@ class _OrderOfferTile extends StatelessWidget {
             SizedBox(height: 10.h),
             Text(
               order.title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: AppTextStyles.body.copyWith(
                 fontSize: 17.sp,
                 fontWeight: FontWeight.w700,

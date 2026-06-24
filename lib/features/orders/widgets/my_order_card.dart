@@ -87,6 +87,8 @@ class MyOrderCard extends StatelessWidget {
                   child: Text(
                     equipment.join('   '),
                     style: tagStyle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
                 SizedBox(width: 8.w),
@@ -194,6 +196,8 @@ class _CustomerRow extends StatelessWidget {
             children: <Widget>[
               Text(
                 name.trim().isEmpty ? CropResult.namePlaceholder : name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   fontFamily: 'Roboto',
                   fontSize: 16.sp,
@@ -205,6 +209,8 @@ class _CustomerRow extends StatelessWidget {
               SizedBox(height: 2.h),
               Text(
                 phone,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   fontFamily: 'Roboto',
                   fontSize: 14.sp,

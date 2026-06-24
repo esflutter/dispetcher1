@@ -92,7 +92,7 @@ class _CatalogServiceDetailScreenState
     // Гость каталог смотрит, но предложить заказ может только после входа.
     if (isGuest) {
       await showGuestAuthPrompt(context,
-          message: 'Войдите, чтобы предложить заказ исполнителю.');
+          message: 'Авторизуйтесь, чтобы предложить заказ исполнителю.');
       return;
     }
     if (AccountBlock.isBlocked) {
@@ -156,6 +156,8 @@ class _CatalogServiceDetailScreenState
                 children: <Widget>[
                   Text(
                     s.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: AppTextStyles.titleL.copyWith(
                       fontWeight: FontWeight.w700,
                       height: 1.2,
@@ -166,11 +168,15 @@ class _CatalogServiceDetailScreenState
                     Row(
                       children: <Widget>[
                         if (hasHour) ...<Widget>[
-                          Text('₽ / час',
-                              style: AppTextStyles.body.copyWith(
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.textPrimary,
-                              )),
+                          Flexible(
+                            child: Text('₽ / час',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: AppTextStyles.body.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.textPrimary,
+                                )),
+                          ),
                           SizedBox(width: 6.w),
                           Text(priceHour,
                               style: AppTextStyles.bodyMedium.copyWith(
@@ -179,11 +185,15 @@ class _CatalogServiceDetailScreenState
                         ],
                         if (hasHour && hasDay) SizedBox(width: 24.w),
                         if (hasDay) ...<Widget>[
-                          Text('₽ / день',
-                              style: AppTextStyles.body.copyWith(
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.textPrimary,
-                              )),
+                          Flexible(
+                            child: Text('₽ / день',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: AppTextStyles.body.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.textPrimary,
+                                )),
+                          ),
                           SizedBox(width: 6.w),
                           Text(priceDay,
                               style: AppTextStyles.bodyMedium.copyWith(
@@ -197,11 +207,15 @@ class _CatalogServiceDetailScreenState
                     SizedBox(height: 16.h),
                     Row(
                       children: <Widget>[
-                        Text('Минимальный заказ:',
-                            style: AppTextStyles.body.copyWith(
-                              fontSize: 14.sp,
-                              color: AppColors.textSecondary,
-                            )),
+                        Flexible(
+                          child: Text('Минимальный заказ:',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppTextStyles.body.copyWith(
+                                fontSize: 14.sp,
+                                color: AppColors.textSecondary,
+                              )),
+                        ),
                         SizedBox(width: 6.w),
                         Text(
                           'от ${s.minHours} ${_hoursWord(s.minHours!)}',
@@ -212,13 +226,6 @@ class _CatalogServiceDetailScreenState
                         ),
                       ],
                     ),
-                  ],
-                  if (s.description != null &&
-                      s.description!.trim().isNotEmpty) ...<Widget>[
-                    SizedBox(height: 16.h),
-                    Text(s.description!,
-                        style: AppTextStyles.body
-                            .copyWith(fontSize: 14.sp, height: 1.4)),
                   ],
                   // Секцию «Спецтехника» прячем, когда она сводится к одной
                   // позиции, равной заголовку услуги — иначе вид техники

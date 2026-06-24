@@ -705,6 +705,8 @@ class _OrdersSegmented extends StatelessWidget {
                             : AppColors.surface,
                         child: Text(
                           items[i],
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             fontFamily: 'Roboto',
                             fontSize: 14.sp,

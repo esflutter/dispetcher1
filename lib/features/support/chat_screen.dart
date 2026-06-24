@@ -126,7 +126,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) {
             showGuestAuthPrompt(context,
-                message: 'Войдите, чтобы создать и разместить заказ.');
+                message: 'Авторизуйтесь, чтобы создать и разместить заказ.');
           }
         });
         return;
@@ -140,7 +140,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     }
     if (initial == 'find_executor' || initial == 'Найти исполнителя') {
       _mode = AiChatKind.search;
-      _addBotMessage('Кого ищете? Назовите технику и город — например, «кран в Москве». Можно голосом.');
+      _addBotMessage('Кого ищете? Назовите технику и город — например, «кран в Новосибирске». Можно голосом.');
       return;
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -308,7 +308,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                 looksLikeCreateOrder(text)))) {
       if (_mode == AiChatKind.slotFillOrder) _mode = AiChatKind.chat;
       await showGuestAuthPrompt(context,
-          message: 'Войдите, чтобы создать и разместить заказ.');
+          message: 'Авторизуйтесь, чтобы создать и разместить заказ.');
       return;
     }
     setState(() => _isProcessing = true);
@@ -849,7 +849,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                         // Гость заказ создать не может — нужен аккаунт.
                         if (isGuest) {
                           showGuestAuthPrompt(context,
-                              message: 'Войдите, чтобы создать и разместить заказ.');
+                              message: 'Авторизуйтесь, чтобы создать и разместить заказ.');
                           return;
                         }
                         _mode = AiChatKind.slotFillOrder;
@@ -862,7 +862,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                       label: 'Найти исполнителя',
                       onTap: () {
                         _mode = AiChatKind.search;
-                        _addBotMessage('Кого ищете? Назовите технику и город — например, «кран в Москве». Можно голосом.');
+                        _addBotMessage('Кого ищете? Назовите технику и город — например, «кран в Новосибирске». Можно голосом.');
                       },
                     ),
                   ],

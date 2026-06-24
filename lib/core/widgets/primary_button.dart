@@ -58,6 +58,9 @@ class PrimaryButton extends StatelessWidget {
               )
             : Text(
                 label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
                 style: AppTextStyles.button.copyWith(
                   color: active
                       ? Colors.white
@@ -95,7 +98,11 @@ class SecondaryButton extends StatelessWidget {
             borderRadius: BorderRadius.circular(16.r),
           ),
         ),
-        child: Text(label, style: AppTextStyles.button.copyWith(color: AppColors.primary)),
+        child: Text(label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: AppTextStyles.button.copyWith(color: AppColors.primary)),
       ),
     );
   }

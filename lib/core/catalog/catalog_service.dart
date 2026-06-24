@@ -713,6 +713,20 @@ class CatalogService {
     return null;
   }
 
+  /// Почта исполнителя для написания письма из каталога. Сервер (RPC
+  /// `get_executor_email`) отдаёт её ТОЛЬКО вошедшему заказчику и ТОЛЬКО для
+  /// исполнителя, реально видимого в каталоге, и только если исполнитель её
+  /// указал. Гостю почта не отдаётся (и в UI не показывается). Возвращает адрес
+  /// или null, если почты нет / исполнитель скрыт. Ошибку сети НЕ глотаем.
+  Future<String?> getExecutorEmail(String executorId) async {
+    final dynamic res = await _client.rpc(
+      'get_executor_email',
+      params: <String, dynamic>{'p_executor_id': executorId},
+    );
+    if (res is String && res.trim().isNotEmpty) return res.trim();
+    return null;
+  }
+
   ExecutorService _executorServiceFromRow(Map<String, dynamic> r) {
     final List<int> mIds = List<int>.from((r['machinery_ids'] as List?) ?? const <dynamic>[]);
     final List<int> cIds = List<int>.from((r['category_ids'] as List?) ?? const <dynamic>[]);

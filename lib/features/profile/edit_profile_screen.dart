@@ -497,6 +497,8 @@ class _ActionTile extends StatelessWidget {
               SizedBox(width: AppSpacing.sm),
               Expanded(
                 child: Text(text,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: AppTextStyles.body.copyWith(color: color)),
               ),
               Image.asset(arrowAsset, width: 20.r, height: 20.r),

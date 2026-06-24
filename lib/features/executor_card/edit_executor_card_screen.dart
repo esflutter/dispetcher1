@@ -41,12 +41,15 @@ class _EditExecutorCardScreenState extends State<EditExecutorCardScreen> {
     r'^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$',
   );
 
-  late final TextEditingController _about;
   late final TextEditingController _nameCtrl;
   late final TextEditingController _emailCtrl;
 
   final FocusNode _nameFocus = FocusNode();
   final FocusNode _emailFocus = FocusNode();
+
+  /// Контроллер прокрутки формы — чтобы при раскрытии списка статусов
+  /// автоматически проскроллить к нему (статус — последнее поле).
+  final ScrollController _scrollCtrl = ScrollController();
 
   /// Показывать ли красную подсказку под полем телефона (нельзя менять
   /// номер в карточке — только через регистрацию/техподдержку).
@@ -55,11 +58,6 @@ class _EditExecutorCardScreenState extends State<EditExecutorCardScreen> {
   String? _selectedStatus;
 
   bool _statusExpanded = false;
-
-  /// Ключ на контейнер с развёрнутым списком статусов — нужен, чтобы
-  /// прокрутить экран к списку, когда пользователь его раскрывает
-  /// (иначе список может быть ниже видимой области).
-  final GlobalKey _statusDropdownKey = GlobalKey();
 
   /// Текст ошибки под полем email. Выставляется при потере фокуса,
   /// если введённое значение не проходит валидацию регуляркой. Сброс —
@@ -82,7 +80,6 @@ class _EditExecutorCardScreenState extends State<EditExecutorCardScreen> {
   @override
   void initState() {
     super.initState();
-    _about = TextEditingController(text: ExecutorCardData.about ?? '');
     // Имя/email — синхронизируются с профилем через [ExecutorCardData.name]
     // (геттер на [CropResult.userName]) и [CropResult.userEmail].
     _nameCtrl = TextEditingController(text: ExecutorCardData.name);
@@ -173,11 +170,11 @@ class _EditExecutorCardScreenState extends State<EditExecutorCardScreen> {
         CropResult.userEmail = prev;
       });
     }
-    _about.dispose();
     _nameCtrl.dispose();
     _emailCtrl.dispose();
     _nameFocus.dispose();
     _emailFocus.dispose();
+    _scrollCtrl.dispose();
     super.dispose();
   }
 
@@ -197,6 +194,7 @@ class _EditExecutorCardScreenState extends State<EditExecutorCardScreen> {
           children: [
             Expanded(
               child: SingleChildScrollView(
+                controller: _scrollCtrl,
                 padding: EdgeInsets.fromLTRB(AppSpacing.screenH, AppSpacing.md,
                     AppSpacing.screenH, AppSpacing.md),
                 child: Column(
@@ -247,7 +245,12 @@ class _EditExecutorCardScreenState extends State<EditExecutorCardScreen> {
                     borderRadius: BorderRadius.circular(14.r),
                   ),
                   alignment: Alignment.centerLeft,
-                  child: Text(ExecutorCardData.phone, style: AppTextStyles.body),
+                  child: Text(
+                    ExecutorCardData.phone,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTextStyles.body,
+                  ),
                 ),
               ),
               if (_showPhoneHint) ...[
@@ -260,39 +263,21 @@ class _EditExecutorCardScreenState extends State<EditExecutorCardScreen> {
                 ),
               ],
               SizedBox(height: AppSpacing.lg),
-              _SectionTitle('О себе'),
-              SizedBox(height: AppSpacing.xs),
-              _TintField(
-                controller: _about,
-                hint: 'Расскажите о себе',
-                minLines: 1,
-                maxLength: 500,
-                maxLines: 5,
-              ),
-              SizedBox(height: AppSpacing.xs),
-              Text(
-                'Информация о вас помогает другим лучше понять, '
-                'с кем они будут работать.',
-                style: AppTextStyles.caption
-                    .copyWith(color: const Color(0xFF707070)),
-              ),
-              SizedBox(height: AppSpacing.lg),
               _SectionTitle('Статус'),
               SizedBox(height: AppSpacing.xs),
               GestureDetector(
                 onTap: () {
                   setState(() => _statusExpanded = !_statusExpanded);
                   if (_statusExpanded) {
-                    // После раскрытия списка прокручиваем экран так,
-                    // чтобы полный список статусов был виден.
+                    // При раскрытии прокручиваем форму в самый низ, чтобы
+                    // список статусов был сразу виден целиком (статус —
+                    // последнее поле формы), без ручного свайпа.
                     WidgetsBinding.instance.addPostFrameCallback((_) {
-                      final BuildContext? ctx =
-                          _statusDropdownKey.currentContext;
-                      if (ctx != null) {
-                        Scrollable.ensureVisible(
-                          ctx,
-                          duration: const Duration(milliseconds: 200),
-                          alignment: 1.0,
+                      if (_scrollCtrl.hasClients) {
+                        _scrollCtrl.animateTo(
+                          _scrollCtrl.position.maxScrollExtent,
+                          duration: const Duration(milliseconds: 250),
+                          curve: Curves.easeOut,
                         );
                       }
                     });
@@ -312,6 +297,8 @@ class _EditExecutorCardScreenState extends State<EditExecutorCardScreen> {
                       Expanded(
                         child: Text(
                           _selectedStatus ?? 'Укажите статус',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                           style: AppTextStyles.body.copyWith(
                             color: _selectedStatus == null
                                 ? AppColors.textTertiary
@@ -332,7 +319,6 @@ class _EditExecutorCardScreenState extends State<EditExecutorCardScreen> {
               ),
               if (_statusExpanded)
                 Container(
-                  key: _statusDropdownKey,
                   decoration: BoxDecoration(
                     color: AppColors.fieldFill,
                     borderRadius: BorderRadius.vertical(
@@ -354,7 +340,12 @@ class _EditExecutorCardScreenState extends State<EditExecutorCardScreen> {
                             child: Row(
                               children: [
                                 Expanded(
-                                  child: Text(s, style: AppTextStyles.body),
+                                  child: Text(
+                                    s,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: AppTextStyles.body,
+                                  ),
                                 ),
                                 if (_selectedStatus == s)
                                   Image.asset('assets/icons/ui/check_black.webp',
@@ -387,7 +378,6 @@ class _EditExecutorCardScreenState extends State<EditExecutorCardScreen> {
                 label: 'Сохранить',
                 onPressed: () async {
                   ExecutorCardData.status = _selectedStatus;
-                  ExecutorCardData.about = _about.text;
                   ExecutorCardScreen.cardCreated = true;
 
                   // UPDATE profiles: about, legal_status. У заказчика
@@ -404,9 +394,7 @@ class _EditExecutorCardScreenState extends State<EditExecutorCardScreen> {
                     // чтобы UI ушёл из empty-state даже когда оба поля
                     // (about/legal_status) пустые — они опциональные.
                     await ProfileService.instance.saveCustomerCard(
-                      about: _about.text.trim().isEmpty
-                          ? null
-                          : _about.text.trim(),
+                      about: null,
                       legalStatus: legalStatus,
                     );
                   } catch (e) {
@@ -635,50 +623,4 @@ class _PlainEditableField extends StatelessWidget {
   }
 }
 
-class _TintField extends StatelessWidget {
-  const _TintField({
-    required this.controller,
-    this.hint,
-    this.minLines = 1,
-    this.maxLines = 1,
-    this.maxLength,
-  });
-  final TextEditingController controller;
-  final String? hint;
-  final int minLines;
-  final int maxLines;
-  final int? maxLength;
-
-  @override
-  Widget build(BuildContext context) {
-    return TextField(
-      controller: controller,
-      minLines: minLines,
-      maxLines: maxLines,
-      maxLength: maxLength,
-      buildCounter: maxLength != null ? (_, {required currentLength, required isFocused, required maxLength}) => null : null,
-      style: AppTextStyles.body,
-      decoration: InputDecoration(
-        hintText: hint,
-        hintStyle: AppTextStyles.body.copyWith(color: AppColors.textTertiary),
-        filled: true,
-        fillColor: AppColors.fieldFill,
-        contentPadding: EdgeInsets.symmetric(
-            horizontal: AppSpacing.md, vertical: AppSpacing.sm),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppSpacing.radiusM),
-          borderSide: BorderSide.none,
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppSpacing.radiusM),
-          borderSide: BorderSide.none,
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppSpacing.radiusM),
-          borderSide: const BorderSide(color: AppColors.primary),
-        ),
-      ),
-    );
-  }
-}
 
