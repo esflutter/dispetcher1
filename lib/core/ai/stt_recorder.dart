@@ -48,8 +48,6 @@ class SttRecorder {
     return result.isGranted;
   }
 
-  Future<void> openSettings() => openAppSettings();
-
   Future<bool> start() async {
     final granted = await ensurePermission();
     if (!granted) return false;
