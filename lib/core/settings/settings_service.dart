@@ -98,6 +98,21 @@ class SettingsService {
     return (min: min, latest: latest, recommend: recommend);
   }
 
+  /// Режим графика исполнителей: считается ли день БЕЗ отметки в расписании
+  /// рабочим. true (легаси, по умолчанию) — исполнитель без отметки доступен
+  /// на любую дату. false (новый режим «нерабочие по умолчанию») — доступен
+  /// только на явно отмеченные рабочие дни. Флаг серверный
+  /// (schedule.unmarked_day_available, миграция 107) — фильтр каталога по
+  /// дате обязан трактовать «нет записи» так же, как сервер.
+  Future<bool> unmarkedDayAvailable() async {
+    await _load();
+    final Object? v = _values['schedule.unmarked_day_available'];
+    if (v is bool) return v;
+    if (v is num) return v != 0;
+    if (v is String) return v.trim().toLowerCase() != 'false';
+    return true;
+  }
+
   /// Прогревает кэш настроек на старте приложения. Вызывается из `main()`
   /// fire-and-forget вместе с CatalogService.warmup() — после этого все
   /// геттеры возвращают значения мгновенно, без сетевого запроса.

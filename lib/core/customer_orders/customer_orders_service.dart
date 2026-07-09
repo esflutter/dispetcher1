@@ -22,6 +22,16 @@ class MatchAlreadyTakenException implements Exception {
   String toString() => 'Match already taken';
 }
 
+/// Сервер отклонил ручное завершение заказа (RPC `complete_match_manually`).
+/// Несёт готовый к показу русский текст — сама функция бросает технические
+/// коды (`too_early`, `not_accepted` и т.п.), которые нельзя показывать как есть.
+class CompleteMatchException implements Exception {
+  const CompleteMatchException(this.message);
+  final String message;
+  @override
+  String toString() => message;
+}
+
 /// Результат публикации заказа: id новой записи + сколько фото из
 /// заявленных реально залилось в Storage. UI показывает снэкбар, если
 /// `photosUploaded < photosTotal`.
@@ -683,6 +693,44 @@ class CustomerOrdersService {
       rethrow;
     }
     return (matchId: row['id'] as String, serviceId: serviceId);
+  }
+
+  /// Ручное завершение принятого заказа (RPC `complete_match_manually`,
+  /// миграция 109). Возвращает `'completed'` либо `'already_completed'`
+  /// (крон или исполнитель успели раньше — тоже успех). Переход в
+  /// `completed` на сервере сам архивирует заказ и шлёт пуши «Оставьте
+  /// отзыв» обеим сторонам — клиенту достаточно обновить свой стор.
+  /// Серверные отказы приходят техническими кодами в message —
+  /// конвертируем в [CompleteMatchException] с готовым русским текстом.
+  Future<String> completeMatchManually(String matchId) async {
+    try {
+      final dynamic res = await _client.rpc<dynamic>(
+        'complete_match_manually',
+        params: <String, dynamic>{'p_match_id': matchId},
+      );
+      return res as String;
+    } on PostgrestException catch (e) {
+      throw CompleteMatchException(_completeErrorMessage(e.message));
+    }
+  }
+
+  /// Технический код отказа `complete_match_manually` → русский текст.
+  static String _completeErrorMessage(String serverMessage) {
+    if (serverMessage.contains('too_early')) {
+      return 'Завершить можно начиная с последнего дня работ';
+    }
+    if (serverMessage.contains('order_cancelled')) {
+      return 'Заказ отменён — завершить его нельзя';
+    }
+    if (serverMessage.contains('not_accepted')) {
+      return 'Заказ уже не в работе — обновите список заказов';
+    }
+    if (serverMessage.contains('match_not_found') ||
+        serverMessage.contains('forbidden') ||
+        serverMessage.contains('unauthorized')) {
+      return 'Не удалось завершить заказ — обновите список заказов';
+    }
+    return 'Не удалось завершить заказ. Попробуйте ещё раз';
   }
 
   /// Снять заказ с публикации (status → `cancelled`). RLS-политика

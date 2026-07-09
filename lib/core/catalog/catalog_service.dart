@@ -1,5 +1,6 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'package:dispatcher_1/core/settings/settings_service.dart';
 import 'package:dispatcher_1/core/utils/geo_distance.dart';
 
 import 'models.dart';
@@ -514,12 +515,19 @@ class CatalogService {
     });
   }
 
-  /// Возвращает множество `user_id`, у которых на интервале
-  /// `[dateFrom..dateTo]` расписание конфликтует с запрошенным временем.
-  /// Если для дня нет override — считаем, что исполнитель доступен.
-  /// Конфликт = override.accepting=false ИЛИ
-  /// (заказ wholeDay=true, override.whole_day=false) ИЛИ
-  /// (заданы timeFrom/timeTo, override не whole_day и время не покрывает запрос).
+  /// Возвращает множество `user_id`, которые НЕдоступны на интервале
+  /// `[dateFrom..dateTo]` по своему расписанию.
+  ///
+  /// Трактовка дня БЕЗ записи зависит от серверного флага
+  /// `schedule.unmarked_day_available` (миграция 107):
+  ///  • легаси (true): нет override — исполнитель доступен; конфликт =
+  ///    override.accepting=false ИЛИ (заказ wholeDay=true, override не
+  ///    whole_day) ИЛИ (заданы timeFrom/timeTo, override не whole_day и
+  ///    время не покрывает запрос);
+  ///  • строгий (false, «нерабочие по умолчанию»): исполнитель доступен,
+  ///    только если КАЖДЫЙ день интервала явно отмечен рабочим
+  ///    (accepting=true) и не конфликтует по времени по тем же правилам;
+  ///    день без записи = недоступен.
   Future<Set<String>> _findUnavailableExecutors({
     required List<String> userIds,
     required DateTime dateFrom,
@@ -528,6 +536,8 @@ class CatalogService {
     String? timeTo,
     required bool wholeDay,
   }) async {
+    final bool unmarkedOk =
+        await SettingsService.instance.unmarkedDayAvailable();
     final List<Map<String, dynamic>> rows = await _client
         .from('schedule_day_overrides')
         .select('user_id, day, accepting, whole_day, time_from, time_to')
@@ -535,31 +545,58 @@ class CatalogService {
         .gte('day', _isoDate(dateFrom))
         .lte('day', _isoDate(dateTo));
 
-    final Set<String> excluded = <String>{};
-    for (final Map<String, dynamic> r in rows) {
-      final String uid = r['user_id'] as String;
-      if (excluded.contains(uid)) continue;
-      final bool accepting = (r['accepting'] as bool?) ?? true;
-      if (!accepting) {
-        excluded.add(uid);
-        continue;
-      }
+    // Конфликтует ли ПОЛОЖИТЕЛЬНЫЙ override (accepting=true) с запросом.
+    bool conflictsByTime(Map<String, dynamic> r) {
       final bool overrideWholeDay = (r['whole_day'] as bool?) ?? false;
-      if (wholeDay && !overrideWholeDay) {
-        excluded.add(uid);
-        continue;
-      }
+      if (wholeDay && !overrideWholeDay) return true;
       if (!wholeDay && timeFrom != null && timeTo != null) {
-        if (overrideWholeDay) continue; // полностью покрывает
+        if (overrideWholeDay) return false; // полностью покрывает
         final String? oFrom = _trimTime(r['time_from'] as String?);
         final String? oTo = _trimTime(r['time_to'] as String?);
         if (oFrom == null ||
             oTo == null ||
             timeFrom.compareTo(oFrom) < 0 ||
             timeTo.compareTo(oTo) > 0) {
-          excluded.add(uid);
+          return true;
         }
       }
+      return false;
+    }
+
+    final Set<String> excluded = <String>{};
+
+    if (unmarkedOk) {
+      // Легаси-режим: исключаем только явные конфликты, день без записи
+      // доступен — поведение прежних версий.
+      for (final Map<String, dynamic> r in rows) {
+        final String uid = r['user_id'] as String;
+        if (excluded.contains(uid)) continue;
+        final bool accepting = (r['accepting'] as bool?) ?? true;
+        if (!accepting || conflictsByTime(r)) excluded.add(uid);
+      }
+      return excluded;
+    }
+
+    // Строгий режим: считаем, сколько дней интервала у исполнителя явно
+    // отмечены рабочими и подходят по времени; закрытый день (accepting=
+    // false) — жёсткое исключение сразу. Не покрыл все дни — недоступен.
+    final int daysTotal = dateTo.difference(dateFrom).inDays + 1;
+    final Map<String, Set<String>> okDays = <String, Set<String>>{};
+    for (final Map<String, dynamic> r in rows) {
+      final String uid = r['user_id'] as String;
+      if (excluded.contains(uid)) continue;
+      final bool accepting = (r['accepting'] as bool?) ?? true;
+      if (!accepting) {
+        excluded.add(uid);
+        okDays.remove(uid);
+        continue;
+      }
+      if (conflictsByTime(r)) continue; // день отмечен, но время не подходит
+      (okDays[uid] ??= <String>{}).add((r['day'] ?? '').toString());
+    }
+    for (final String uid in userIds) {
+      if (excluded.contains(uid)) continue;
+      if ((okDays[uid]?.length ?? 0) < daysTotal) excluded.add(uid);
     }
     return excluded;
   }

@@ -31,6 +31,8 @@ class OrderMock {
     required this.address,
     required this.publishedAt,
     DateTime? statusUpdatedAt,
+    this.dateFrom,
+    this.dateTo,
     this.customerName,
     this.customerPhone,
     this.customerEmail,
@@ -62,6 +64,15 @@ class OrderMock {
   /// это поле используется в [timeAgo], чтобы отсчёт «сколько времени
   /// назад» шёл не от публикации, а от последнего действия.
   final DateTime statusUpdatedAt;
+
+  /// Реальные даты работ заказа (`orders.date_from` / `date_to`) —
+  /// заполняются из БД в [MyOrdersStore.loadFromDb]. Нужны экрану деталей
+  /// для правила видимости кнопки «Отметить выполненным» (доступна с
+  /// начала последнего дня заказа по локальному времени). У локально
+  /// созданных заказов до первой синхронизации могут быть null — тогда
+  /// кнопка просто не показывается.
+  final DateTime? dateFrom;
+  final DateTime? dateTo;
 
   String get timeAgo {
     // Единый стиль «N минут/часов/дней назад». Раньше для прошлого
@@ -208,6 +219,8 @@ class OrderMock {
       statusUpdatedAt: (status != null && status != this.status)
           ? DateTime.now()
           : statusUpdatedAt,
+      dateFrom: dateFrom,
+      dateTo: dateTo,
       // [clearContacts] принудительно обнуляет контактные поля.
       customerName:
           clearContacts ? null : (customerName ?? this.customerName),
@@ -468,6 +481,8 @@ class MyOrdersStore {
           rentDate: formatRentDate(r.toFormatAdapter()),
           address: r.address,
           publishedAt: r.publishedAt,
+          dateFrom: r.dateFrom,
+          dateTo: r.dateTo,
           number: '№${r.displayNumber.toString().padLeft(8, '0')}',
           respondersCount: r.respondersCount,
           matchId: r.bestMatchId,
@@ -774,6 +789,19 @@ class MyOrdersStore {
         debugPrint('_fetchAndPatchContacts failed: $e');
       }
     }
+  }
+
+  /// Локально помечает заказ завершённым после ручного «Отметить
+  /// выполненным». Заказ остаётся в списке `accepted` (геттер `inWork`
+  /// сам держит завершённые без отзыва во вкладке «В работе») — карточка
+  /// сразу показывает «Завершён. Оставьте отзыв», не дожидаясь
+  /// realtime-перезагрузки из БД. Серверный переход делает RPC
+  /// `complete_match_manually` — вызывается экраном деталей ДО этого метода.
+  static void markCompleted(String id) {
+    final int i = accepted.indexWhere((OrderMock x) => x.id == id);
+    if (i < 0) return;
+    accepted[i] = accepted[i].copyWith(status: MyOrderStatus.completed);
+    _bump();
   }
 
   /// Помечает заказ как тот, по которому уже оставлен отзыв.

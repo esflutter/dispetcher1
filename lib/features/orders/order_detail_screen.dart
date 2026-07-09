@@ -11,6 +11,7 @@ import 'package:dispatcher_1/core/utils/plural.dart';
 import 'package:dispatcher_1/core/widgets/avatar_circle.dart';
 import 'package:dispatcher_1/core/widgets/clickable_address.dart';
 import 'package:dispatcher_1/core/widgets/dark_sub_app_bar.dart';
+import 'package:dispatcher_1/core/widgets/dialog_close_button.dart';
 import 'package:dispatcher_1/features/orders/orders_store.dart';
 import 'package:dispatcher_1/core/widgets/primary_button.dart';
 import 'package:dispatcher_1/features/catalog/executor_card_view_screen.dart';
@@ -150,6 +151,10 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
   MyOrderStatus? _liveStatus;
   MyOrderStatus? get _status => _liveStatus ?? widget.status;
 
+  /// Идёт RPC ручного завершения заказа — блокируем повторные тапы по
+  /// «Отметить выполненным», пока запрос летит.
+  bool _completing = false;
+
   @override
   void initState() {
     super.initState();
@@ -176,24 +181,32 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
     super.dispose();
   }
 
-  /// Realtime поднял revision стора — ищем свой заказ и, если статус сменился,
-  /// обновляем экран и догружаем контакты (на случай перехода в «принят»).
-  void _onStoreRevision() {
+  /// Актуальный снимок своего заказа из стора (по widget.orderId) — стор
+  /// обновляется по realtime, поэтому matchId/даты здесь свежее, чем
+  /// параметры, переданные при открытии экрана. `null` — заказ не найден
+  /// (например, экран открыт как превью до публикации).
+  OrderMock? _findInStore() {
     final String? id = widget.orderId;
-    if (id == null || !mounted) return;
-    OrderMock? found;
+    if (id == null) return null;
     for (final List<OrderMock> bucket in <List<OrderMock>>[
       MyOrdersStore.newOrders, MyOrdersStore.accepted, MyOrdersStore.inWork,
       MyOrdersStore.archive, MyOrdersStore.rejected,
     ]) {
       for (final OrderMock o in bucket) {
-        if (o.id == id) { found = o; break; }
+        if (o.id == id) return o;
       }
-      if (found != null) break;
     }
+    return null;
+  }
+
+  /// Realtime поднял revision стора — ищем свой заказ и, если статус сменился,
+  /// обновляем экран и догружаем контакты (на случай перехода в «принят»).
+  void _onStoreRevision() {
+    if (!mounted) return;
+    final OrderMock? found = _findInStore();
     if (found == null) return;
     if (found.status == _status) return;
-    setState(() => _liveStatus = found!.status);
+    setState(() => _liveStatus = found.status);
     if ((found.status == MyOrderStatus.accepted ||
             found.status == MyOrderStatus.completed) &&
         (_dbExecutorPhone == null || _dbExecutorPhone!.isEmpty) &&
@@ -525,6 +538,147 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
     showConfirmCancelDialog(context, onCancel: cb);
   }
 
+  /// Правило видимости «Отметить выполненным»: заказ в работе (accepted,
+  /// т.е. best-мэтч принят) И по локальному времени устройства уже
+  /// наступил последний день заказа (date_to, без него date_from).
+  /// Сервер проверяет то же по московской дате (для Сибири мягче
+  /// клиента), поэтому ложного too_early при видимой кнопке не будет.
+  /// Даты и matchId берём из актуального снимка стора — параметры экрана
+  /// их не содержат.
+  bool get _canMarkCompleted {
+    if (_status != MyOrderStatus.accepted) return false;
+    final OrderMock? o = _findInStore();
+    if (o == null) return false;
+    final String? matchId = o.matchId;
+    final DateTime? from = o.dateFrom;
+    if (matchId == null || matchId.isEmpty || from == null) return false;
+    final DateTime finalDay = o.dateTo ?? from;
+    final DateTime finalDayStart =
+        DateTime(finalDay.year, finalDay.month, finalDay.day);
+    return !DateTime.now().isBefore(finalDayStart);
+  }
+
+  /// «Отметить выполненным»: подтверждение → RPC → заказ в сторе и на
+  /// экране становится «Завершён» (кнопка «Оставить отзыв» появится по
+  /// существующей логике completed). `already_completed` — тоже успех:
+  /// крон или исполнитель успели завершить раньше.
+  Future<void> _markCompleted() async {
+    if (_completing) return;
+    final OrderMock? o = _findInStore();
+    final String? matchId = o?.matchId;
+    if (o == null || matchId == null || matchId.isEmpty) return;
+    final bool? confirmed = await _showConfirmCompleteDialog(context);
+    if (confirmed != true || !mounted) return;
+    setState(() => _completing = true);
+    try {
+      await CustomerOrdersService.instance.completeMatchManually(matchId);
+      if (!mounted) return;
+      MyOrdersStore.markCompleted(o.id);
+      setState(() => _liveStatus = MyOrderStatus.completed);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Заказ завершён')),
+      );
+    } on CompleteMatchException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message)),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Не удалось завершить заказ. Попробуйте ещё раз.'),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _completing = false);
+    }
+  }
+
+  /// Диалог подтверждения ручного завершения — «Заказ выполнен?». Тот же
+  /// хаус-стайл, что у алертов в order_alerts.dart (голый Dialog +
+  /// Container, крестик, оранжевая кнопка, текстовая «Вернуться»), плюс
+  /// поясняющий текст под заголовком. Возвращает `true` при подтверждении;
+  /// сам RPC вызывается уже ПОСЛЕ закрытия диалога.
+  Future<bool?> _showConfirmCompleteDialog(BuildContext context) {
+    return showDialog<bool>(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.35),
+      builder: (BuildContext ctx) => Dialog(
+        insetPadding: EdgeInsets.symmetric(horizontal: 16.w),
+        backgroundColor: Colors.transparent,
+        child: Container(
+          padding: EdgeInsets.fromLTRB(16.r, 14.r, 16.r, 22.r),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(20.r),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              Align(
+                alignment: Alignment.centerRight,
+                child: DialogCloseButton(
+                  onTap: () => Navigator.of(ctx).pop(),
+                  color: AppColors.textTertiary,
+                  iconSize: 22.r,
+                ),
+              ),
+              SizedBox(height: 12.h),
+              Text(
+                'Заказ выполнен?',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontFamily: 'Roboto',
+                  fontSize: 20.sp,
+                  fontWeight: FontWeight.w600,
+                  height: 1.3,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+              SizedBox(height: 10.h),
+              Text(
+                'Заказ будет завершён у вас и у исполнителя. После этого можно оставить отзыв.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontFamily: 'Roboto',
+                  fontSize: 16.sp,
+                  fontWeight: FontWeight.w400,
+                  height: 1.3,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+              SizedBox(height: 20.h),
+              PrimaryButton(
+                label: 'Да, выполнен',
+                onPressed: () => Navigator.of(ctx).pop(true),
+              ),
+              SizedBox(height: 20.h),
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => Navigator.of(ctx).pop(),
+                child: Center(
+                  child: Text(
+                    'Вернуться',
+                    style: TextStyle(
+                      fontFamily: 'Roboto',
+                      fontSize: 16.sp,
+                      fontWeight: FontWeight.w500,
+                      height: 1.3,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                ),
+              ),
+              SizedBox(height: 8.h),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   /// Набор кнопок нижней панели в зависимости от статуса заказа.
   /// Пустой список означает, что нижней панели нет вообще.
   List<Widget> _buildBottomButtons(BuildContext context) {
@@ -583,9 +737,22 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
         ];
       case MyOrderStatus.accepted:
         return <Widget>[
+          // «Отметить выполненным» — только когда наступил последний
+          // день работ заказа (см. _canMarkCompleted). До этого в панели
+          // остаётся одна кнопка отмены.
+          if (_canMarkCompleted) ...<Widget>[
+            PrimaryButton(
+              label: 'Отметить выполненным',
+              enabled: !_completing,
+              onPressed: _markCompleted,
+            ),
+            SizedBox(height: 8.h),
+          ],
           SecondaryButton(
             label: 'Отменить заказ',
-            onPressed: () => _confirmCancelOrder(context),
+            onPressed: _completing
+                ? null
+                : () => _confirmCancelOrder(context),
           ),
         ];
       case MyOrderStatus.completed:
