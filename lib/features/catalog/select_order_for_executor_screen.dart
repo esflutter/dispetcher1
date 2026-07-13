@@ -190,8 +190,23 @@ class _SelectOrderForExecutorScreenState
     } catch (e) {
       if (!mounted) return;
       setState(() => _busy = false);
+      // Сервис бросает готовые русские бизнес-тексты — не прогоняем их через
+      // friendlyError, иначе понятная причина превращается в общий «попробуйте
+      // ещё раз». Распознаём известные и показываем как есть (с подсказкой),
+      // всё остальное отдаём общему переводчику.
+      final String raw = e.toString();
+      final String message;
+      if (raw.contains('нет услуги под технику')) {
+        message = 'У исполнителя нет услуги под технику этого заказа — '
+            'выберите другого исполнителя.';
+      } else if (raw.contains('Заказ не найден')) {
+        message = 'Заказ не найден — возможно, он удалён. Обновите список.';
+      } else {
+        message = friendlyError(e,
+            fallback: 'Не удалось предложить заказ. Попробуйте ещё раз.');
+      }
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(friendlyError(e, fallback: 'Не удалось предложить заказ. Попробуйте ещё раз.'))),
+        SnackBar(content: Text(message)),
       );
       return;
     }

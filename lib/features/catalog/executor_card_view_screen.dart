@@ -6,6 +6,7 @@ import 'package:dispatcher_1/core/auth/guest_gate.dart';
 import 'package:dispatcher_1/core/auth/phone_format.dart';
 import 'package:dispatcher_1/core/catalog/catalog_service.dart';
 import 'package:dispatcher_1/core/catalog/models.dart';
+import 'package:dispatcher_1/core/settings/settings_service.dart';
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_spacing.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
@@ -82,16 +83,33 @@ class _ExecutorCardViewScreenState extends State<ExecutorCardViewScreen> {
   bool _contactLoading = false;
   bool _contactError = false;
 
+  /// Режим графика: считается ли день БЕЗ отметки рабочим. По умолчанию true
+  /// (легаси) — пока не загрузили реальный флаг, показываем прежнее поведение.
+  /// На проде включён строгий режим (false): день без отметки — нерабочий, и
+  /// блок «Занятость» обязан трактовать «нет записи» так же, как фильтр
+  /// каталога и сервер.
+  bool _unmarkedDayAvailable = true;
+
   @override
   void initState() {
     super.initState();
     _future = CatalogService.instance.getExecutorFull(widget.executorId);
+    _loadScheduleMode();
     // В режиме выбора исполнителя из откликнувшихся контакты не показываем
     // (они уже после мэтча) — не дёргаем телефон/почту зря.
     if (!isGuest && !widget.selectMode) _loadContacts();
     OfferSubmissions.revision.addListener(_onRevision);
     AccountBlock.notifier.addListener(_onRevision);
     MyOrdersStore.revision.addListener(_onRevision);
+  }
+
+  /// Читает режим графика (обычно уже прогрет в кэше на старте — вернётся
+  /// мгновенно). До ответа календарь рисуется в легаси-режиме, после —
+  /// перестраивается с актуальным флагом.
+  Future<void> _loadScheduleMode() async {
+    final bool v = await SettingsService.instance.unmarkedDayAvailable();
+    if (!mounted) return;
+    setState(() => _unmarkedDayAvailable = v);
   }
 
   Future<void> _loadContacts() async {
@@ -454,6 +472,7 @@ class _ExecutorCardViewScreenState extends State<ExecutorCardViewScreen> {
           _AvailabilitySection(
             overrides: full.scheduleOverrides,
             defaultRadiusKm: e.radiusKm,
+            unmarkedDayAvailable: _unmarkedDayAvailable,
           ),
           if (full.services.isNotEmpty) ...<Widget>[
             SizedBox(height: 16.h),
@@ -609,10 +628,16 @@ class _AvailabilitySection extends StatefulWidget {
   const _AvailabilitySection({
     required this.overrides,
     required this.defaultRadiusKm,
+    required this.unmarkedDayAvailable,
   });
 
   final Map<DateTime, ExecutorScheduleDay> overrides;
   final int? defaultRadiusKm;
+
+  /// Режим графика (см. `SettingsService.unmarkedDayAvailable`). true —
+  /// легаси: день без отметки свободен. false — строгий: день без отметки
+  /// нерабочий (так же считают фильтр каталога и сервер).
+  final bool unmarkedDayAvailable;
 
   @override
   State<_AvailabilitySection> createState() => _AvailabilitySectionState();
@@ -703,7 +728,12 @@ class _AvailabilitySectionState extends State<_AvailabilitySection> {
 
   bool _isDayOff(DateTime d) {
     final ExecutorScheduleDay? o = _override(d);
-    return o != null && !o.accepting;
+    if (widget.unmarkedDayAvailable) {
+      // Легаси: нерабочий — только явный override с accepting=false.
+      return o != null && !o.accepting;
+    }
+    // Строгий режим: день без записи — тоже нерабочий (как фильтр и сервер).
+    return o == null || !o.accepting;
   }
 
   String _formatTimeRange(ExecutorScheduleDay o) {
@@ -715,7 +745,9 @@ class _AvailabilitySectionState extends State<_AvailabilitySection> {
   @override
   Widget build(BuildContext context) {
     final ExecutorScheduleDay? info = _override(_selected);
-    final bool selectedDayOff = info != null && !info.accepting;
+    // В строгом режиме день без записи — тоже нерабочий: считаем через тот же
+    // _isDayOff, что красит ячейки, чтобы текст и окраска не расходились.
+    final bool selectedDayOff = _isDayOff(_selected);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
