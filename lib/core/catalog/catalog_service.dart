@@ -286,16 +286,17 @@ class CatalogService {
     List<Map<String, dynamic>> cards =
         await q.order('updated_at', ascending: false).limit(limit);
 
-    // В каталоге показываем только верифицированных и не заблокированных
-    // исполнителей. PostgREST не умеет фильтровать по полям embedded
-    // ресурса в одном запросе так же, как по основному, — фильтруем
-    // на клиенте. Карточек в одной выдаче мало (обычно ≤ limit=50).
+    // Кого показывать в каталоге, решает СЕРВЕР (RLS на executor_cards:
+    // документы/подписка/оферта/блокировка, миграция 113) — и в режиме
+    // «документы по услугам» статус верификации аккаунта у исполнителей
+    // всегда 'none'. Клиентский дубль-фильтр по verification_status здесь
+    // прятал ВСЕХ исполнителей нового режима. Оставляем только страховку
+    // от блокировки (тоже есть в RLS, но дёшево и терпимо к рассинхрону).
     final DateTime now = DateTime.now().toUtc();
     cards = cards.where((Map<String, dynamic> c) {
       final Map<String, dynamic>? p =
           c['profile'] as Map<String, dynamic>?;
       if (p == null) return false;
-      if ((p['verification_status'] as String?) != 'approved') return false;
       final String? blockedRaw = p['blocked_until'] as String?;
       if (blockedRaw != null) {
         final DateTime? until = DateTime.tryParse(blockedRaw);
@@ -625,7 +626,9 @@ class CatalogService {
     final Map<String, dynamic>? prof =
         card['profile'] as Map<String, dynamic>?;
     if (prof == null) return null;
-    if ((prof['verification_status'] as String?) != 'approved') return null;
+    // Видимость исполнителя решает сервер (RLS, миграция 113): в режиме
+    // «документы по услугам» verification_status аккаунта всегда 'none',
+    // и старый клиентский фильтр по нему прятал легитимные карточки.
     final String? blockedRaw = prof['blocked_until'] as String?;
     if (blockedRaw != null) {
       final DateTime? until = DateTime.tryParse(blockedRaw);
