@@ -869,17 +869,24 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
         // Спор: заказ у модератора, кнопки завершения бессильны —
         // остаётся только плашка и отмена заказа (как было).
         if (completionState == 'disputed') {
-          final String? reason = live?.completionDeclineReason;
+          final String? reason = live?.completionDeclineReason?.trim();
+          // Когда МОЙ запрос отклонил исполнитель — говорим об этом прямо
+          // и приводим его слова в кавычках. Свою причину заказчик и так
+          // знает, поэтому в остальных случаях — нейтральный текст.
+          final bool declinedByExecutor =
+              live?.completionRequestedByMe ?? false;
           return <Widget>[
             _CompletionNotice(
-              text: 'Заказ на проверке у модератора. '
-                  'Мы пришлём уведомление о решении.',
-              // Причину показываем только когда МОЙ запрос отклонил
-              // исполнитель — своя причина заказчику и так известна.
-              subText: (live?.completionRequestedByMe ?? false) &&
+              text: declinedByExecutor
+                  ? 'Исполнитель не подтвердил завершение — заказ на '
+                      'проверке у модератора. Мы пришлём уведомление '
+                      'о решении.'
+                  : 'Заказ на проверке у модератора. '
+                      'Мы пришлём уведомление о решении.',
+              subText: declinedByExecutor &&
                       reason != null &&
-                      reason.trim().isNotEmpty
-                  ? 'Причина исполнителя: $reason'
+                      reason.isNotEmpty
+                  ? 'Исполнитель написал: «$reason»'
                   : null,
             ),
             SizedBox(height: 8.h),
