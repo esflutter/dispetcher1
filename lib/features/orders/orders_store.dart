@@ -49,6 +49,9 @@ class OrderMock {
     this.reviewLeft = false,
     this.respondersCount,
     this.prevStatus,
+    this.completionState = 'none',
+    this.completionRequestedByMe = false,
+    this.completionDeclineReason,
   }) : statusUpdatedAt = statusUpdatedAt ?? publishedAt;
 
   final String id;
@@ -188,6 +191,23 @@ class OrderMock {
   /// причине» (отменён, просрочен и т. п.), возвращать некуда.
   final MyOrderStatus? prevStatus;
 
+  /// Состояние двухшагового ручного завершения по выбранному мэтчу
+  /// (`order_matches.completion_state`, миграция 116): `'none'` /
+  /// `'awaiting_confirm'` / `'disputed'`. Осмысленно только в статусе
+  /// «В работе» — экран деталей по нему выбирает, что показать вместо
+  /// кнопки «Отметить выполненным» (плашку ожидания, кнопки
+  /// подтвердить/отклонить или плашку модерации).
+  final String completionState;
+
+  /// True — запрос завершения создал сам заказчик (ждём исполнителя);
+  /// false при `awaiting_confirm` — работу отметил выполненной
+  /// исполнитель, и заказчик должен подтвердить или отклонить.
+  final bool completionRequestedByMe;
+
+  /// Причина отклонения завершения — заполнена только в споре.
+  /// Показывается заказчику, когда его запрос отклонил исполнитель.
+  final String? completionDeclineReason;
+
   /// Сентинел для [copyWith], чтобы отличить «не передавать» от
   /// «установить в null». Общий трюк для nullable-полей в copyWith.
   static const Object _unset = Object();
@@ -204,6 +224,8 @@ class OrderMock {
     String? executorId,
     double? executorRating,
     int? executorReviewCount,
+    String? completionState,
+    bool? completionRequestedByMe,
     bool clearContacts = false,
   }) {
     return OrderMock(
@@ -246,6 +268,15 @@ class OrderMock {
       prevStatus: identical(prevStatus, _unset)
           ? this.prevStatus
           : prevStatus as MyOrderStatus?,
+      // Состояние подтверждения завершения привязано к мэтчу — вместе
+      // с [clearContacts] (мэтч отвязан) сбрасываем и его.
+      completionState:
+          clearContacts ? 'none' : (completionState ?? this.completionState),
+      completionRequestedByMe: clearContacts
+          ? false
+          : (completionRequestedByMe ?? this.completionRequestedByMe),
+      completionDeclineReason:
+          clearContacts ? null : completionDeclineReason,
     );
   }
 
@@ -498,6 +529,9 @@ class MyOrdersStore {
           works: r.works,
           photos: r.photos,
           reviewLeft: r.reviewLeft,
+          completionState: r.completionState,
+          completionRequestedByMe: r.completionRequestedByMe,
+          completionDeclineReason: r.completionDeclineReason,
         );
         if (uiStatus == MyOrderStatus.accepted ||
             uiStatus == MyOrderStatus.completed) {
@@ -801,6 +835,32 @@ class MyOrdersStore {
     final int i = accepted.indexWhere((OrderMock x) => x.id == id);
     if (i < 0) return;
     accepted[i] = accepted[i].copyWith(status: MyOrderStatus.completed);
+    _bump();
+  }
+
+  /// Локально включает режим «ждём подтверждения исполнителя» после того,
+  /// как сервер принял запрос завершения (`confirmation_requested` /
+  /// `already_requested`). Заказ остаётся «В работе», но экран деталей
+  /// сразу показывает плашку ожидания вместо кнопки, не дожидаясь
+  /// realtime-перезагрузки из БД.
+  static void markCompletionRequested(String id) {
+    final int i = accepted.indexWhere((OrderMock x) => x.id == id);
+    if (i < 0) return;
+    accepted[i] = accepted[i].copyWith(
+      completionState: 'awaiting_confirm',
+      completionRequestedByMe: true,
+    );
+    _bump();
+  }
+
+  /// Локально помечает заказ спорным — «на проверке у модератора».
+  /// Вызывается, когда заказчик отклонил завершение исполнителя, либо
+  /// когда сервер на любую из кнопок ответил `disputed` (спор уже был
+  /// открыт второй стороной).
+  static void markCompletionDisputed(String id) {
+    final int i = accepted.indexWhere((OrderMock x) => x.id == id);
+    if (i < 0) return;
+    accepted[i] = accepted[i].copyWith(completionState: 'disputed');
     _bump();
   }
 

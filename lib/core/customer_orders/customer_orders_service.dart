@@ -259,6 +259,8 @@ class CustomerOrdersService {
         .from('order_matches')
         .select(
           'id, order_id, status, '
+          'completion_state, completion_requested_by, '
+          'completion_decline_reason, '
           'executor:profiles!order_matches_executor_id_fkey('
           'id, name, avatar_url, rating_as_executor, review_count_as_executor)',
         )
@@ -292,6 +294,11 @@ class CustomerOrdersService {
           executorRating: _toDouble(executor?['rating_as_executor']) ?? 0,
           executorReviewCount:
               (executor?['review_count_as_executor'] as int?) ?? 0,
+          completionState:
+              (m['completion_state'] as String?) ?? 'none',
+          completionRequestedBy: m['completion_requested_by'] as String?,
+          completionDeclineReason:
+              m['completion_decline_reason'] as String?,
         );
       }
     }
@@ -422,6 +429,19 @@ class CustomerOrdersService {
             _bestMatchYieldsExecutor(best) && best?.executorId != null
                 ? emailByExecutor[best!.executorId]
                 : null,
+        // Двухшаговое завершение (миграция 116): состояние подтверждения
+        // осмысленно только на accepted-мэтче — для остальных статусов
+        // отдаём дефолт 'none', чтобы UI не показывал устаревшие плашки
+        // (например, от прошлого спора, который модератор уже закрыл
+        // завершением мэтча).
+        completionState: best?.status == 'accepted'
+            ? (best?.completionState ?? 'none')
+            : 'none',
+        completionRequestedByMe: best?.status == 'accepted' &&
+            best?.completionRequestedBy != null &&
+            best?.completionRequestedBy == user.id,
+        completionDeclineReason:
+            best?.status == 'accepted' ? best?.completionDeclineReason : null,
       );
     }).toList();
   }
@@ -696,10 +716,19 @@ class CustomerOrdersService {
   }
 
   /// Ручное завершение принятого заказа (RPC `complete_match_manually`,
-  /// миграция 109). Возвращает `'completed'` либо `'already_completed'`
-  /// (крон или исполнитель успели раньше — тоже успех). Переход в
-  /// `completed` на сервере сам архивирует заказ и шлёт пуши «Оставьте
-  /// отзыв» обеим сторонам — клиенту достаточно обновить свой стор.
+  /// миграции 109/116). С миграции 116 завершение двухшаговое —
+  /// возможные ответы:
+  ///  * `'confirmation_requested'` — запрос создан, исполнителю ушёл пуш
+  ///    «Подтвердите завершение», мэтч ждёт его ответа;
+  ///  * `'already_requested'` — запрос уже висит (автор жмёт повторно,
+  ///    не ошибка);
+  ///  * `'completed'` — это было подтверждение живого запроса второй
+  ///    стороны: мэтч завершён, сервер сам архивирует заказ и шлёт пуши
+  ///    «Оставьте отзыв» обеим сторонам — клиенту достаточно обновить
+  ///    свой стор;
+  ///  * `'already_completed'` — крон или исполнитель успели раньше
+  ///    (тоже успех);
+  ///  * `'disputed'` — по заказу открыт спор, решает модератор.
   /// Серверные отказы приходят техническими кодами в message —
   /// конвертируем в [CompleteMatchException] с готовым русским текстом.
   Future<String> completeMatchManually(String matchId) async {
@@ -731,6 +760,45 @@ class CustomerOrdersService {
       return 'Не удалось завершить заказ — обновите список заказов';
     }
     return 'Не удалось завершить заказ. Попробуйте ещё раз';
+  }
+
+  /// Заказчик не согласен с «работа выполнена» от исполнителя (RPC
+  /// `decline_match_completion`, миграция 116). Причина обязательна —
+  /// сервер сохранит её и передаст заказ на проверку модератору.
+  /// Возвращает `'disputed'` (успех — спор открыт) либо
+  /// `'already_completed'` (крон или исполнитель успели завершить,
+  /// пока заказчик писал причину — спор уже не открыть).
+  /// Технические коды отказа конвертируем в [CompleteMatchException]
+  /// с готовым русским текстом — по образцу [completeMatchManually].
+  Future<String> declineMatchCompletion(String matchId, String reason) async {
+    try {
+      final dynamic res = await _client.rpc<dynamic>(
+        'decline_match_completion',
+        params: <String, dynamic>{
+          'p_match_id': matchId,
+          'p_reason': reason,
+        },
+      );
+      return res as String;
+    } on PostgrestException catch (e) {
+      throw CompleteMatchException(_declineErrorMessage(e.message));
+    }
+  }
+
+  /// Технический код отказа `decline_match_completion` → русский текст.
+  static String _declineErrorMessage(String serverMessage) {
+    if (serverMessage.contains('reason_required')) {
+      return 'Опишите причину — она уйдёт модератору';
+    }
+    if (serverMessage.contains('no_completion_request')) {
+      return 'Запрос завершения уже неактуален — обновите экран';
+    }
+    if (serverMessage.contains('match_not_found') ||
+        serverMessage.contains('forbidden') ||
+        serverMessage.contains('unauthorized')) {
+      return 'Не удалось отправить — обновите список заказов';
+    }
+    return 'Не удалось отправить. Попробуйте ещё раз';
   }
 
   /// Снять заказ с публикации (status → `cancelled`). RLS-политика
@@ -911,6 +979,9 @@ class _BestMatch {
     required this.executorAvatarUrl,
     required this.executorRating,
     required this.executorReviewCount,
+    required this.completionState,
+    required this.completionRequestedBy,
+    required this.completionDeclineReason,
   });
   final int rank;
   final String matchId;
@@ -920,4 +991,11 @@ class _BestMatch {
   final String? executorAvatarUrl;
   final double executorRating;
   final int executorReviewCount;
+
+  // Двухшаговое ручное завершение (миграция 116): состояние
+  // подтверждения, кто отметил работу выполненной и причина отклонения
+  // (заполнена только в споре).
+  final String completionState;
+  final String? completionRequestedBy;
+  final String? completionDeclineReason;
 }

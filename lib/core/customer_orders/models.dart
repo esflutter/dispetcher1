@@ -89,6 +89,9 @@ class CustomerOrderListItem {
     this.bestMatchExecutorEmail,
     this.bestMatchExecutorAvatarUrl,
     this.reviewLeft = false,
+    this.completionState = 'none',
+    this.completionRequestedByMe = false,
+    this.completionDeclineReason,
   });
 
   final String id;
@@ -152,6 +155,28 @@ class CustomerOrderListItem {
   /// перезагрузки приложения кнопка «Оставить отзыв» опять появлялась
   /// и второй INSERT падал по unique-constraint (либо плодил дубль).
   final bool reviewLeft;
+
+  /// Состояние двухшагового ручного завершения по best-мэтчу
+  /// (`order_matches.completion_state`, миграция 116):
+  ///  * `'none'` — никто ещё не отмечал работу выполненной;
+  ///  * `'awaiting_confirm'` — одна сторона отметила, ждём подтверждения
+  ///    второй;
+  ///  * `'disputed'` — вторая сторона отклонила завершение, заказ на
+  ///    проверке у модератора.
+  /// Осмысленно только пока мэтч в `accepted` — экран деталей по нему
+  /// решает, что показать вместо кнопки «Отметить выполненным».
+  final String completionState;
+
+  /// True, если запрос завершения (`completion_requested_by`) создал
+  /// текущий заказчик. Тогда экран показывает «Ждём подтверждения
+  /// исполнителя»; иначе — «Исполнитель отметил работу выполненной»
+  /// с кнопками подтвердить/отклонить.
+  final bool completionRequestedByMe;
+
+  /// Причина отклонения завершения (`completion_decline_reason`) —
+  /// заполнена только в споре. Показываем заказчику, когда его запрос
+  /// отклонил исполнитель, чтобы было понятно, что именно не так.
+  final String? completionDeclineReason;
 
   /// Удобный адаптер для утилиты `formatRentDate` из каталога исполнителя.
   catalog.OrderListItem toFormatAdapter() => catalog.OrderListItem(
