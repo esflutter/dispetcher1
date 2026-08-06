@@ -11,6 +11,7 @@ import 'app.dart';
 import 'core/analytics/app_analytics.dart';
 import 'core/catalog/catalog_service.dart';
 import 'core/config/env.dart';
+import 'core/config/firebase_options_ios.dart';
 import 'core/push/push_handler.dart';
 import 'core/push/push_service.dart';
 import 'core/auth/auth_reset.dart';
@@ -27,12 +28,19 @@ import 'features/support/chat_screen.dart';
 /// AOT-компилятор Dart вырезает функцию как «неиспользуемую» — нативный
 /// FCM SDK не находит handler, и пуши в фоне молча не доходят. Баг
 /// проявляется только в release, debug всё показывает корректно.
+/// На iOS запускаем Firebase с ЯВНЫМИ параметрами: файл настроек не попадает
+/// внутрь iOS-сборки (не подключён к Xcode-проекту), и без этого запуск падал,
+/// а приложение молча оставалось без пушей. На Android — `null`, то есть
+/// прежнее поведение: настройки берутся из своего файла в проекте.
+FirebaseOptions? get _firebaseOptions =>
+    defaultTargetPlatform == TargetPlatform.iOS ? kFirebaseOptionsIos : null;
+
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   // try/catch обязателен: на Huawei без GMS Firebase.initializeApp бросает
   // PlatformException и изолят молча умирает.
   try {
-    await Firebase.initializeApp();
+    await Firebase.initializeApp(options: _firebaseOptions);
   } catch (e) {
     if (kDebugMode) debugPrint('[bg-push] Firebase init failed: $e');
   }
@@ -64,7 +72,7 @@ Future<void> main() async {
   // Google приложение должно запускаться (без пушей, но рабочее).
   bool firebaseReady = false;
   try {
-    await Firebase.initializeApp();
+    await Firebase.initializeApp(options: _firebaseOptions);
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
     await PushHandler.instance.initialize();
     PushService.instance.initTokenRefreshListener();

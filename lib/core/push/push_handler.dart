@@ -65,8 +65,17 @@ class PushHandler {
 
     const AndroidInitializationSettings androidInit =
         AndroidInitializationSettings('@mipmap/ic_launcher');
+    // iOS-настройки ОБЯЗАТЕЛЬНЫ: без них библиотека на iOS бросает
+    // «iOS settings must be set when targeting iOS platform» прямо здесь, и
+    // обрывается вся дальнейшая настройка пушей. Разрешения запрашивает
+    // FirebaseMessaging в push_service, поэтому тут они выключены.
+    const DarwinInitializationSettings iosInit = DarwinInitializationSettings(
+      requestAlertPermission: false,
+      requestBadgePermission: false,
+      requestSoundPermission: false,
+    );
     await _local.initialize(
-      const InitializationSettings(android: androidInit),
+      const InitializationSettings(android: androidInit, iOS: iosInit),
       onDidReceiveNotificationResponse: _onLocalTap,
     );
 
