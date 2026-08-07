@@ -106,6 +106,15 @@ class SettingsService {
   /// дате обязан трактовать «нет записи» так же, как сервер.
   Future<bool> unmarkedDayAvailable() async {
     await _load();
+    return unmarkedDayAvailableCached;
+  }
+
+  /// Синхронная версия по УЖЕ ПРОГРЕТОМУ кэшу (warmup в main). Нужна там,
+  /// где значение требуется в первый же кадр отрисовки. Без неё экран
+  /// занятости сначала рисовался в легаси-режиме и писал «исполнитель
+  /// свободен для заказов», а через мгновение переключался на «не принимает
+  /// заказы». При медленной сети человек успевал прочитать неправду.
+  bool get unmarkedDayAvailableCached {
     final Object? v = _values['schedule.unmarked_day_available'];
     if (v is bool) return v;
     if (v is num) return v != 0;

@@ -88,7 +88,11 @@ class _ExecutorCardViewScreenState extends State<ExecutorCardViewScreen> {
   /// На проде включён строгий режим (false): день без отметки — нерабочий, и
   /// блок «Занятость» обязан трактовать «нет записи» так же, как фильтр
   /// каталога и сервер.
-  bool _unmarkedDayAvailable = true;
+  /// Стартуем не с легаси-догадки, а с уже прогретого кэша настроек —
+  /// иначе первый кадр показывал «свободен для заказов» даже там, где
+  /// сервер считает день нерабочим.
+  bool _unmarkedDayAvailable =
+      SettingsService.instance.unmarkedDayAvailableCached;
 
   @override
   void initState() {
@@ -754,10 +758,14 @@ class _AvailabilitySectionState extends State<_AvailabilitySection> {
         Row(
           children: <Widget>[
             const _SectionTitle('Занятость'),
-            const Spacer(),
-            Flexible(
+            // Раньше между заголовком и месяцем стоял Spacer, и он делил
+            // свободное место с текстом поровну — из-за этого «Август, 2026»
+            // обрезалось в «Август, 20…». Растягиваем сам текст и прижимаем
+            // его вправо: место занимает он один, обрезать нечего.
+            Expanded(
               child: Text(
                 '${_monthsNominative[_selected.month - 1]}, ${_selected.year}',
+                textAlign: TextAlign.right,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: AppTextStyles.body,
