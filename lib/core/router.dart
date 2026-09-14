@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import 'auth/guest_gate.dart';
+
 import '../features/auth/otp_verification_screen.dart';
 import '../features/auth/phone_input_screen.dart';
 import '../features/auth/registration_screen.dart';
@@ -15,6 +17,7 @@ import '../features/profile/notifications_settings_screen.dart';
 import '../features/onboarding/onboarding_screen.dart';
 import '../features/onboarding/splash_screen.dart';
 import '../features/orders/my_orders_screen.dart';
+import '../features/orders/create_order_screen.dart';
 import '../features/orders/order_detail_route_screen.dart';
 import '../features/profile/edit_profile_screen.dart';
 import '../features/profile/profile_screen.dart';
@@ -30,20 +33,37 @@ import '../features/support/support_home_screen.dart';
 ///   открываются поверх shell обычным push.
 final GoRouter appRouter = GoRouter(
   initialLocation: '/splash',
+  redirect: (BuildContext context, GoRouterState state) {
+    if (isGuest &&
+        (state.uri.path.startsWith('/catalog') ||
+            state.uri.path.startsWith('/welcome'))) {
+      return '/shell';
+    }
+    return null;
+  },
   routes: <RouteBase>[
     GoRoute(path: '/splash', builder: (_, _) => const SplashScreen()),
     GoRoute(path: '/onboarding', builder: (_, _) => const OnboardingScreen()),
 
     // Авторизация
     GoRoute(path: '/auth/phone', builder: (_, _) => const PhoneInputScreen()),
-    GoRoute(path: '/auth/otp', builder: (_, _) => const OtpVerificationScreen()),
-    GoRoute(path: '/auth/registration', builder: (_, _) => const RegistrationScreen()),
+    GoRoute(
+      path: '/auth/otp',
+      builder: (_, _) => const OtpVerificationScreen(),
+    ),
+    GoRoute(
+      path: '/auth/registration',
+      builder: (_, _) => const RegistrationScreen(),
+    ),
 
     // Главный shell с нижней навигацией
     GoRoute(path: '/shell', builder: (_, _) => const MainShell()),
 
     // Каталог
-    GoRoute(path: '/catalog', builder: (_, _) => const CatalogCategoriesScreen()),
+    GoRoute(
+      path: '/catalog',
+      builder: (_, _) => const CatalogCategoriesScreen(),
+    ),
     GoRoute(
       path: '/catalog/feed/:categoryId',
       builder: (_, state) => OrderFeedScreen(
@@ -51,33 +71,44 @@ final GoRouter appRouter = GoRouter(
         categoryTitle: (state.extra as String?) ?? 'Категория',
       ),
     ),
-    GoRoute(path: '/catalog/filter', builder: (_, _) => const CatalogFilterScreen()),
+    GoRoute(
+      path: '/catalog/filter',
+      builder: (_, _) => const CatalogFilterScreen(),
+    ),
     GoRoute(
       path: '/catalog/executor/:id',
-      builder: (_, state) => ExecutorCardViewScreen(
-        executorId: state.pathParameters['id'] ?? '',
-      ),
+      builder: (_, state) =>
+          ExecutorCardViewScreen(executorId: state.pathParameters['id'] ?? ''),
     ),
-    GoRoute(path: '/catalog/no-internet', builder: (_, _) => const NoInternetScreen()),
+    GoRoute(
+      path: '/catalog/no-internet',
+      builder: (_, _) => const NoInternetScreen(),
+    ),
 
     // Заказы. Только список — детали и review открываются через
     // `Navigator.push(MaterialPageRoute)`, чтобы получать конкретные
     // данные заказа через параметры конструктора. Декларативные роуты
     // `/orders/:id` без передачи orderId-параметра не имеют смысла.
     GoRoute(path: '/orders', builder: (_, _) => const MyOrdersScreen()),
+    GoRoute(
+      path: '/welcome/order',
+      builder: (_, _) => const _PostAuthOrderRoute(),
+    ),
     // Deep-link от пуша на конкретный заказ — обёртка кладёт id в
     // pendingOrderDeepLink, переключает таб «Заказы» и MyOrdersScreen
     // сам открывает детали через свою привычную логику.
     GoRoute(
       path: '/orders/:id',
-      builder: (_, GoRouterState state) => OrderDetailRouteScreen(
-        orderId: state.pathParameters['id'] ?? '',
-      ),
+      builder: (_, GoRouterState state) =>
+          OrderDetailRouteScreen(orderId: state.pathParameters['id'] ?? ''),
     ),
 
     // Профиль
     GoRoute(path: '/profile', builder: (_, _) => const ProfileScreen()),
-    GoRoute(path: '/profile/edit', builder: (_, _) => const EditProfileScreen()),
+    GoRoute(
+      path: '/profile/edit',
+      builder: (_, _) => const EditProfileScreen(),
+    ),
     GoRoute(path: '/profile/reviews', builder: (_, _) => const ReviewsScreen()),
     GoRoute(
       path: '/profile/notifications-settings',
@@ -85,8 +116,14 @@ final GoRouter appRouter = GoRouter(
     ),
 
     // Карточка заказчика
-    GoRoute(path: '/executor-card', builder: (_, _) => const ExecutorCardScreen()),
-    GoRoute(path: '/executor-card/edit', builder: (_, _) => const EditExecutorCardScreen()),
+    GoRoute(
+      path: '/executor-card',
+      builder: (_, _) => const ExecutorCardScreen(),
+    ),
+    GoRoute(
+      path: '/executor-card/edit',
+      builder: (_, _) => const EditExecutorCardScreen(),
+    ),
 
     // Поддержка
     GoRoute(path: '/support', builder: (_, _) => const SupportHomeScreen()),
@@ -108,6 +145,34 @@ final GoRouter appRouter = GoRouter(
   // показывать сырое «Маршрут не найден».
   errorBuilder: (context, state) => _RouteNotFoundScreen(uri: state.uri),
 );
+
+class _PostAuthOrderRoute extends StatefulWidget {
+  const _PostAuthOrderRoute();
+
+  @override
+  State<_PostAuthOrderRoute> createState() => _PostAuthOrderRouteState();
+}
+
+class _PostAuthOrderRouteState extends State<_PostAuthOrderRoute> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _open());
+  }
+
+  Future<void> _open() async {
+    final bool? published = await Navigator.of(context).push<bool>(
+      MaterialPageRoute<bool>(builder: (_) => const CreateOrderScreen()),
+    );
+    if (!mounted) return;
+    MainShell.selectedTab.value = published == true ? 1 : 0;
+    context.go('/shell');
+  }
+
+  @override
+  Widget build(BuildContext context) =>
+      const Scaffold(body: Center(child: CircularProgressIndicator()));
+}
 
 class _RouteNotFoundScreen extends StatelessWidget {
   const _RouteNotFoundScreen({required this.uri});
@@ -145,7 +210,9 @@ class _RouteNotFoundScreen extends StatelessWidget {
                 backgroundColor: const Color(0xFFFF9900),
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(
-                    horizontal: 32, vertical: 14),
+                  horizontal: 32,
+                  vertical: 14,
+                ),
               ),
               onPressed: () => appRouter.go('/shell'),
               child: const Text('На главный'),

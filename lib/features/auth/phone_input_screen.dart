@@ -8,6 +8,7 @@ import 'package:mask_text_input_formatter/mask_text_input_formatter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:dispatcher_1/core/auth/auth_service.dart';
+import 'package:dispatcher_1/core/auth/guest_gate.dart';
 import 'package:dispatcher_1/core/auth/phone_format.dart';
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
@@ -89,8 +90,11 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
         context.go('/auth/otp');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text('Код уже отправлен на этот номер — введите его. '
-                  'Новый можно запросить через ${pluralSecondsRu(retryAfter)}.')),
+            content: Text(
+              'Код уже отправлен на этот номер — введите его. '
+              'Новый можно запросить через ${pluralSecondsRu(retryAfter)}.',
+            ),
+          ),
         );
         return;
       }
@@ -106,9 +110,9 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
   }
 
   void _showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
@@ -120,70 +124,84 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
       // возврат в гостевой каталог тоже корректен.
       canPop: false,
       onPopInvokedWithResult: (bool didPop, Object? _) {
-        if (!didPop && context.mounted) context.go('/shell');
+        if (!didPop && context.mounted) {
+          cancelGuestAuthIntent();
+          context.go('/shell');
+        }
       },
       child: Scaffold(
-      backgroundColor: AppColors.background,
-      body: SafeArea(
-        child: Column(
-          children: [
-            Expanded(
-              child: SingleChildScrollView(
-                padding: EdgeInsets.symmetric(horizontal: 16.w),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SizedBox(height: 8.h),
-                    // Видимая «Назад» в каталог — для гостя, зашедшего из каталога.
-                    GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: () => context.go('/shell'),
-                      child: Padding(
-                        padding: EdgeInsets.symmetric(vertical: 6.h),
-                        child: Icon(Icons.arrow_back_ios_new_rounded,
-                            size: 22.r, color: AppColors.textBlack),
+        backgroundColor: AppColors.background,
+        body: SafeArea(
+          child: Column(
+            children: [
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: EdgeInsets.symmetric(horizontal: 16.w),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SizedBox(height: 8.h),
+                      // Видимая «Назад» в каталог — для гостя, зашедшего из каталога.
+                      GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () {
+                          cancelGuestAuthIntent();
+                          context.go('/shell');
+                        },
+                        child: Padding(
+                          padding: EdgeInsets.symmetric(vertical: 6.h),
+                          child: Icon(
+                            Icons.arrow_back_ios_new_rounded,
+                            size: 22.r,
+                            color: AppColors.textBlack,
+                          ),
+                        ),
                       ),
-                    ),
-                    SizedBox(height: 8.h),
-                    Text(
-                      'Введите номер\nтелефона',
-                      style: AppTextStyles.h1Phone.copyWith(color: AppColors.textBlack),
-                    ),
-                    SizedBox(height: 40.h),
-                    Text(
-                      'Номер телефона',
-                      style: AppTextStyles.body.copyWith(
-                        color: AppColors.textPrimary,
-                        fontSize: 16.sp,
+                      SizedBox(height: 8.h),
+                      Text(
+                        'Введите номер\nтелефона',
+                        style: AppTextStyles.h1Phone.copyWith(
+                          color: AppColors.textBlack,
+                        ),
                       ),
-                    ),
-                    SizedBox(height: 8.h),
-                    _PhoneField(controller: _controller, formatter: _maskFormatter),
-                  ],
+                      SizedBox(height: 40.h),
+                      Text(
+                        'Номер телефона',
+                        style: AppTextStyles.body.copyWith(
+                          color: AppColors.textPrimary,
+                          fontSize: 16.sp,
+                        ),
+                      ),
+                      SizedBox(height: 8.h),
+                      _PhoneField(
+                        controller: _controller,
+                        formatter: _maskFormatter,
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-            Container(
-              padding: EdgeInsets.fromLTRB(16.w, 16.h, 16.w, 16.h),
-              decoration: BoxDecoration(
-                color: AppColors.background,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.04),
-                    offset: const Offset(0, -4),
-                    blurRadius: 16,
-                  ),
-                ],
+              Container(
+                padding: EdgeInsets.fromLTRB(16.w, 16.h, 16.w, 16.h),
+                decoration: BoxDecoration(
+                  color: AppColors.background,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.04),
+                      offset: const Offset(0, -4),
+                      blurRadius: 16,
+                    ),
+                  ],
+                ),
+                child: PrimaryButton(
+                  label: 'Далее',
+                  enabled: _isComplete && !_sending,
+                  onPressed: (_isComplete && !_sending) ? _onNext : null,
+                ),
               ),
-              child: PrimaryButton(
-                label: 'Далее',
-                enabled: _isComplete && !_sending,
-                onPressed: (_isComplete && !_sending) ? _onNext : null,
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
-      ),
       ),
     );
   }

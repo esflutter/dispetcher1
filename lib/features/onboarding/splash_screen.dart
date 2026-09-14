@@ -54,9 +54,7 @@ class _SplashScreenState extends State<SplashScreen> {
       session = null;
     }
     if (session == null) {
-      // Гость: после первого онбординга пускаем сразу в каталог (просмотр без
-      // входа разрешён, см. миграцию 090). Вход требуется только на аккаунтных
-      // разделах («Заказы», «Профиль») и действиях — там покажем экран/попап.
+      // Гость после первого онбординга попадает на полезный стартовый экран.
       final bool onbSeen = await OnboardingPrefs.seen();
       if (mounted) context.go(onbSeen ? '/shell' : '/onboarding');
       return;

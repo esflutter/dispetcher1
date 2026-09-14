@@ -13,16 +13,14 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:dispatcher_1/core/auth/guest_gate.dart';
 import 'package:dispatcher_1/core/utils/support_contact.dart';
 import 'package:dispatcher_1/features/shell/main_shell.dart';
 
 const String _kAssistantChat = '/assistant/chat';
 
 /// Открыть чат с ассистентом без дубликатов.
-Future<void> openAssistantChat(
-  BuildContext context, {
-  Object? extra,
-}) async {
+Future<void> openAssistantChat(BuildContext context, {Object? extra}) async {
   final router = GoRouter.maybeOf(context);
   if (router == null) return;
 
@@ -38,6 +36,18 @@ Future<void> openAssistantChat(
 /// (см. _shared/navSuggest.ts). Корневые вкладки открываем переключением
 /// таба. Неизвестный ключ — ничего не делаем (молча, без краша).
 void navigateAssistantAction(BuildContext context, String action) {
+  if (isGuest && action != 'contact_support') {
+    showGuestAuthPrompt(
+      context,
+      message: action == 'open_create_order'
+          ? 'Войдите, чтобы создать и разместить заказ.'
+          : 'Этот раздел доступен после входа.',
+      intent: action == 'open_create_order'
+          ? GuestAuthIntent.createOrder
+          : GuestAuthIntent.browseCatalog,
+    );
+    return;
+  }
   switch (action) {
     case 'open_create_order':
       // Создание заказа живёт на вкладке «Мои заказы» (там же лимит/проверки).

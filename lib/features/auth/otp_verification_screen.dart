@@ -8,6 +8,7 @@ import 'package:pinput/pinput.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:dispatcher_1/core/auth/auth_service.dart';
+import 'package:dispatcher_1/core/auth/guest_gate.dart';
 import 'package:dispatcher_1/core/push/push_service.dart';
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
@@ -126,7 +127,10 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
         // если сеть тормозит, юзер уже на экране shell, а токен подтянется
         // в фоне (внутри single-flight + дедуп 5 мин).
         unawaited(PushService.instance.registerForCurrentUser());
-        context.go('/shell');
+        final GuestAuthIntent? intent = takeGuestAuthIntent();
+        context.go(
+          intent == GuestAuthIntent.createOrder ? '/welcome/order' : '/shell',
+        );
       }
     } on AuthException {
       if (!mounted) return;
@@ -148,7 +152,11 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
       _pinController.clear();
       setState(() => _verifying = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Сервер не отвечает. Проверьте интернет и попробуйте ещё раз.')),
+        const SnackBar(
+          content: Text(
+            'Сервер не отвечает. Проверьте интернет и попробуйте ещё раз.',
+          ),
+        ),
       );
     } catch (_) {
       if (!mounted) return;
@@ -159,7 +167,11 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
       _pinController.clear();
       setState(() => _verifying = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Не удалось проверить код. Проверьте интернет и попробуйте ещё раз.')),
+        const SnackBar(
+          content: Text(
+            'Не удалось проверить код. Проверьте интернет и попробуйте ещё раз.',
+          ),
+        ),
       );
     }
   }
@@ -202,208 +214,215 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
         if (!didPop && context.mounted) context.go('/auth/phone');
       },
       child: Scaffold(
-      backgroundColor: AppColors.background,
-      body: SafeArea(
-        child: Column(
-          children: [
-            Expanded(
-              child: Padding(
-                padding: EdgeInsets.symmetric(horizontal: 16.w),
-                child: ListView(
-                  physics: const BouncingScrollPhysics(),
-                  children: [
-                    SizedBox(height: 16.h),
-                    Text(
-                      // Не «Верификация»: канцелярит. Заголовок продолжает
-                      // прошлый экран: «Введите номер телефона» → «Введите код».
-                      'Введите код',
-                      style: AppTextStyles.h1Phone.copyWith(color: AppColors.textBlack),
-                    ),
-                    SizedBox(height: 16.h),
-                    Text(
-                      'Код был выслан по номеру',
-                      style: AppTextStyles.body.copyWith(
-                        color: AppColors.textTertiary,
-                        fontSize: 18.sp,
-                      ),
-                    ),
-                    SizedBox(height: 2.h),
-                    Text(
-                      widget.phone?.trim().isNotEmpty == true
-                          ? widget.phone!
-                          : CropResult.userPhone,
-                      style: AppTextStyles.body.copyWith(
-                        color: AppColors.textBlack,
-                        fontSize: 18.sp,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    SizedBox(height: 21.h),
-                    Pinput(
-                      controller: _pinController,
-                      focusNode: _pinFocusNode,
-                      length: _otpLength,
-                      autofocus: true,
-                      // Без анимации ячеек: со «slide» (по умолчанию) при
-                      // быстром наборе перерисовка не поспевает за вводом и
-                      // последние цифры терялись.
-                      pinAnimationType: PinAnimationType.none,
-                      cursor: Align(
-                        alignment: Alignment.center,
-                        child: Container(
-                          width: 2,
-                          height: 22.h,
-                          color: AppColors.primary,
-                        ),
-                      ),
-                      defaultPinTheme: defaultPinTheme,
-                      focusedPinTheme: focusedPinTheme,
-                      errorPinTheme: errorPinTheme,
-                      forceErrorState: _hasError,
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      onChanged: (_) {
-                        if (_hasError) {
-                          setState(() => _hasError = false);
-                        }
-                      },
-                      onCompleted: _onCompleted,
-                    ),
-                    if (_hasError) ...[
-                      SizedBox(height: 12.h),
+        backgroundColor: AppColors.background,
+        body: SafeArea(
+          child: Column(
+            children: [
+              Expanded(
+                child: Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 16.w),
+                  child: ListView(
+                    physics: const BouncingScrollPhysics(),
+                    children: [
+                      SizedBox(height: 16.h),
                       Text(
-                        'Неверный код',
-                        style: AppTextStyles.body.copyWith(
-                          color: AppColors.error,
-                          fontSize: 15.sp,
+                        // Не «Верификация»: канцелярит. Заголовок продолжает
+                        // прошлый экран: «Введите номер телефона» → «Введите код».
+                        'Введите код',
+                        style: AppTextStyles.h1Phone.copyWith(
+                          color: AppColors.textBlack,
                         ),
                       ),
-                    ],
-                    SizedBox(height: 21.h),
-                    _secondsLeft > 0
-                        ? RichText(
-                            text: TextSpan(
-                              text: 'Не пришёл код? ',
-                              style: AppTextStyles.body.copyWith(
-                                color: AppColors.textTertiary,
-                                fontSize: 15.sp,
-                              ),
-                              children: [
-                                TextSpan(
-                                  text: 'Отправить повторно через ${_formatSeconds(_secondsLeft)}',
-                                  style: const TextStyle(
-                                    color: AppColors.textBlack,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          )
-                        : GestureDetector(
-                            onTap: () async {
-                              if (_resending) return;
-                              _resending = true;
-                              try {
-                              _pinController.clear();
-                              setState(() {
-                                _hasError = false;
-                                _codeResent = true;
-                              });
-                              _startTimer();
-                              WidgetsBinding.instance
-                                  .addPostFrameCallback((_) {
-                                if (mounted) _pinFocusNode.requestFocus();
-                              });
-                              final String e164 = CropResult.userPhoneE164;
-                              if (e164.isNotEmpty) {
-                                // Берём messenger ДО await, чтобы не дёргать
-                                // context через async-разрыв.
-                                final ScaffoldMessengerState messenger =
-                                    ScaffoldMessenger.of(context);
-                                try {
-                                  await AuthService.instance
-                                      .sendOtp(e164)
-                                      .timeout(const Duration(seconds: 10));
-                                } catch (e) {
-                                  // Сбой отправки: снимаем кулдаун и надпись
-                                  // (иначе ложный отсчёт на экране) и
-                                  // показываем КОНКРЕТНУЮ причину — лимит
-                                  // устройства, часовой лимит номера, нет
-                                  // сети — вместо общего «проверьте интернет».
-                                  if (mounted) {
-                                    _timer?.cancel();
-                                    setState(() {
-                                      _codeResent = false;
-                                      _secondsLeft = 0;
-                                    });
-                                    messenger.showSnackBar(
-                                      SnackBar(content: Text(authErrorToRu(e))),
-                                    );
-                                  }
-                                }
-                              }
-                              } finally {
-                                _resending = false;
-                              }
-                            },
-                            child: RichText(
+                      SizedBox(height: 16.h),
+                      Text(
+                        'Код был выслан по номеру',
+                        style: AppTextStyles.body.copyWith(
+                          color: AppColors.textTertiary,
+                          fontSize: 18.sp,
+                        ),
+                      ),
+                      SizedBox(height: 2.h),
+                      Text(
+                        widget.phone?.trim().isNotEmpty == true
+                            ? widget.phone!
+                            : CropResult.userPhone,
+                        style: AppTextStyles.body.copyWith(
+                          color: AppColors.textBlack,
+                          fontSize: 18.sp,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      SizedBox(height: 21.h),
+                      Pinput(
+                        controller: _pinController,
+                        focusNode: _pinFocusNode,
+                        length: _otpLength,
+                        autofocus: true,
+                        // Без анимации ячеек: со «slide» (по умолчанию) при
+                        // быстром наборе перерисовка не поспевает за вводом и
+                        // последние цифры терялись.
+                        pinAnimationType: PinAnimationType.none,
+                        cursor: Align(
+                          alignment: Alignment.center,
+                          child: Container(
+                            width: 2,
+                            height: 22.h,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                        defaultPinTheme: defaultPinTheme,
+                        focusedPinTheme: focusedPinTheme,
+                        errorPinTheme: errorPinTheme,
+                        forceErrorState: _hasError,
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        onChanged: (_) {
+                          if (_hasError) {
+                            setState(() => _hasError = false);
+                          }
+                        },
+                        onCompleted: _onCompleted,
+                      ),
+                      if (_hasError) ...[
+                        SizedBox(height: 12.h),
+                        Text(
+                          'Неверный код',
+                          style: AppTextStyles.body.copyWith(
+                            color: AppColors.error,
+                            fontSize: 15.sp,
+                          ),
+                        ),
+                      ],
+                      SizedBox(height: 21.h),
+                      _secondsLeft > 0
+                          ? RichText(
                               text: TextSpan(
                                 text: 'Не пришёл код? ',
                                 style: AppTextStyles.body.copyWith(
                                   color: AppColors.textTertiary,
-                                  fontSize: 14.sp,
+                                  fontSize: 15.sp,
                                 ),
-                                children: const [
+                                children: [
                                   TextSpan(
-                                    text: 'Отправить повторно',
-                                    style: TextStyle(
+                                    text:
+                                        'Отправить повторно через ${_formatSeconds(_secondsLeft)}',
+                                    style: const TextStyle(
                                       color: AppColors.textBlack,
                                       fontWeight: FontWeight.w600,
                                     ),
                                   ),
                                 ],
                               ),
+                            )
+                          : GestureDetector(
+                              onTap: () async {
+                                if (_resending) return;
+                                _resending = true;
+                                try {
+                                  _pinController.clear();
+                                  setState(() {
+                                    _hasError = false;
+                                    _codeResent = true;
+                                  });
+                                  _startTimer();
+                                  WidgetsBinding.instance.addPostFrameCallback((
+                                    _,
+                                  ) {
+                                    if (mounted) _pinFocusNode.requestFocus();
+                                  });
+                                  final String e164 = CropResult.userPhoneE164;
+                                  if (e164.isNotEmpty) {
+                                    // Берём messenger ДО await, чтобы не дёргать
+                                    // context через async-разрыв.
+                                    final ScaffoldMessengerState messenger =
+                                        ScaffoldMessenger.of(context);
+                                    try {
+                                      await AuthService.instance
+                                          .sendOtp(e164)
+                                          .timeout(const Duration(seconds: 10));
+                                    } catch (e) {
+                                      // Сбой отправки: снимаем кулдаун и надпись
+                                      // (иначе ложный отсчёт на экране) и
+                                      // показываем КОНКРЕТНУЮ причину — лимит
+                                      // устройства, часовой лимит номера, нет
+                                      // сети — вместо общего «проверьте интернет».
+                                      if (mounted) {
+                                        _timer?.cancel();
+                                        setState(() {
+                                          _codeResent = false;
+                                          _secondsLeft = 0;
+                                        });
+                                        messenger.showSnackBar(
+                                          SnackBar(
+                                            content: Text(authErrorToRu(e)),
+                                          ),
+                                        );
+                                      }
+                                    }
+                                  }
+                                } finally {
+                                  _resending = false;
+                                }
+                              },
+                              child: RichText(
+                                text: TextSpan(
+                                  text: 'Не пришёл код? ',
+                                  style: AppTextStyles.body.copyWith(
+                                    color: AppColors.textTertiary,
+                                    fontSize: 14.sp,
+                                  ),
+                                  children: const [
+                                    TextSpan(
+                                      text: 'Отправить повторно',
+                                      style: TextStyle(
+                                        color: AppColors.textBlack,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
                             ),
+                      if (_codeResent) ...[
+                        SizedBox(height: 32.h),
+                        Text(
+                          'Новый код отправлен',
+                          style: AppTextStyles.body.copyWith(
+                            color: AppColors.textBlack,
+                            fontSize: 14.sp,
                           ),
-                    if (_codeResent) ...[
-                      SizedBox(height: 32.h),
-                      Text(
-                        'Новый код отправлен',
-                        style: AppTextStyles.body.copyWith(
-                          color: AppColors.textBlack,
-                          fontSize: 14.sp,
                         ),
-                      ),
+                      ],
                     ],
+                  ),
+                ),
+              ),
+              Container(
+                padding: EdgeInsets.fromLTRB(16.w, 16.h, 16.w, 16.h),
+                decoration: BoxDecoration(
+                  color: AppColors.background,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.04),
+                      offset: const Offset(0, -4),
+                      blurRadius: 16,
+                    ),
                   ],
                 ),
-              ),
-            ),
-            Container(
-              padding: EdgeInsets.fromLTRB(16.w, 16.h, 16.w, 16.h),
-              decoration: BoxDecoration(
-                color: AppColors.background,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.04),
-                    offset: const Offset(0, -4),
-                    blurRadius: 16,
+                child: ListenableBuilder(
+                  listenable: _pinController,
+                  builder: (_, _) => PrimaryButton(
+                    label: 'Далее',
+                    enabled:
+                        _pinController.text.length == _otpLength &&
+                        !_hasError &&
+                        !_verifying,
+                    onPressed: _submit,
                   ),
-                ],
-              ),
-              child: ListenableBuilder(
-                listenable: _pinController,
-                builder: (_, _) => PrimaryButton(
-                  label: 'Далее',
-                  enabled: _pinController.text.length == _otpLength &&
-                      !_hasError &&
-                      !_verifying,
-                  onPressed: _submit,
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
-      ),
       ),
     );
   }

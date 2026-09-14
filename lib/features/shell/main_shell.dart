@@ -33,21 +33,23 @@ class MainShell extends StatefulWidget {
 }
 
 class _MainShellState extends State<MainShell> {
-  // Гость (без входа) видит каталог, но «Заказы» и «Профиль» — это аккаунтные
-  // разделы: вместо контента показываем заглушку с предложением войти. Состояние
+  // Гость видит тот же каталог, что и зарегистрированный пользователь. Действия,
+  // для которых нужен аккаунт, показывают компактный диалог регистрации.
   // гостя фиксировано на время жизни shell (после входа открывается новый shell
   // через переход на /shell), поэтому считаем один раз.
+  late final bool _guest = isGuest;
   late final List<Widget> _screens = <Widget>[
     const CatalogCategoriesScreen(),
-    isGuest
+    _guest
         ? const GuestLockedView(
             icon: Icons.assignment_outlined,
-            title: 'Войдите в аккаунт',
+            title: 'Начните с первого заказа',
             subtitle:
-                'Чтобы видеть свои заказы и отклики, войдите или зарегистрируйтесь.',
+                'После регистрации здесь появятся ваши заказы и отклики исполнителей.',
+            intent: GuestAuthIntent.createOrder,
           )
         : MyOrdersScreen(onGoToCatalog: () => MainShell.selectedTab.value = 0),
-    isGuest
+    _guest
         ? const GuestLockedView(
             icon: Icons.person_outline,
             title: 'Войдите в аккаунт',
@@ -78,9 +80,8 @@ class _MainShellState extends State<MainShell> {
   }
 
   void _openSupport() {
-    // Ассистент доступен и гостю (с дневными лимитами по device_id, см.
-    // ai_client.dart): каталог/поиск/FAQ работают без входа, создание заказа
-    // ассистент гейтит отдельно (нужен аккаунт).
+    // Ассистент доступен гостю для общих вопросов. Поиск исполнителей и
+    // создание заказа внутри чата гейтятся на вход отдельно.
     // Стартовый экран ассистента («С чего хотите начать?») показывается
     // только один раз — сразу после регистрации (см. registration_screen.dart).
     // По FAB всегда открываем чат напрямую.
@@ -127,11 +128,10 @@ class _MainShellState extends State<MainShell> {
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       bottomNavigationBar: MainBottomNavBar(
-        items: kMainNavItems,
+        items: _guest ? kGuestMainNavItems : kMainNavItems,
         currentIndex: index,
         onTap: (int i) => MainShell.selectedTab.value = i,
       ),
     );
   }
 }
-
