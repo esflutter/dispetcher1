@@ -79,6 +79,23 @@ class PushHandler {
       onDidReceiveNotificationResponse: _onLocalTap,
     );
 
+    // iOS: баннер пуша при открытом приложении показывает сама система.
+    // Получатель уведомлений на iOS — библиотека пушей, и без этой настройки
+    // она гасит и сам пуш, и наш локальный баннер. Локальный баннер на iOS
+    // поэтому не рисуем (см. _handleForegroundMessage), иначе было бы два.
+    if (defaultTargetPlatform == TargetPlatform.iOS) {
+      try {
+        await FirebaseMessaging.instance
+            .setForegroundNotificationPresentationOptions(
+              alert: true,
+              badge: true,
+              sound: true,
+            )
+            .timeout(const Duration(seconds: 2));
+      } catch (e) {
+        if (kDebugMode) debugPrint('[push] presentation options failed: $e');
+      }
+    }
     FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
     FirebaseMessaging.onMessageOpenedApp.listen(_routeFromMessage);
 
@@ -87,8 +104,20 @@ class PushHandler {
     // (см. [pendingColdStartRoute]). Раньше здесь был немедленный push через
     // microtask, но он успевал лечь поверх сплэша, и таймер сплэша через 1.5 c
     // затирал его переходом на главную.
-    final RemoteMessage? initial =
-        await FirebaseMessaging.instance.getInitialMessage();
+    //
+    // Ждём ответа не дольше 2 секунд. На iOS при новой схеме запуска (UIScene)
+    // библиотека пушей подключается уже после системного сигнала «запуск
+    // завершён» и на этот вопрос не отвечает НИКОГДА — приложение зависало на
+    // белой заставке (1.0.2–1.0.3). Схема отключена в pubspec.yaml, а это —
+    // страховка на случай, если она снова включится.
+    RemoteMessage? initial;
+    try {
+      initial = await FirebaseMessaging.instance
+          .getInitialMessage()
+          .timeout(const Duration(seconds: 2));
+    } catch (_) {
+      initial = null;
+    }
     if (initial != null) {
       final dynamic route = initial.data['route'];
       if (route is String && route.isNotEmpty) {
@@ -112,6 +141,9 @@ class PushHandler {
   Future<void> _handleForegroundMessage(RemoteMessage message) async {
     final RemoteNotification? n = message.notification;
     if (n == null) return;
+    // На iOS баннер уже показала система (см. initialize), тап по нему
+    // придёт в onMessageOpenedApp.
+    if (defaultTargetPlatform == TargetPlatform.iOS) return;
 
     // Стабильный id локального уведомления: при повторной доставке одного и
     // того же пуша FCM сохраняет messageId, поэтому второй баннер ПЕРЕЗАПИШЕТ
