@@ -10,6 +10,7 @@ import 'package:dispatcher_1/core/catalog/catalog_service.dart';
 import 'package:dispatcher_1/core/catalog/models.dart';
 import 'package:dispatcher_1/core/dadata/dadata_service.dart';
 import 'package:dispatcher_1/core/location_permission.dart';
+import 'package:dispatcher_1/core/settings/settings_service.dart';
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
 import 'package:dispatcher_1/core/utils/thousand_separator_formatter.dart';
@@ -22,6 +23,8 @@ import 'package:dispatcher_1/features/catalog/widgets/machinery_dropdown.dart';
 /// — Дата аренды (поля «С» / «По» + чек «Точная дата»)
 /// — Время работы (поля «С» / «По» + чек «Весь день»)
 /// — Местоположение (поле адреса + 3 радиуса)
+/// Дата и время нужны только для проверки по графику исполнителей: когда
+/// график выключен в админ-панели, эти два раздела скрыты.
 class CatalogFilterScreen extends StatefulWidget {
   const CatalogFilterScreen({super.key});
 
@@ -64,9 +67,15 @@ class _CatalogFilterScreenState extends State<CatalogFilterScreen> {
   /// видимой области и приходится руками скроллить вниз.
   final GlobalKey _pickerAnchorKey = GlobalKey();
 
+  /// Включён ли график работы исполнителей (переключатель в админ-панели).
+  /// Без графика дата и время ни на что не влияют — разделы «Дата аренды» и
+  /// «Время работы» скрыты и в применённый фильтр не попадают.
+  bool _scheduleOn = SettingsService.instance.scheduleEnabledCached;
+
   @override
   void initState() {
     super.initState();
+    SettingsService.instance.revision.addListener(_onSettingsChanged);
     _selectedEquipment.addAll(AppliedFilter.equipment);
     _priceHourCtrl.text = AppliedFilter.priceHour ?? '';
     _priceDayCtrl.text = AppliedFilter.priceDay ?? '';
@@ -113,9 +122,23 @@ class _CatalogFilterScreenState extends State<CatalogFilterScreen> {
 
   @override
   void dispose() {
+    SettingsService.instance.revision.removeListener(_onSettingsChanged);
     _priceHourCtrl.dispose();
     _priceDayCtrl.dispose();
     super.dispose();
+  }
+
+  /// Переключатель графика из админ-панели доехал (возврат из фона) — прячем
+  /// или показываем разделы даты и времени.
+  void _onSettingsChanged() {
+    final bool on = SettingsService.instance.scheduleEnabledCached;
+    if (!mounted || on == _scheduleOn) return;
+    setState(() {
+      _scheduleOn = on;
+      // Раскрытый календарь или часы были внутри скрытого раздела —
+      // закрываем, чтобы они не всплыли сами при обратном включении.
+      if (!on) _openPicker = null;
+    });
   }
 
   void _applyFilter() {
@@ -132,12 +155,16 @@ class _CatalogFilterScreenState extends State<CatalogFilterScreen> {
         ? null
         : _priceDayCtrl.text.trim();
     AppliedFilter.sortByPriceAsc = _sortByPriceAsc;
-    AppliedFilter.dateFrom = _dateFrom;
-    AppliedFilter.dateTo = _dateTo;
-    AppliedFilter.exactDate = _exactDate;
-    AppliedFilter.timeFrom = _timeFrom;
-    AppliedFilter.timeTo = _timeTo;
-    AppliedFilter.wholeDay = _wholeDay;
+    // Дата и время работают только вместе с графиком. Когда он выключен,
+    // разделы скрыты — в применённый фильтр их не пишем (сбрасываем), чтобы
+    // старая дата не ожила сама, если график потом включат.
+    final bool withSchedule = _scheduleOn;
+    AppliedFilter.dateFrom = withSchedule ? _dateFrom : null;
+    AppliedFilter.dateTo = withSchedule ? _dateTo : null;
+    AppliedFilter.exactDate = withSchedule && _exactDate;
+    AppliedFilter.timeFrom = withSchedule ? _timeFrom : null;
+    AppliedFilter.timeTo = withSchedule ? _timeTo : null;
+    AppliedFilter.wholeDay = withSchedule && _wholeDay;
     // Радиус без адреса вообще ничего не значит — сбрасываем оба
     // поля. С адресом радиус сохраняем даже без координат: при
     // отсутствии geo_lat/lon (DaData не вернула координаты для
@@ -256,154 +283,158 @@ class _CatalogFilterScreenState extends State<CatalogFilterScreen> {
                             setState(() => _sortByPriceAsc = v),
                       ),
                       SizedBox(height: 24.h),
-                      _SectionTitle('Дата аренды'),
-                      SizedBox(height: 12.h),
-                      Row(
-                        children: <Widget>[
-                          Expanded(
-                            child: PickerField(
-                              hint: _exactDate ? '' : 'С',
-                              value: _dateFrom == null
-                                  ? null
-                                  : _formatDate(_dateFrom!),
-                              iconAsset: 'assets/icons/ui/calendar_active.webp',
-                              iconAssetInactive: 'assets/icons/ui/calendar_inactive.webp',
-                              active: _openPicker == 'dateFrom',
-                              onTap: () => _togglePicker('dateFrom'),
+                      // Дата и время — только при включённом графике работы
+                      // исполнителей: без графика они ни на что не влияют.
+                      if (_scheduleOn) ...<Widget>[
+                        _SectionTitle('Дата аренды'),
+                        SizedBox(height: 12.h),
+                        Row(
+                          children: <Widget>[
+                            Expanded(
+                              child: PickerField(
+                                hint: _exactDate ? '' : 'С',
+                                value: _dateFrom == null
+                                    ? null
+                                    : _formatDate(_dateFrom!),
+                                iconAsset: 'assets/icons/ui/calendar_active.webp',
+                                iconAssetInactive: 'assets/icons/ui/calendar_inactive.webp',
+                                active: _openPicker == 'dateFrom',
+                                onTap: () => _togglePicker('dateFrom'),
+                              ),
                             ),
-                          ),
-                          SizedBox(width: 12.w),
-                          Expanded(
-                            child: PickerField(
-                              hint: 'По',
-                              value: _dateTo == null
-                                  ? null
-                                  : _formatDate(_dateTo!),
-                              iconAsset: 'assets/icons/ui/calendar_active.webp',
-                              iconAssetInactive: 'assets/icons/ui/calendar_inactive.webp',
-                              active: _openPicker == 'dateTo',
-                              enabled: !_exactDate,
-                              onTap: _exactDate
-                                  ? null
-                                  : () => _togglePicker('dateTo'),
+                            SizedBox(width: 12.w),
+                            Expanded(
+                              child: PickerField(
+                                hint: 'По',
+                                value: _dateTo == null
+                                    ? null
+                                    : _formatDate(_dateTo!),
+                                iconAsset: 'assets/icons/ui/calendar_active.webp',
+                                iconAssetInactive: 'assets/icons/ui/calendar_inactive.webp',
+                                active: _openPicker == 'dateTo',
+                                enabled: !_exactDate,
+                                onTap: _exactDate
+                                    ? null
+                                    : () => _togglePicker('dateTo'),
+                              ),
                             ),
-                          ),
-                        ],
-                      ),
-                      if (_openPicker == 'dateFrom' ||
-                          _openPicker == 'dateTo') ...<Widget>[
-                        SizedBox(height: 8.h),
-                        InlineCalendar(
-                          key: _pickerAnchorKey,
-                          selected: _openPicker == 'dateFrom'
-                              ? _dateFrom
-                              : (_dateTo ?? _dateFrom),
-                          minDate: _openPicker == 'dateTo'
-                              ? _dateFrom
-                              : null,
-                          onChanged: (DateTime d) {
-                            setState(() {
-                              if (_openPicker == 'dateFrom') {
-                                _dateFrom = d;
-                                // Сбросить «По» если она раньше «С».
-                                if (_dateTo != null &&
-                                    _dateTo!.isBefore(d)) {
-                                  _dateTo = null;
+                          ],
+                        ),
+                        if (_openPicker == 'dateFrom' ||
+                            _openPicker == 'dateTo') ...<Widget>[
+                          SizedBox(height: 8.h),
+                          InlineCalendar(
+                            key: _pickerAnchorKey,
+                            selected: _openPicker == 'dateFrom'
+                                ? _dateFrom
+                                : (_dateTo ?? _dateFrom),
+                            minDate: _openPicker == 'dateTo'
+                                ? _dateFrom
+                                : null,
+                            onChanged: (DateTime d) {
+                              setState(() {
+                                if (_openPicker == 'dateFrom') {
+                                  _dateFrom = d;
+                                  // Сбросить «По» если она раньше «С».
+                                  if (_dateTo != null &&
+                                      _dateTo!.isBefore(d)) {
+                                    _dateTo = null;
+                                  }
+                                } else {
+                                  _dateTo = d;
                                 }
-                              } else {
-                                _dateTo = d;
-                              }
-                              _openPicker = null;
-                            });
-                          },
-                          onCancel: () =>
-                              setState(() => _openPicker = null),
-                        ),
-                      ],
-                      SizedBox(height: 8.h),
-                      CheckRow(
-                        label: 'Точная дата',
-                        value: _exactDate,
-                        onChanged: (bool v) => setState(() {
-                          _exactDate = v;
-                          if (v && _openPicker == 'dateTo') {
-                            _openPicker = null;
-                          }
-                        }),
-                      ),
-                      SizedBox(height: 16.h),
-                      _SectionTitle('Время работы'),
-                      SizedBox(height: 12.h),
-                      Row(
-                        children: <Widget>[
-                          Expanded(
-                            child: PickerField(
-                              hint: 'С',
-                              value: _timeFrom == null
-                                  ? null
-                                  : _formatTime(_timeFrom!),
-                              iconAsset: 'assets/icons/ui/clock_active.webp',
-                              iconAssetInactive: 'assets/icons/ui/clock_inactive.webp',
-                              active: _openPicker == 'timeFrom',
-                              enabled: !_wholeDay,
-                              onTap: _wholeDay
-                                  ? null
-                                  : () => _togglePicker('timeFrom'),
-                            ),
-                          ),
-                          SizedBox(width: 12.w),
-                          Expanded(
-                            child: PickerField(
-                              hint: 'По',
-                              value: _timeTo == null
-                                  ? null
-                                  : _formatTime(_timeTo!),
-                              iconAsset: 'assets/icons/ui/clock_active.webp',
-                              iconAssetInactive: 'assets/icons/ui/clock_inactive.webp',
-                              active: _openPicker == 'timeTo',
-                              enabled: !_wholeDay,
-                              onTap: _wholeDay
-                                  ? null
-                                  : () => _togglePicker('timeTo'),
-                            ),
+                                _openPicker = null;
+                              });
+                            },
+                            onCancel: () =>
+                                setState(() => _openPicker = null),
                           ),
                         ],
-                      ),
-                      if (_openPicker == 'timeFrom' ||
-                          _openPicker == 'timeTo') ...<Widget>[
                         SizedBox(height: 8.h),
-                        InlineTimePicker(
-                          key: _pickerAnchorKey,
-                          selected: _openPicker == 'timeFrom'
-                              ? _timeFrom
-                              : _timeTo,
-                          onDone: (TimeOfDay t) {
-                            setState(() {
-                              if (_openPicker == 'timeFrom') {
-                                _timeFrom = t;
-                              } else {
-                                _timeTo = t;
-                              }
+                        CheckRow(
+                          label: 'Точная дата',
+                          value: _exactDate,
+                          onChanged: (bool v) => setState(() {
+                            _exactDate = v;
+                            if (v && _openPicker == 'dateTo') {
                               _openPicker = null;
-                            });
-                          },
-                          onCancel: () =>
-                              setState(() => _openPicker = null),
+                            }
+                          }),
                         ),
+                        SizedBox(height: 16.h),
+                        _SectionTitle('Время работы'),
+                        SizedBox(height: 12.h),
+                        Row(
+                          children: <Widget>[
+                            Expanded(
+                              child: PickerField(
+                                hint: 'С',
+                                value: _timeFrom == null
+                                    ? null
+                                    : _formatTime(_timeFrom!),
+                                iconAsset: 'assets/icons/ui/clock_active.webp',
+                                iconAssetInactive: 'assets/icons/ui/clock_inactive.webp',
+                                active: _openPicker == 'timeFrom',
+                                enabled: !_wholeDay,
+                                onTap: _wholeDay
+                                    ? null
+                                    : () => _togglePicker('timeFrom'),
+                              ),
+                            ),
+                            SizedBox(width: 12.w),
+                            Expanded(
+                              child: PickerField(
+                                hint: 'По',
+                                value: _timeTo == null
+                                    ? null
+                                    : _formatTime(_timeTo!),
+                                iconAsset: 'assets/icons/ui/clock_active.webp',
+                                iconAssetInactive: 'assets/icons/ui/clock_inactive.webp',
+                                active: _openPicker == 'timeTo',
+                                enabled: !_wholeDay,
+                                onTap: _wholeDay
+                                    ? null
+                                    : () => _togglePicker('timeTo'),
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (_openPicker == 'timeFrom' ||
+                            _openPicker == 'timeTo') ...<Widget>[
+                          SizedBox(height: 8.h),
+                          InlineTimePicker(
+                            key: _pickerAnchorKey,
+                            selected: _openPicker == 'timeFrom'
+                                ? _timeFrom
+                                : _timeTo,
+                            onDone: (TimeOfDay t) {
+                              setState(() {
+                                if (_openPicker == 'timeFrom') {
+                                  _timeFrom = t;
+                                } else {
+                                  _timeTo = t;
+                                }
+                                _openPicker = null;
+                              });
+                            },
+                            onCancel: () =>
+                                setState(() => _openPicker = null),
+                          ),
+                        ],
+                        SizedBox(height: 8.h),
+                        CheckRow(
+                          label: 'Весь день',
+                          value: _wholeDay,
+                          onChanged: (bool v) => setState(() {
+                            _wholeDay = v;
+                            if (v && (_openPicker == 'timeFrom' ||
+                                _openPicker == 'timeTo')) {
+                              _openPicker = null;
+                            }
+                          }),
+                        ),
+                        SizedBox(height: 16.h),
                       ],
-                      SizedBox(height: 8.h),
-                      CheckRow(
-                        label: 'Весь день',
-                        value: _wholeDay,
-                        onChanged: (bool v) => setState(() {
-                          _wholeDay = v;
-                          if (v && (_openPicker == 'timeFrom' ||
-                              _openPicker == 'timeTo')) {
-                            _openPicker = null;
-                          }
-                        }),
-                      ),
-                      SizedBox(height: 16.h),
                       _SectionTitle('Местоположение'),
                       SizedBox(height: 12.h),
                       GestureDetector(
@@ -1612,6 +1643,20 @@ class AppliedFilter {
   /// без них фильтр радиуса не работает (адрес введён вручную).
   static double? addressLat;
   static double? addressLng;
+
+  // Дата и время фильтра имеют смысл только вместе с графиком работы
+  // исполнителей. Если график выключили в админ-панели, когда фильтр по дате
+  // уже применён, значения остаются в памяти. Поэтому для поиска, чипов и
+  // индикатора фильтра их читаем только через эти геттеры: при выключенном
+  // графике они пустые. При включённом — ровно сохранённые значения.
+  static bool get _scheduleOn =>
+      SettingsService.instance.scheduleEnabledCached;
+  static DateTime? get activeDateFrom => _scheduleOn ? dateFrom : null;
+  static DateTime? get activeDateTo => _scheduleOn ? dateTo : null;
+  static bool get activeExactDate => _scheduleOn && exactDate;
+  static TimeOfDay? get activeTimeFrom => _scheduleOn ? timeFrom : null;
+  static TimeOfDay? get activeTimeTo => _scheduleOn ? timeTo : null;
+  static bool get activeWholeDay => _scheduleOn && wholeDay;
 
   static final ValueNotifier<int> revision = ValueNotifier<int>(0);
 

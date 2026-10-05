@@ -6,6 +6,7 @@ import 'package:dispatcher_1/core/auth/guest_gate.dart';
 import 'package:dispatcher_1/core/auth/phone_format.dart';
 import 'package:dispatcher_1/core/catalog/catalog_service.dart';
 import 'package:dispatcher_1/core/catalog/models.dart';
+import 'package:dispatcher_1/core/catalog/schedule_availability.dart';
 import 'package:dispatcher_1/core/settings/settings_service.dart';
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_spacing.dart';
@@ -45,7 +46,8 @@ String _hoursWord(int n) {
 
 /// Просмотр чужой карточки исполнителя (открывается заказчиком из
 /// каталога). Данные — из `executor_cards` + `profiles` + список
-/// `services` + `schedule_day_overrides`. Контакты не показываем —
+/// `services` + `schedule_day_overrides` (график — только когда он включён в
+/// админ-панели; выключен — блока «Занятость» нет). Контакты не показываем —
 /// они в `profiles_private` под RLS, доступны только участнику
 /// accepted-мэтча.
 class ExecutorCardViewScreen extends StatefulWidget {
@@ -94,6 +96,11 @@ class _ExecutorCardViewScreenState extends State<ExecutorCardViewScreen> {
   bool _unmarkedDayAvailable =
       SettingsService.instance.unmarkedDayAvailableCached;
 
+  /// Включён ли график работы исполнителей (переключатель в админ-панели).
+  /// Выключен — блока «Занятость» нет вовсе. Первый кадр — по уже прогретому
+  /// кэшу (или запомненному на устройстве значению), чтобы блок не мигал.
+  bool _scheduleEnabled = SettingsService.instance.scheduleEnabledCached;
+
   @override
   void initState() {
     super.initState();
@@ -105,15 +112,38 @@ class _ExecutorCardViewScreenState extends State<ExecutorCardViewScreen> {
     OfferSubmissions.revision.addListener(_onRevision);
     AccountBlock.notifier.addListener(_onRevision);
     MyOrdersStore.revision.addListener(_onRevision);
+    // Настройки перечитываются при возврате из фона — переключатель графика
+    // из админ-панели доезжает до уже открытой карточки.
+    SettingsService.instance.revision.addListener(_onSettingsChanged);
   }
 
   /// Читает режим графика (обычно уже прогрет в кэше на старте — вернётся
-  /// мгновенно). До ответа календарь рисуется в легаси-режиме, после —
-  /// перестраивается с актуальным флагом.
+  /// мгновенно). До ответа календарь рисуется по кэшу, после —
+  /// перестраивается с актуальными флагами.
   Future<void> _loadScheduleMode() async {
-    final bool v = await SettingsService.instance.unmarkedDayAvailable();
+    await SettingsService.instance.scheduleEnabled();
+    _onSettingsChanged();
+  }
+
+  /// Подтягивает флаги графика из настроек и перерисовывает карточку, если
+  /// они изменились.
+  void _onSettingsChanged() {
     if (!mounted) return;
-    setState(() => _unmarkedDayAvailable = v);
+    final bool enabled = SettingsService.instance.scheduleEnabledCached;
+    final bool unmarked = SettingsService.instance.unmarkedDayAvailableCached;
+    if (enabled == _scheduleEnabled && unmarked == _unmarkedDayAvailable) {
+      return;
+    }
+    setState(() {
+      // График включили, пока карточка открыта: при выключенном дни графика
+      // не загружались — перечитываем карточку, иначе блок «Занятость»
+      // показал бы все дни нерабочими.
+      if (enabled && !_scheduleEnabled) {
+        _future = CatalogService.instance.getExecutorFull(widget.executorId);
+      }
+      _scheduleEnabled = enabled;
+      _unmarkedDayAvailable = unmarked;
+    });
   }
 
   Future<void> _loadContacts() async {
@@ -215,6 +245,7 @@ class _ExecutorCardViewScreenState extends State<ExecutorCardViewScreen> {
     OfferSubmissions.revision.removeListener(_onRevision);
     AccountBlock.notifier.removeListener(_onRevision);
     MyOrdersStore.revision.removeListener(_onRevision);
+    SettingsService.instance.revision.removeListener(_onSettingsChanged);
     super.dispose();
   }
 
@@ -473,13 +504,17 @@ class _ExecutorCardViewScreenState extends State<ExecutorCardViewScreen> {
             Text(_legalStatusLabel(e.legalStatus), style: AppTextStyles.body),
             SizedBox(height: 16.h),
           ],
-          _AvailabilitySection(
-            overrides: full.scheduleOverrides,
-            defaultRadiusKm: e.radiusKm,
-            unmarkedDayAvailable: _unmarkedDayAvailable,
-          ),
+          // Блок «Занятость» — только при включённом графике работы.
+          if (_scheduleEnabled)
+            _AvailabilitySection(
+              overrides: full.scheduleOverrides,
+              defaultRadiusKm: e.radiusKm,
+              unmarkedDayAvailable: _unmarkedDayAvailable,
+            ),
           if (full.services.isNotEmpty) ...<Widget>[
-            SizedBox(height: 16.h),
+            // Отступ после блока «Занятость». Без него предыдущий раздел уже
+            // заканчивается своим отступом — второй дал бы двойную щель.
+            if (_scheduleEnabled) SizedBox(height: 16.h),
             const _SectionTitle('Услуги'),
             SizedBox(height: 8.h),
             for (int i = 0; i < full.services.length; i++) ...<Widget>[
@@ -730,15 +765,15 @@ class _AvailabilitySectionState extends State<_AvailabilitySection> {
   ExecutorScheduleDay? _override(DateTime d) =>
       widget.overrides[DateTime(d.year, d.month, d.day)];
 
-  bool _isDayOff(DateTime d) {
-    final ExecutorScheduleDay? o = _override(d);
-    if (widget.unmarkedDayAvailable) {
-      // Легаси: нерабочий — только явный override с accepting=false.
-      return o != null && !o.accepting;
-    }
-    // Строгий режим: день без записи — тоже нерабочий (как фильтр и сервер).
-    return o == null || !o.accepting;
-  }
+  /// Легаси: нерабочий — только явный override с accepting=false. Строгий
+  /// режим: день без записи — тоже нерабочий (как фильтр и сервер). Правило —
+  /// чистая функция ScheduleAvailability.isDayOff (покрыта тестами). Сам блок
+  /// рисуется только при включённом графике, поэтому здесь он всегда включён.
+  bool _isDayOff(DateTime d) => ScheduleAvailability.isDayOff(
+        mark: _override(d),
+        scheduleEnabled: true,
+        unmarkedDayAvailable: widget.unmarkedDayAvailable,
+      );
 
   String _formatTimeRange(ExecutorScheduleDay o) {
     if (o.wholeDay) return 'Весь день';

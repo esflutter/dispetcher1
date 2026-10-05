@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:dispatcher_1/core/ai/ai_navigation.dart';
 import 'package:dispatcher_1/core/catalog/catalog_service.dart';
 import 'package:dispatcher_1/core/catalog/models.dart';
+import 'package:dispatcher_1/core/settings/settings_service.dart';
 import 'package:dispatcher_1/core/theme/app_colors.dart';
 import 'package:dispatcher_1/core/theme/app_text_styles.dart';
 import 'package:dispatcher_1/core/user_location.dart';
@@ -43,10 +44,15 @@ class _OrderFeedScreenState extends State<OrderFeedScreen> {
   Timer? _debounce;
   late Future<List<ExecutorCardListItem>> _future;
 
+  /// Последнее увиденное положение переключателя графика — чтобы реагировать
+  /// только на его смену, а не на каждое перечитывание настроек.
+  bool _scheduleOn = SettingsService.instance.scheduleEnabledCached;
+
   @override
   void initState() {
     super.initState();
     AppliedFilter.revision.addListener(_onFilterChanged);
+    SettingsService.instance.revision.addListener(_onSettingsChanged);
     // Это каталог ИСПОЛНИТЕЛЕЙ (listPublishedExecutors). На realtime-маяк
     // заказов/откликов он не подписан: карточки исполнителей через него
     // не меняются, и подписка лишь зря пере-фетчила список при любом
@@ -67,6 +73,7 @@ class _OrderFeedScreenState extends State<OrderFeedScreen> {
   @override
   void dispose() {
     AppliedFilter.revision.removeListener(_onFilterChanged);
+    SettingsService.instance.revision.removeListener(_onSettingsChanged);
     _debounce?.cancel();
     _searchCtrl.dispose();
     super.dispose();
@@ -80,11 +87,12 @@ class _OrderFeedScreenState extends State<OrderFeedScreen> {
       machineryTitles: AppliedFilter.equipment,
       categoryTitles: AppliedFilter.categories,
       search: _query.trim().isEmpty ? null : _query,
-      dateFrom: AppliedFilter.dateFrom,
-      dateTo: AppliedFilter.dateTo,
-      timeFrom: _fmtHm(AppliedFilter.timeFrom),
-      timeTo: _fmtHm(AppliedFilter.timeTo),
-      wholeDay: AppliedFilter.wholeDay,
+      // Дата и время — только при включённом графике (иначе пустые).
+      dateFrom: AppliedFilter.activeDateFrom,
+      dateTo: AppliedFilter.activeDateTo,
+      timeFrom: _fmtHm(AppliedFilter.activeTimeFrom),
+      timeTo: _fmtHm(AppliedFilter.activeTimeTo),
+      wholeDay: AppliedFilter.activeWholeDay,
       originLat: radiusActive ? AppliedFilter.addressLat : null,
       originLng: radiusActive ? AppliedFilter.addressLng : null,
       radiusKm: radiusActive ? AppliedFilter.radiusKm : null,
@@ -116,6 +124,19 @@ class _OrderFeedScreenState extends State<OrderFeedScreen> {
         _future = _fetch();
       });
     }
+  }
+
+  /// График включили или выключили в админ-панели, пока лента открыта
+  /// (настройки перечитались при возврате из фона): дата и время из фильтра
+  /// начали или перестали работать — перерисовываем чипы и индикатор, а
+  /// выдачу пересобираем, только если в фильтре есть дата.
+  void _onSettingsChanged() {
+    final bool on = SettingsService.instance.scheduleEnabledCached;
+    if (!mounted || on == _scheduleOn) return;
+    setState(() {
+      _scheduleOn = on;
+      if (AppliedFilter.dateFrom != null) _future = _fetch();
+    });
   }
 
   void _onSearchChanged(String v) {
@@ -159,9 +180,11 @@ class _OrderFeedScreenState extends State<OrderFeedScreen> {
       return true;
     }
     if (AppliedFilter.sortByPriceAsc) return true;
-    if (AppliedFilter.dateFrom != null) return true;
-    if (AppliedFilter.wholeDay) return true;
-    if (AppliedFilter.timeFrom != null && AppliedFilter.timeTo != null) {
+    // Дата и время считаются, только пока график включён.
+    if (AppliedFilter.activeDateFrom != null) return true;
+    if (AppliedFilter.activeWholeDay) return true;
+    if (AppliedFilter.activeTimeFrom != null &&
+        AppliedFilter.activeTimeTo != null) {
       return true;
     }
     if (AppliedFilter.radiusKm != null) return true;
@@ -395,13 +418,16 @@ class _AppliedFilterChips extends StatelessWidget {
       }));
     }
 
-    // Дата: один чип на диапазон или на «точную» дату.
-    if (AppliedFilter.dateFrom != null) {
-      final String label = AppliedFilter.exactDate ||
-              AppliedFilter.dateTo == null ||
-              AppliedFilter.dateTo == AppliedFilter.dateFrom
-          ? _fmtDate(AppliedFilter.dateFrom!)
-          : '${_fmtDate(AppliedFilter.dateFrom!)} – ${_fmtDate(AppliedFilter.dateTo!)}';
+    // Дата: один чип на диапазон или на «точную» дату. Чипы даты и времени —
+    // только при включённом графике (active*-геттеры иначе пустые).
+    final DateTime? dateFrom = AppliedFilter.activeDateFrom;
+    final DateTime? dateTo = AppliedFilter.activeDateTo;
+    if (dateFrom != null) {
+      final String label = AppliedFilter.activeExactDate ||
+              dateTo == null ||
+              dateTo == dateFrom
+          ? _fmtDate(dateFrom)
+          : '${_fmtDate(dateFrom)} – ${_fmtDate(dateTo)}';
       chips.add(_ChipSpec(label, () {
         AppliedFilter.dateFrom = null;
         AppliedFilter.dateTo = null;
@@ -411,15 +437,16 @@ class _AppliedFilterChips extends StatelessWidget {
     }
 
     // Время: один чип на диапазон, либо «Весь день».
-    if (AppliedFilter.wholeDay) {
+    final TimeOfDay? timeFrom = AppliedFilter.activeTimeFrom;
+    final TimeOfDay? timeTo = AppliedFilter.activeTimeTo;
+    if (AppliedFilter.activeWholeDay) {
       chips.add(_ChipSpec('Весь день', () {
         AppliedFilter.wholeDay = false;
         _bump();
       }));
-    } else if (AppliedFilter.timeFrom != null &&
-        AppliedFilter.timeTo != null) {
+    } else if (timeFrom != null && timeTo != null) {
       chips.add(_ChipSpec(
-          '${_fmtTime(AppliedFilter.timeFrom!)}–${_fmtTime(AppliedFilter.timeTo!)}',
+          '${_fmtTime(timeFrom)}–${_fmtTime(timeTo)}',
           () {
         AppliedFilter.timeFrom = null;
         AppliedFilter.timeTo = null;

@@ -4,6 +4,7 @@ import 'package:dispatcher_1/core/settings/settings_service.dart';
 import 'package:dispatcher_1/core/utils/geo_distance.dart';
 
 import 'models.dart';
+import 'schedule_availability.dart';
 
 /// Чтение каталога из Supabase: справочники, лента заказов,
 /// карточка одного заказа и карточка заказчика. Отклик на заказ —
@@ -312,10 +313,17 @@ class CatalogService {
 
     // Если задан фильтр по дате — собираем список user_id, у которых
     // расписание (`schedule_day_overrides`) на эти даты конфликтует с
-    // запросом, и исключаем их. Без override считаем, что исполнитель
-    // доступен по умолчанию.
+    // запросом, и исключаем их. Как трактовать день без записи — см.
+    // ScheduleAvailability. Когда график выключен в админ-панели, дата и
+    // время ни на что не влияют: проверку не делаем вовсе и таблицу графика
+    // не читаем. Проверка здесь, в сервисе, закрывает сразу и ленту, и поиск
+    // на главной каталога (даже если в фильтре осталась старая дата).
     Set<String> excludedByDate = const <String>{};
-    if (dateFrom != null) {
+    // Перед решением «проверять ли по графику» сверяем настройки, если они
+    // старше минуты: иначе после выключения графика в админ-панели открытое
+    // приложение по устаревшему строгому режиму никого бы не нашло.
+    if (dateFrom != null) await SettingsService.instance.refreshIfStale();
+    if (dateFrom != null && await SettingsService.instance.scheduleEnabled()) {
       excludedByDate = await _findUnavailableExecutors(
         userIds: userIds,
         dateFrom: dateFrom,
@@ -517,18 +525,14 @@ class CatalogService {
   }
 
   /// Возвращает множество `user_id`, которые НЕдоступны на интервале
-  /// `[dateFrom..dateTo]` по своему расписанию.
+  /// `[dateFrom..dateTo]` по своему расписанию. Зовётся только при
+  /// включённом графике (см. listPublishedExecutors).
   ///
   /// Трактовка дня БЕЗ записи зависит от серверного флага
-  /// `schedule.unmarked_day_available` (миграция 107):
-  ///  • легаси (true): нет override — исполнитель доступен; конфликт =
-  ///    override.accepting=false ИЛИ (заказ wholeDay=true, override не
-  ///    whole_day) ИЛИ (заданы timeFrom/timeTo, override не whole_day и
-  ///    время не покрывает запрос);
-  ///  • строгий (false, «нерабочие по умолчанию»): исполнитель доступен,
-  ///    только если КАЖДЫЙ день интервала явно отмечен рабочим
-  ///    (accepting=true) и не конфликтует по времени по тем же правилам;
-  ///    день без записи = недоступен.
+  /// `schedule.unmarked_day_available` (миграция 107): легаси (true) — день
+  /// без записи доступен, строгий (false) — недоступен. Сами правила, включая
+  /// конфликт по времени, — чистые функции в ScheduleAvailability (покрыты
+  /// юнит-тестами); здесь только чтение строк графика из базы.
   Future<Set<String>> _findUnavailableExecutors({
     required List<String> userIds,
     required DateTime dateFrom,
@@ -546,60 +550,17 @@ class CatalogService {
         .gte('day', _isoDate(dateFrom))
         .lte('day', _isoDate(dateTo));
 
-    // Конфликтует ли ПОЛОЖИТЕЛЬНЫЙ override (accepting=true) с запросом.
-    bool conflictsByTime(Map<String, dynamic> r) {
-      final bool overrideWholeDay = (r['whole_day'] as bool?) ?? false;
-      if (wholeDay && !overrideWholeDay) return true;
-      if (!wholeDay && timeFrom != null && timeTo != null) {
-        if (overrideWholeDay) return false; // полностью покрывает
-        final String? oFrom = _trimTime(r['time_from'] as String?);
-        final String? oTo = _trimTime(r['time_to'] as String?);
-        if (oFrom == null ||
-            oTo == null ||
-            timeFrom.compareTo(oFrom) < 0 ||
-            timeTo.compareTo(oTo) > 0) {
-          return true;
-        }
-      }
-      return false;
-    }
-
-    final Set<String> excluded = <String>{};
-
-    if (unmarkedOk) {
-      // Легаси-режим: исключаем только явные конфликты, день без записи
-      // доступен — поведение прежних версий.
-      for (final Map<String, dynamic> r in rows) {
-        final String uid = r['user_id'] as String;
-        if (excluded.contains(uid)) continue;
-        final bool accepting = (r['accepting'] as bool?) ?? true;
-        if (!accepting || conflictsByTime(r)) excluded.add(uid);
-      }
-      return excluded;
-    }
-
-    // Строгий режим: считаем, сколько дней интервала у исполнителя явно
-    // отмечены рабочими и подходят по времени; закрытый день (accepting=
-    // false) — жёсткое исключение сразу. Не покрыл все дни — недоступен.
-    final int daysTotal = dateTo.difference(dateFrom).inDays + 1;
-    final Map<String, Set<String>> okDays = <String, Set<String>>{};
-    for (final Map<String, dynamic> r in rows) {
-      final String uid = r['user_id'] as String;
-      if (excluded.contains(uid)) continue;
-      final bool accepting = (r['accepting'] as bool?) ?? true;
-      if (!accepting) {
-        excluded.add(uid);
-        okDays.remove(uid);
-        continue;
-      }
-      if (conflictsByTime(r)) continue; // день отмечен, но время не подходит
-      (okDays[uid] ??= <String>{}).add((r['day'] ?? '').toString());
-    }
-    for (final String uid in userIds) {
-      if (excluded.contains(uid)) continue;
-      if ((okDays[uid]?.length ?? 0) < daysTotal) excluded.add(uid);
-    }
-    return excluded;
+    return ScheduleAvailability.unavailableExecutors(
+      userIds: userIds,
+      rows: rows,
+      dateFrom: dateFrom,
+      dateTo: dateTo,
+      timeFrom: timeFrom,
+      timeTo: timeTo,
+      wholeDay: wholeDay,
+      scheduleEnabled: true,
+      unmarkedDayAvailable: unmarkedOk,
+    );
   }
 
   /// Прямой SELECT по `user_id` + агрегация услуг этого исполнителя.
@@ -692,7 +653,8 @@ class CatalogService {
 
   /// Полная карточка исполнителя: summary + услуги + расписание.
   /// Делает 3 параллельных запроса. Если карточка не опубликована или
-  /// исполнитель не найден — возвращает null.
+  /// исполнитель не найден — возвращает null. Когда график выключен в
+  /// админ-панели, расписание не читается (пустая карта дней).
   Future<ExecutorCardFull?> getExecutorFull(String userId) async {
     await _primeDirectories();
 
@@ -711,13 +673,7 @@ class CatalogService {
           .eq('is_paid', true)
           .eq('is_archived', false)
           .order('updated_at', ascending: false),
-      _client
-          .from('schedule_day_overrides')
-          .select(
-            'day, accepting, whole_day, time_from, time_to, '
-            'machinery_ids, radius_km',
-          )
-          .eq('user_id', userId),
+      _scheduleRowsForCard(userId),
     ]);
 
     final List<ExecutorService> services = results[0]
@@ -736,6 +692,27 @@ class CatalogService {
       services: services,
       scheduleOverrides: schedule,
     );
+  }
+
+  /// Строки графика исполнителя для блока «Занятость» в карточке. При
+  /// выключенном графике таблицу не читаем вовсе: блок скрыт, а лишний
+  /// запрос заодно не может уронить всю карточку. Флаг проверяем внутри
+  /// параллельной ветки, чтобы не задерживать запрос услуг.
+  Future<List<Map<String, dynamic>>> _scheduleRowsForCard(String userId) async {
+    await SettingsService.instance.refreshIfStale();
+    // Решаем по кэшу, без второго ожидания: если первая загрузка настроек
+    // ещё висит на плохой сети, карточка не должна ждать её дольше 3 секунд.
+    // Придёт позже — карточка сама перерисуется по сигналу настроек.
+    if (!SettingsService.instance.scheduleEnabledCached) {
+      return const <Map<String, dynamic>>[];
+    }
+    return _client
+        .from('schedule_day_overrides')
+        .select(
+          'day, accepting, whole_day, time_from, time_to, '
+          'machinery_ids, radius_km',
+        )
+        .eq('user_id', userId);
   }
 
   /// Телефон исполнителя для звонка из каталога. Сервер (RPC `get_executor_phone`)

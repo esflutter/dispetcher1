@@ -71,7 +71,8 @@ class _CatalogCategoriesScreenState extends State<CatalogCategoriesScreen> {
   /// Поиск исполнителей по тексту С УЧЁТОМ активных фильтров (техника,
   /// категории, дата/время, адрес/радиус) и локального фильтра/сортировки по
   /// цене — чтобы поиск на этом экране вёл себя так же, как лента с фильтром, а
-  /// не игнорировал заданные пользователем фильтры.
+  /// не игнорировал заданные пользователем фильтры. Дата и время учитываются
+  /// только при включённом графике работы исполнителей.
   Future<List<ExecutorCardListItem>> _searchExecutors(String q) async {
     String? hm(TimeOfDay? t) => t == null
         ? null
@@ -87,11 +88,11 @@ class _CatalogCategoriesScreenState extends State<CatalogCategoriesScreen> {
       search: q,
       machineryTitles: AppliedFilter.equipment,
       categoryTitles: AppliedFilter.categories,
-      dateFrom: AppliedFilter.dateFrom,
-      dateTo: AppliedFilter.dateTo,
-      timeFrom: hm(AppliedFilter.timeFrom),
-      timeTo: hm(AppliedFilter.timeTo),
-      wholeDay: AppliedFilter.wholeDay,
+      dateFrom: AppliedFilter.activeDateFrom,
+      dateTo: AppliedFilter.activeDateTo,
+      timeFrom: hm(AppliedFilter.activeTimeFrom),
+      timeTo: hm(AppliedFilter.activeTimeTo),
+      wholeDay: AppliedFilter.activeWholeDay,
       originLat: radiusActive ? AppliedFilter.addressLat : null,
       originLng: radiusActive ? AppliedFilter.addressLng : null,
       radiusKm: radiusActive ? AppliedFilter.radiusKm : null,
