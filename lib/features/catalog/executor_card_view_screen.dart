@@ -768,10 +768,9 @@ class _AvailabilitySectionState extends State<_AvailabilitySection> {
   /// Легаси: нерабочий — только явный override с accepting=false. Строгий
   /// режим: день без записи — тоже нерабочий (как фильтр и сервер). Правило —
   /// чистая функция ScheduleAvailability.isDayOff (покрыта тестами). Сам блок
-  /// рисуется только при включённом графике, поэтому здесь он всегда включён.
+  /// рисуется только при включённом графике.
   bool _isDayOff(DateTime d) => ScheduleAvailability.isDayOff(
         mark: _override(d),
-        scheduleEnabled: true,
         unmarkedDayAvailable: widget.unmarkedDayAvailable,
       );
 

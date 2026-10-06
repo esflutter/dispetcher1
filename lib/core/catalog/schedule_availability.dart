@@ -7,9 +7,9 @@ import 'models.dart';
 ///    исполнителя ([isDayOff]).
 ///
 /// Сеть и настройки сюда не ходят — всё приходит параметрами, поэтому логика
-/// покрыта юнит-тестами. Три режима:
-///  • график выключен в админ-панели (`scheduleEnabled` = false) — графика
-///    нет вообще: любой день рабочий, исполнитель доступен на любую дату;
+/// покрыта юнит-тестами. Зовётся только при ВКЛЮЧЁННОМ графике: когда он
+/// выключен в админ-панели, график не читается вовсе (см. CatalogService и
+/// карточку исполнителя). Два режима:
 ///  • легаси (`schedule.unmarked_day_available` = true) — день без отметки
 ///    рабочий, мешают только явные отметки «не работаю» и конфликт по
 ///    времени;
@@ -37,12 +37,8 @@ class ScheduleAvailability {
     String? timeFrom,
     String? timeTo,
     required bool wholeDay,
-    required bool scheduleEnabled,
     required bool unmarkedDayAvailable,
   }) {
-    // График выключен — дата и время ни на что не влияют.
-    if (!scheduleEnabled) return true;
-
     if (unmarkedDayAvailable) {
       // Легаси-режим: исключаем только явные конфликты, день без записи
       // доступен — поведение прежних версий.
@@ -77,7 +73,7 @@ class ScheduleAvailability {
   /// Множество `user_id` из [userIds], которые НЕдоступны на интервале
   /// `[dateFrom..dateTo]`. [rows] — строки `schedule_day_overrides` всех этих
   /// исполнителей за интервал (с колонкой user_id). Правила — как в
-  /// [isExecutorAvailable]. При выключенном графике — пустое множество.
+  /// [isExecutorAvailable].
   static Set<String> unavailableExecutors({
     required Iterable<String> userIds,
     required Iterable<Map<String, dynamic>> rows,
@@ -86,10 +82,8 @@ class ScheduleAvailability {
     String? timeFrom,
     String? timeTo,
     required bool wholeDay,
-    required bool scheduleEnabled,
     required bool unmarkedDayAvailable,
   }) {
-    if (!scheduleEnabled) return <String>{};
     final Map<String, List<Map<String, dynamic>>> byUser =
         <String, List<Map<String, dynamic>>>{};
     for (final Map<String, dynamic> r in rows) {
@@ -104,7 +98,6 @@ class ScheduleAvailability {
         timeFrom: timeFrom,
         timeTo: timeTo,
         wholeDay: wholeDay,
-        scheduleEnabled: scheduleEnabled,
         unmarkedDayAvailable: unmarkedDayAvailable,
       );
       if (!available) excluded.add(uid);
@@ -114,15 +107,12 @@ class ScheduleAvailability {
 
   /// Нерабочий ли день в блоке «Занятость». [mark] — отметка исполнителя на
   /// этот день (null — дня нет в графике).
-  ///  • график выключен — нерабочих дней нет;
   ///  • легаси — нерабочий только день с отметкой accepting=false;
   ///  • строгий — нерабочий и день без отметки (как фильтр каталога и сервер).
   static bool isDayOff({
     required ExecutorScheduleDay? mark,
-    required bool scheduleEnabled,
     required bool unmarkedDayAvailable,
   }) {
-    if (!scheduleEnabled) return false;
     if (unmarkedDayAvailable) return mark != null && !mark.accepting;
     return mark == null || !mark.accepting;
   }

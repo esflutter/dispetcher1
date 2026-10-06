@@ -558,7 +558,6 @@ class CatalogService {
       timeFrom: timeFrom,
       timeTo: timeTo,
       wholeDay: wholeDay,
-      scheduleEnabled: true,
       unmarkedDayAvailable: unmarkedOk,
     );
   }

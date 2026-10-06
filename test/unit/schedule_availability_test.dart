@@ -43,7 +43,6 @@ final DateTime _d11 = DateTime(2026, 10, 11);
 /// день, если [oneDay]).
 bool _available(
   List<Map<String, dynamic>> rows, {
-  required bool enabled,
   required bool unmarked,
   bool oneDay = false,
   bool wholeDay = false,
@@ -57,69 +56,21 @@ bool _available(
       timeFrom: timeFrom,
       timeTo: timeTo,
       wholeDay: wholeDay,
-      scheduleEnabled: enabled,
       unmarkedDayAvailable: unmarked,
     );
 
 void main() {
-  group('доступность на диапазон — график ВЫКЛЮЧЕН', () {
-    test('без отметок исполнитель доступен даже при строгом режиме', () {
-      expect(_available(const <Map<String, dynamic>>[],
-          enabled: false, unmarked: false), isTrue);
-    });
-
-    test('отметка «не работаю» не мешает', () {
-      final List<Map<String, dynamic>> rows = <Map<String, dynamic>>[
-        _row(day: '2026-10-10', accepting: false),
-      ];
-      expect(_available(rows, enabled: false, unmarked: false), isTrue);
-      expect(_available(rows, enabled: false, unmarked: true), isTrue);
-    });
-
-    test('время и «весь день» не мешают', () {
-      final List<Map<String, dynamic>> rows = <Map<String, dynamic>>[
-        _row(day: '2026-10-10', from: '10:00:00', to: '12:00:00'),
-      ];
-      expect(
-          _available(rows,
-              enabled: false, unmarked: false, wholeDay: true),
-          isTrue);
-      expect(
-          _available(rows,
-              enabled: false,
-              unmarked: true,
-              timeFrom: '08:00',
-              timeTo: '20:00'),
-          isTrue);
-    });
-
-    test('список недоступных пуст', () {
-      final Set<String> out = ScheduleAvailability.unavailableExecutors(
-        userIds: const <String>['a', 'b'],
-        rows: <Map<String, dynamic>>[
-          _row(uid: 'a', day: '2026-10-10', accepting: false),
-        ],
-        dateFrom: _d10,
-        dateTo: _d11,
-        wholeDay: false,
-        scheduleEnabled: false,
-        unmarkedDayAvailable: false,
-      );
-      expect(out, isEmpty);
-    });
-  });
-
   group('доступность на диапазон — ЛЕГАСИ (день без отметки рабочий)', () {
     test('без отметок — доступен', () {
       expect(_available(const <Map<String, dynamic>>[],
-          enabled: true, unmarked: true), isTrue);
+          unmarked: true), isTrue);
     });
 
     test('одна отметка «не работаю» в диапазоне — недоступен', () {
       expect(
           _available(<Map<String, dynamic>>[
             _row(day: '2026-10-11', accepting: false),
-          ], enabled: true, unmarked: true),
+          ], unmarked: true),
           isFalse);
     });
 
@@ -127,7 +78,7 @@ void main() {
       expect(
           _available(<Map<String, dynamic>>[
             _row(day: '2026-10-10'),
-          ], enabled: true, unmarked: true),
+          ], unmarked: true),
           isTrue);
     });
 
@@ -135,7 +86,7 @@ void main() {
       expect(
           _available(<Map<String, dynamic>>[
             _row(day: '2026-10-10', accepting: null),
-          ], enabled: true, unmarked: true),
+          ], unmarked: true),
           isTrue);
     });
 
@@ -143,7 +94,7 @@ void main() {
       final List<Map<String, dynamic>> rows = <Map<String, dynamic>>[
         _row(day: '2026-10-10', from: '09:00:00', to: '18:00:00'),
       ];
-      expect(_available(rows, enabled: true, unmarked: true, wholeDay: true),
+      expect(_available(rows, unmarked: true, wholeDay: true),
           isFalse);
     });
 
@@ -153,15 +104,15 @@ void main() {
       ];
       expect(
           _available(rows,
-              enabled: true, unmarked: true, timeFrom: '09:00', timeTo: '18:00'),
+              unmarked: true, timeFrom: '09:00', timeTo: '18:00'),
           isTrue);
       expect(
           _available(rows,
-              enabled: true, unmarked: true, timeFrom: '07:00', timeTo: '18:00'),
+              unmarked: true, timeFrom: '07:00', timeTo: '18:00'),
           isFalse);
       expect(
           _available(rows,
-              enabled: true, unmarked: true, timeFrom: '09:00', timeTo: '21:00'),
+              unmarked: true, timeFrom: '09:00', timeTo: '21:00'),
           isFalse);
     });
 
@@ -169,7 +120,7 @@ void main() {
       expect(
           _available(<Map<String, dynamic>>[
             _row(day: '2026-10-10'),
-          ], enabled: true, unmarked: true, timeFrom: '09:00', timeTo: '18:00'),
+          ], unmarked: true, timeFrom: '09:00', timeTo: '18:00'),
           isFalse);
     });
 
@@ -179,9 +130,9 @@ void main() {
       ];
       expect(
           _available(rows,
-              enabled: true, unmarked: true, timeFrom: '06:00', timeTo: '23:00'),
+              unmarked: true, timeFrom: '06:00', timeTo: '23:00'),
           isTrue);
-      expect(_available(rows, enabled: true, unmarked: true, wholeDay: true),
+      expect(_available(rows, unmarked: true, wholeDay: true),
           isTrue);
     });
   });
@@ -189,7 +140,7 @@ void main() {
   group('доступность на диапазон — СТРОГИЙ (день без отметки нерабочий)', () {
     test('без отметок — недоступен', () {
       expect(_available(const <Map<String, dynamic>>[],
-          enabled: true, unmarked: false), isFalse);
+          unmarked: false), isFalse);
     });
 
     test('все дни диапазона отмечены рабочими — доступен', () {
@@ -197,7 +148,7 @@ void main() {
           _available(<Map<String, dynamic>>[
             _row(day: '2026-10-10'),
             _row(day: '2026-10-11'),
-          ], enabled: true, unmarked: false),
+          ], unmarked: false),
           isTrue);
     });
 
@@ -205,7 +156,7 @@ void main() {
       expect(
           _available(<Map<String, dynamic>>[
             _row(day: '2026-10-10'),
-          ], enabled: true, unmarked: false),
+          ], unmarked: false),
           isFalse);
     });
 
@@ -213,7 +164,7 @@ void main() {
       expect(
           _available(<Map<String, dynamic>>[
             _row(day: '2026-10-10'),
-          ], enabled: true, unmarked: false, oneDay: true),
+          ], unmarked: false, oneDay: true),
           isTrue);
     });
 
@@ -222,7 +173,7 @@ void main() {
           _available(<Map<String, dynamic>>[
             _row(day: '2026-10-10'),
             _row(day: '2026-10-11', accepting: false),
-          ], enabled: true, unmarked: false),
+          ], unmarked: false),
           isFalse);
     });
 
@@ -233,14 +184,12 @@ void main() {
       ];
       expect(
           _available(rows,
-              enabled: true,
               unmarked: false,
               timeFrom: '09:00',
               timeTo: '18:00'),
           isFalse);
       expect(
           _available(rows,
-              enabled: true,
               unmarked: false,
               timeFrom: '13:00',
               timeTo: '18:00'),
@@ -256,57 +205,42 @@ void main() {
       _row(uid: 'b', day: '2026-10-10'),
       _row(uid: 'b', day: '2026-10-11', accepting: false),
     ];
-    Set<String> run({required bool enabled, required bool unmarked}) =>
+    Set<String> run({required bool unmarked}) =>
         ScheduleAvailability.unavailableExecutors(
           userIds: const <String>['a', 'b', 'c'],
           rows: rows,
           dateFrom: _d10,
           dateTo: _d11,
           wholeDay: false,
-          scheduleEnabled: enabled,
           unmarkedDayAvailable: unmarked,
         );
 
-    test('выключен — все доступны',
-        () => expect(run(enabled: false, unmarked: false), isEmpty));
     test('легаси — исключён только b',
-        () => expect(run(enabled: true, unmarked: true), <String>{'b'}));
+        () => expect(run(unmarked: true), <String>{'b'}));
     test('строгий — исключены b и c (у c нет отметок)',
-        () => expect(run(enabled: true, unmarked: false), <String>{'b', 'c'}));
+        () => expect(run(unmarked: false), <String>{'b', 'c'}));
   });
 
   group('нерабочий ли день (блок «Занятость»)', () {
-    bool off(ExecutorScheduleDay? m,
-            {required bool enabled, required bool unmarked}) =>
+    bool off(ExecutorScheduleDay? m, {required bool unmarked}) =>
         ScheduleAvailability.isDayOff(
           mark: m,
-          scheduleEnabled: enabled,
           unmarkedDayAvailable: unmarked,
         );
 
-    test('график выключен — нерабочих дней нет', () {
-      for (final bool unmarked in <bool>[true, false]) {
-        expect(off(null, enabled: false, unmarked: unmarked), isFalse);
-        expect(off(_mark(accepting: false), enabled: false, unmarked: unmarked),
-            isFalse);
-        expect(off(_mark(accepting: true), enabled: false, unmarked: unmarked),
-            isFalse);
-      }
-    });
-
     test('легаси — нерабочий только отмеченный «не работаю»', () {
-      expect(off(null, enabled: true, unmarked: true), isFalse);
-      expect(off(_mark(accepting: true), enabled: true, unmarked: true),
+      expect(off(null, unmarked: true), isFalse);
+      expect(off(_mark(accepting: true), unmarked: true),
           isFalse);
-      expect(off(_mark(accepting: false), enabled: true, unmarked: true),
+      expect(off(_mark(accepting: false), unmarked: true),
           isTrue);
     });
 
     test('строгий — нерабочий и день без отметки', () {
-      expect(off(null, enabled: true, unmarked: false), isTrue);
-      expect(off(_mark(accepting: true), enabled: true, unmarked: false),
+      expect(off(null, unmarked: false), isTrue);
+      expect(off(_mark(accepting: true), unmarked: false),
           isFalse);
-      expect(off(_mark(accepting: false), enabled: true, unmarked: false),
+      expect(off(_mark(accepting: false), unmarked: false),
           isTrue);
     });
   });
@@ -370,7 +304,6 @@ void main() {
           timeFrom: tf,
           timeTo: tt,
           wholeDay: wholeDay,
-          scheduleEnabled: true,
           unmarkedDayAvailable: unmarked,
         );
         expect(actual, expected, reason: 'набор #$i, легаси=$unmarked');
