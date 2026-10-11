@@ -63,6 +63,11 @@ workflows:
         # переиспользуется тот же, что у исполнителя (один CERTIFICATE_PRIVATE_KEY
         # на весь Apple-аккаунт) — создаётся лишь новый профиль под этот bundle id.
         script: |
+          # Любая ошибка — сразу стоп на этом шаге. Без этого отказ Apple
+          # (например, «A required agreement is missing or has expired») не
+          # останавливал шаг, и сборка падала позже, на «Сборке IPA», с
+          # непонятным «No valid code signing certificates were found».
+          set -e
           keychain initialize
           app-store-connect fetch-signing-files "com.dispatcher1.dispatcher1" \
             --type IOS_APP_STORE \
