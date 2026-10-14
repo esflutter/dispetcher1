@@ -337,8 +337,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                                         ScaffoldMessenger.of(context);
                                     try {
                                       await AuthService.instance
-                                          .sendOtp(e164)
-                                          .timeout(const Duration(seconds: 10));
+                                          .sendOtp(e164, context: context);
                                     } catch (e) {
                                       // Сбой отправки: снимаем кулдаун и надпись
                                       // (иначе ложный отсчёт на экране) и
